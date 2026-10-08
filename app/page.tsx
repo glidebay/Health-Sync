@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { motion, AnimatePresence, useMotionValue, useTransform, animate, type Variants } from 'framer-motion';
 import EcgLoadingScreen from '@/components/loading/EcgLoadingScreen';
-import { ClinicProvider } from '@/context/ClinicContext';
+import { ClinicProvider, useClinic } from '@/context/ClinicContext';
 import {
   HeartPulse,
   Home,
@@ -159,7 +159,8 @@ function AnimatedProgress({ percent, delay = 0 }: { percent: number; delay?: num
   );
 }
 
-export default function HealthSyncSkillUpTheme() {
+function DashboardContent() {
+  const { isLoading } = useClinic();
   /* --------------- State --------------- */
   const [activeSection, setActiveSection] = useState<NavSection>('dashboard');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -408,39 +409,44 @@ export default function HealthSyncSkillUpTheme() {
   const totalStockUnits = inventory.reduce((acc, curr) => acc + curr.stock, 0);
 
   return (
-    <ClinicProvider>
-    <div
-      className="min-h-screen bg-[#F8F9FB] flex antialiased select-none text-[#16191E]"
-      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-    >
-      {/* --------------- Print Styles --------------- */}
-      <style jsx global>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          #print-modal,
-          #print-modal * {
-            visibility: visible;
-          }
-          #print-modal {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background: white !important;
-            z-index: 9999;
-            padding: 30px;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
-
+    <>
       {/* --------------- Initial ECG Splash Screen --------------- */}
       <EcgLoadingScreen />
+
+      {!isLoading && (
+        <motion.div
+          key="dashboard-app"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.35, ease: 'easeOut' }}
+          className="min-h-screen bg-[#F8F9FB] flex antialiased select-none text-[#16191E]"
+          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+        >
+          {/* --------------- Print Styles --------------- */}
+          <style jsx global>{`
+            @media print {
+              body * {
+                visibility: hidden;
+              }
+              #print-modal,
+              #print-modal * {
+                visibility: visible;
+              }
+              #print-modal {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                background: white !important;
+                z-index: 9999;
+                padding: 30px;
+              }
+              .no-print {
+                display: none !important;
+              }
+            }
+          `}</style>
 
       {/* --------------- BEGIN: Sidebar (SkillUp Design with Full Animation) --------------- */}
       <motion.aside
@@ -1748,7 +1754,16 @@ export default function HealthSyncSkillUpTheme() {
           </div>
         )}
       </AnimatePresence>
-    </div>
+        </motion.div>
+      )}
+    </>
+  );
+}
+
+export default function HealthSyncSkillUpTheme() {
+  return (
+    <ClinicProvider>
+      <DashboardContent />
     </ClinicProvider>
   );
 }

@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useClinic } from '@/context/ClinicContext';
 
 export default function EcgLoadingScreen() {
   const { isLoading, dismissLoading } = useClinic();
   const [dots, setDots] = useState(1);
-  const [fading, setFading] = useState(false);
 
   useEffect(() => {
     const dotInterval = setInterval(() => {
@@ -16,17 +16,18 @@ export default function EcgLoadingScreen() {
     return () => clearInterval(dotInterval);
   }, []);
 
-  if (!isLoading) return null;
-
   return (
-    <div
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-center transition-opacity duration-700 ${
-        fading ? 'opacity-0 pointer-events-none' : 'opacity-100'
-      }`}
-      style={{
-        background: '#ffffff'
-      }}
-    >
+    <AnimatePresence>
+      {isLoading && (
+        <motion.div
+          key="ecg-loading-screen"
+          initial={{ opacity: 1 }}
+          exit={{ opacity: 0, transition: { duration: 0.55, ease: 'easeInOut' } }}
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center"
+          style={{
+            background: '#ffffff'
+          }}
+        >
       {/* Background ambient lighting */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-white/20 rounded-full blur-3xl animate-pulse" />
@@ -114,10 +115,7 @@ export default function EcgLoadingScreen() {
 
         {/* Quick skip button */}
         <button
-          onClick={() => {
-            setFading(true);
-            setTimeout(dismissLoading, 300);
-          }}
+          onClick={dismissLoading}
           className="text-xs font-display px-4 py-1.5 rounded-full backdrop-blur-md transition-all active:scale-95 cursor-pointer"
           style={{ color: 'rgba(37,99,235,0.5)', border: '1px solid rgba(37,99,235,0.15)' }}
           onMouseEnter={e => { (e.target as HTMLButtonElement).style.color = '#2563EB'; (e.target as HTMLButtonElement).style.borderColor = 'rgba(37,99,235,0.4)'; }}
@@ -126,6 +124,8 @@ export default function EcgLoadingScreen() {
           Skip Intro →
         </button>
       </div>
-    </div>
+    </motion.div>
+    )}
+    </AnimatePresence>
   );
 }
