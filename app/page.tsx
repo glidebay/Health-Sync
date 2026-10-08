@@ -18,21 +18,30 @@ function MainApp() {
   const { activeTab } = useClinic();
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50/60 text-slate-900 antialiased selection:bg-blue-600 selection:text-white">
+    <div
+      className="min-h-screen flex bg-[#F8F9FB] text-[#16191E] antialiased selection:bg-blue-600 selection:text-white"
+      style={{ fontFamily: 'var(--font-jakarta, "Plus Jakarta Sans", sans-serif)' }}
+    >
       {/* ECG Splash & Loading Screen */}
       <EcgLoadingScreen />
 
-      {/* Apple-style Navigation Header */}
+      {/* Stitch-style Left Sidebar (desktop) */}
       <AppHeader />
 
-      {/* Main Dynamic Viewport */}
-      <main id="app-content" className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-28 md:pb-12 transition-all">
-        {activeTab === 'assistant' && <AssistantView />}
-        {activeTab === 'queue' && <QueueView />}
-        {activeTab === 'consult' && <ConsultationView />}
-        {activeTab === 'inventory' && <InventoryView />}
-        {activeTab === 'analytics' && <AnalyticsView />}
-      </main>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        {/* Main Dynamic Viewport */}
+        <main
+          id="app-content"
+          className="flex-1 px-6 sm:px-8 lg:px-10 py-8 pb-28 md:pb-10 overflow-y-auto custom-scrollbar"
+        >
+          {activeTab === 'assistant'  && <AssistantView />}
+          {activeTab === 'queue'      && <QueueView />}
+          {activeTab === 'consult'    && <ConsultationView />}
+          {activeTab === 'inventory'  && <InventoryView />}
+          {activeTab === 'analytics'  && <AnalyticsView />}
+        </main>
+      </div>
 
       {/* Mobile Floating iOS-style Navigation Dock */}
       <NavigationDock />
