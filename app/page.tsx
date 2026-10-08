@@ -43,7 +43,7 @@ function MainApp() {
         </main>
       </div>
 
-      {/* Mobile Floating iOS-style Navigation Dock */}
+      {/* Mobile Floating iOS-style  Dock */}
       <NavigationDock />
 
       {/* Modals & Portals */}
