@@ -4,7 +4,6 @@
   /* Nexuma Inspired Typography */
   --font-display: 'Instrument Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-jakarta: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
   /* Retain User Brand Colors */
   --primary-blue: #1d4ed8;
@@ -13,18 +12,6 @@
   --apple-bg: #f8fafc;
   --apple-card: rgba(255, 255, 255, 0.94);
   --apple-border: rgba(226, 232, 240, 0.85);
-
-  /* Stitch Dashboard Design Tokens */
-  --dash-bg: #F8F9FB;
-  --dash-card: #FFFFFF;
-  --dash-border: #ECEEF2;
-  --dash-text: #16191E;
-  --dash-muted: #8A909D;
-  --dash-subtle: #5E6470;
-  --dash-surface: #F4F5F7;
-  --dash-active: #EBECEF;
-  --dash-sidebar: #FFFFFF;
-  --dash-sidebar-width: 256px;
 
   /* Nexuma Multi-Layer Elevation Shadows */
   --nexuma-shadow-subtle: 0px 0.6px 0.6px 0px rgba(28, 28, 28, 0.02),
