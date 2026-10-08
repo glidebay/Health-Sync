@@ -29,7 +29,7 @@ export default function AppHeader() {
     <header className="sticky top-0 z-40 w-full apple-glass border-b border-slate-200/70 no-print transition-all backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         
-        {/* Brand & Live ECG Heartbeat Badge */}
+        {/* Brand & Live ECG Heartbeat  */}
         <div className="flex items-center gap-3">
           <BrandLogo size="md" theme="light" />
           
