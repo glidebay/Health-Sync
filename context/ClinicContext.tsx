@@ -27,7 +27,6 @@ interface ClinicContextType {
   isPrintModalOpen: boolean;
   isLoading: boolean;
   
-  // Actions
   switchTab: (tab: TabType) => void;
   openAuthModal: (targetTab?: TabType) => void;
   closeAuthModal: () => void;
