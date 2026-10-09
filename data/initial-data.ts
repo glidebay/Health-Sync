@@ -1,12 +1,12 @@
 import { Patient, InventoryItem } from '@/types';
 
 export const INITIAL_PATIENTS: Patient[] = [
-  { id: 'P01', tokenNumber: 1, name: 'Unnikrishnan Menon', age: 62, gender: 'Male', status: 'Waiting', time: '09:30 AM', priority: 'Normal' },
-  { id: 'P02', tokenNumber: 2, name: 'Lakshmi Namboothiri', age: 45, gender: 'Female', status: 'In Progress', time: '09:45 AM', priority: 'Normal' },
-  { id: 'P03', tokenNumber: 3, name: 'Abdul Rahman', age: 34, gender: 'Male', status: 'Waiting', time: '10:00 AM', priority: 'Normal' },
-  { id: 'P04', tokenNumber: 4, name: 'Thomas Varghese', age: 55, gender: 'Male', status: 'Waiting', time: '10:15 AM', priority: 'Urgent' },
-  { id: 'P05', tokenNumber: 5, name: 'Parvathy Nair', age: 28, gender: 'Female', status: 'Waiting', time: '10:30 AM', priority: 'Normal' },
-  { id: 'P06', tokenNumber: 6, name: 'Sreenivasan Pillai', age: 71, gender: 'Male', status: 'Waiting', time: '10:45 AM', priority: 'Normal' }
+  { id: 'P01', tokenNumber: 1, name: 'Unnikrishnan Menon', age: 62, gender: 'Male', phone: '+91 98470 11223', status: 'Waiting', time: '09:30 AM', priority: 'Normal' },
+  { id: 'P02', tokenNumber: 2, name: 'Lakshmi Namboothiri', age: 45, gender: 'Female', phone: '+91 94471 22334', status: 'In Progress', time: '09:45 AM', priority: 'Normal' },
+  { id: 'P03', tokenNumber: 3, name: 'Abdul Rahman', age: 34, gender: 'Male', phone: '+91 97452 33445', status: 'Waiting', time: '10:00 AM', priority: 'Normal' },
+  { id: 'P04', tokenNumber: 4, name: 'Thomas Varghese', age: 55, gender: 'Male', phone: '+91 98953 44556', status: 'Waiting', time: '10:15 AM', priority: 'Urgent' },
+  { id: 'P05', tokenNumber: 5, name: 'Parvathy Nair', age: 28, gender: 'Female', phone: '+91 94004 55667', status: 'Waiting', time: '10:30 AM', priority: 'Normal' },
+  { id: 'P06', tokenNumber: 6, name: 'Sreenivasan Pillai', age: 71, gender: 'Male', phone: '+91 98465 66778', status: 'Waiting', time: '10:45 AM', priority: 'Normal' }
 ];
 
 export const INITIAL_INVENTORY: InventoryItem[] = [

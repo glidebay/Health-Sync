@@ -34,7 +34,13 @@ interface ClinicContextType {
   authenticateDoctor: (pin: string) => boolean;
   logoutDoctor: () => void;
   
-  registerPatient: (name: string, age: number, gender: 'Male' | 'Female' | 'Other', priority?: 'Normal' | 'Urgent') => void;
+  registerPatient: (
+    name: string,
+    age: number,
+    gender: 'Male' | 'Female' | 'Other',
+    phone?: string,
+    priority?: 'Normal' | 'Urgent'
+  ) => void;
   updatePatientStatus: (patientId: string, status: PatientStatus) => void;
   reallocateSlot: (patientId: string) => void;
   
@@ -128,8 +134,19 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     name: string,
     age: number,
     gender: 'Male' | 'Female' | 'Other',
-    priority: 'Normal' | 'Urgent' = 'Normal'
+    phoneOrPriority?: string,
+    optionalPriority: 'Normal' | 'Urgent' = 'Normal'
   ) => {
+    let phone: string | undefined;
+    let priority: 'Normal' | 'Urgent' = optionalPriority;
+
+    if (phoneOrPriority === 'Normal' || phoneOrPriority === 'Urgent') {
+      priority = phoneOrPriority;
+      phone = undefined;
+    } else {
+      phone = phoneOrPriority;
+    }
+
     const nextToken = patients.length + 1;
     const now = new Date();
     const timeString = now.toLocaleTimeString('en-US', {
@@ -144,6 +161,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       name,
       age,
       gender,
+      phone: phone?.trim() || undefined,
       status: 'Waiting',
       time: timeString,
       priority
@@ -251,6 +269,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       patientName: activePatient.name,
       patientAge: activePatient.age,
       patientGender: activePatient.gender,
+      patientPhone: activePatient.phone,
       doctorName: CLINIC_CONFIG.doctorName,
       date: new Date().toLocaleDateString('en-IN', {
         weekday: 'short',

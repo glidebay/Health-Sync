@@ -11,7 +11,8 @@ import {
   Users,
   ChevronRight,
   ShieldCheck,
-  Sparkles
+  Sparkles,
+  Phone
 } from 'lucide-react';
 
 export default function AssistantView() {
@@ -26,6 +27,7 @@ export default function AssistantView() {
 
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
+  const [phone, setPhone] = useState('');
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Male');
   const [priority, setPriority] = useState<'Normal' | 'Urgent'>('Normal');
   const [formSuccess, setFormSuccess] = useState(false);
@@ -34,9 +36,10 @@ export default function AssistantView() {
     e.preventDefault();
     if (!name.trim() || !age) return;
 
-    registerPatient(name.trim(), parseInt(age, 10), gender, priority);
+    registerPatient(name.trim(), parseInt(age, 10), gender, phone.trim(), priority);
     setName('');
     setAge('');
+    setPhone('');
     setPriority('Normal');
     setFormSuccess(true);
     setTimeout(() => setFormSuccess(false), 3000);
@@ -161,10 +164,19 @@ export default function AssistantView() {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 text-xs font-sans text-slate-500 mt-1">
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-sans text-slate-500 mt-1">
                         <span>{patient.age} Yrs</span>
                         <span className="text-slate-300">•</span>
                         <span>{patient.gender}</span>
+                        {patient.phone && (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <span className="inline-flex items-center gap-1 font-medium text-slate-600">
+                              <Phone className="w-3 h-3 text-slate-400" />
+                              {patient.phone}
+                            </span>
+                          </>
+                        )}
                         <span className="text-slate-300">•</span>
                         <span className="inline-flex items-center gap-1 font-medium text-slate-700">
                           <Clock className="w-3 h-3 text-slate-400" />
@@ -248,6 +260,22 @@ export default function AssistantView() {
                   placeholder="e.g. Radhakrishnan Pillai"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white/80 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 text-slate-900 text-sm transition-all shadow-2xs"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-display font-semibold text-slate-700 mb-1.5">
+                  Phone Number
+                </label>
+                <div className="relative">
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    placeholder="e.g. +91 98460 12345"
+                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white/80 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 text-slate-900 text-sm transition-all shadow-2xs"
+                  />
+                  <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

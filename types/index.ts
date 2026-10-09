@@ -7,6 +7,7 @@ export interface Patient {
   name: string;
   age: number;
   gender: 'Male' | 'Female' | 'Other';
+  phone?: string;
   status: PatientStatus;
   time: string;
   tokenNumber: number;
@@ -36,6 +37,7 @@ export interface ConsultationRecord {
   patientName: string;
   patientAge: number;
   patientGender: string;
+  patientPhone?: string;
   doctorName: string;
   date: string;
   timestamp: number;

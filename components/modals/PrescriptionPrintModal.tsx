@@ -99,7 +99,7 @@ export default function PrescriptionPrintModal() {
           </div>
 
           {/* Patient Demographics Box */}
-          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Patient Name</span>
               <span className="font-extrabold text-slate-900 text-sm">{activePrintRecord.patientName}</span>
@@ -111,6 +111,10 @@ export default function PrescriptionPrintModal() {
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Age / Gender</span>
               <span className="font-bold text-slate-800">{activePrintRecord.patientAge} Yrs / {activePrintRecord.patientGender}</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Phone</span>
+              <span className="font-bold text-slate-800">{activePrintRecord.patientPhone || '—'}</span>
             </div>
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Doctor In-Charge</span>

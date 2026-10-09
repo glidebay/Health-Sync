@@ -10,7 +10,8 @@ import {
   Printer,
   CheckCircle2,
   Calendar,
-  Filter
+  Filter,
+  Phone
 } from 'lucide-react';
 
 export default function QueueView() {
@@ -119,8 +120,21 @@ export default function QueueView() {
                     <h3 className="font-display font-bold text-slate-900 text-lg tracking-tight group-hover:text-blue-700 transition-colors">
                       {patient.name}
                     </h3>
-                    <p className="text-xs font-sans text-slate-500 mt-0.5">
-                      {patient.age} Yrs <span className="text-slate-300">•</span> {patient.gender} <span className="text-slate-300">•</span> Slot: {patient.time}
+                    <p className="text-xs font-sans text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
+                      <span>{patient.age} Yrs</span>
+                      <span className="text-slate-300">•</span>
+                      <span>{patient.gender}</span>
+                      {patient.phone && (
+                        <>
+                          <span className="text-slate-300">•</span>
+                          <span className="inline-flex items-center gap-1 text-slate-600 font-medium">
+                            <Phone className="w-3 h-3 text-slate-400" />
+                            {patient.phone}
+                          </span>
+                        </>
+                      )}
+                      <span className="text-slate-300">•</span>
+                      <span>Slot: {patient.time}</span>
                     </p>
                   </div>
                 </div>

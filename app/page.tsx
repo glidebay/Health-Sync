@@ -46,6 +46,7 @@ import {
   Pill,
   Sparkles,
   PanelLeft,
+  Phone,
 } from 'lucide-react';
 
 /* --------------- Types --------------- */
@@ -54,6 +55,7 @@ interface Patient {
   name: string;
   age: number;
   gender: 'Male' | 'Female' | 'Other';
+  phone?: string;
   status: 'Waiting' | 'In Progress' | 'Completed';
   time: string;
 }
@@ -74,12 +76,12 @@ type NavSection = 'dashboard' | 'assistant' | 'queue' | 'consult' | 'inventory' 
 
 /* --------------- Initial Data --------------- */
 const INITIAL_QUEUE: Patient[] = [
-  { id: 'P01', name: 'Unnikrishnan Menon', age: 62, gender: 'Male', status: 'Waiting', time: '09:30 AM' },
-  { id: 'P02', name: 'Lakshmi Namboothiri', age: 45, gender: 'Female', status: 'In Progress', time: '09:45 AM' },
-  { id: 'P03', name: 'Abdul Rahman', age: 34, gender: 'Male', status: 'Waiting', time: '10:00 AM' },
-  { id: 'P04', name: 'Thomas Varghese', age: 55, gender: 'Male', status: 'Waiting', time: '10:15 AM' },
-  { id: 'P05', name: 'Parvathy Nair', age: 28, gender: 'Female', status: 'Waiting', time: '10:30 AM' },
-  { id: 'P06', name: 'Sreenivasan Pillai', age: 71, gender: 'Male', status: 'Waiting', time: '10:45 AM' },
+  { id: 'P01', name: 'Unnikrishnan Menon', age: 62, gender: 'Male', phone: '+91 98470 11223', status: 'Waiting', time: '09:30 AM' },
+  { id: 'P02', name: 'Lakshmi Namboothiri', age: 45, gender: 'Female', phone: '+91 94471 22334', status: 'In Progress', time: '09:45 AM' },
+  { id: 'P03', name: 'Abdul Rahman', age: 34, gender: 'Male', phone: '+91 97452 33445', status: 'Waiting', time: '10:00 AM' },
+  { id: 'P04', name: 'Thomas Varghese', age: 55, gender: 'Male', phone: '+91 98953 44556', status: 'Waiting', time: '10:15 AM' },
+  { id: 'P05', name: 'Parvathy Nair', age: 28, gender: 'Female', phone: '+91 94004 55667', status: 'Waiting', time: '10:30 AM' },
+  { id: 'P06', name: 'Sreenivasan Pillai', age: 71, gender: 'Male', phone: '+91 98465 66778', status: 'Waiting', time: '10:45 AM' },
 ];
 
 const INITIAL_INVENTORY: InventoryItem[] = [
@@ -217,7 +219,8 @@ function DashboardContent() {
   const [showWalkinModal, setShowWalkinModal] = useState(false);
   const [walkinName, setWalkinName] = useState('');
   const [walkinAge, setWalkinAge] = useState('');
-  const [walkinGender, setWalkinGender] = useState<'Male' | 'Female'>('Male');
+  const [walkinPhone, setWalkinPhone] = useState('');
+  const [walkinGender, setWalkinGender] = useState<'Male' | 'Female' | 'Other'>('Male');
 
   // New Procurement form
   const [newGeneric, setNewGeneric] = useState('');
@@ -234,6 +237,7 @@ function DashboardContent() {
   const [printRecord, setPrintRecord] = useState<{
     date: string;
     patientName: string;
+    patientPhone?: string;
     demographics: string;
     diagnostics: string;
     items: PrescriptionItem[];
@@ -289,6 +293,7 @@ function DashboardContent() {
       name: walkinName.trim(),
       age: parseInt(walkinAge, 10),
       gender: walkinGender,
+      phone: walkinPhone.trim() || undefined,
       status: 'Waiting',
       time: timeStr,
     };
@@ -296,6 +301,8 @@ function DashboardContent() {
     setQueue((prev) => [...prev, newPat]);
     setWalkinName('');
     setWalkinAge('');
+    setWalkinPhone('');
+    setWalkinGender('Male');
     setShowWalkinModal(false);
   };
 
@@ -396,6 +403,7 @@ function DashboardContent() {
     setPrintRecord({
       date: dateStr,
       patientName: activePatient.name,
+      patientPhone: activePatient.phone,
       demographics: `${activePatient.age} Yrs / ${activePatient.gender}`,
       diagnostics: diagnosticNotes || 'Clinical examination normal. Prescription issued.',
       items: [...currentPrescription],
@@ -1042,6 +1050,12 @@ function DashboardContent() {
                                       {p.age} Yrs • {p.gender}
                                     </span>
                                   </div>
+                                  {p.phone && (
+                                    <div className="flex items-center space-x-1 text-gray-500">
+                                      <Phone className="w-3 h-3 text-[#2563EB]" />
+                                      <span>{p.phone}</span>
+                                    </div>
+                                  )}
                                   {p.status === 'Waiting' && (
                                     <motion.button
                                       whileHover={{ scale: 1.05 }}
@@ -1153,8 +1167,18 @@ function DashboardContent() {
                                 {p.status}
                               </span>
                             </div>
-                            <p className="text-xs text-[#8A909D] font-medium mt-1 truncate">
-                              {p.age} Yrs • {p.gender} • Slot: {p.time}
+                            <p className="text-xs text-[#8A909D] font-medium mt-1 truncate flex items-center flex-wrap gap-1">
+                              <span>{p.age} Yrs • {p.gender}</span>
+                              {p.phone && (
+                                <>
+                                  <span>•</span>
+                                  <span className="inline-flex items-center gap-1 text-[#5E6470]">
+                                    <Phone className="w-3 h-3 text-[#2563EB]" />
+                                    {p.phone}
+                                  </span>
+                                </>
+                              )}
+                              <span>• Slot: {p.time}</span>
                             </p>
                           </div>
 
@@ -1216,8 +1240,18 @@ function DashboardContent() {
                                   <h3 className="text-sm font-bold text-[#16191E] truncate">{p.name}</h3>
                                   <span className="text-xs text-[#8A909D] flex-shrink-0">({p.id})</span>
                                 </div>
-                                <p className="text-xs text-[#5E6470] mt-0.5 truncate">
-                                  {p.age} Yrs • {p.gender} • Slot: {p.time}
+                                <p className="text-xs text-[#5E6470] mt-0.5 truncate flex items-center flex-wrap gap-1">
+                                  <span>{p.age} Yrs • {p.gender}</span>
+                                  {p.phone && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="inline-flex items-center gap-1 text-gray-600">
+                                        <Phone className="w-3 h-3 text-[#2563EB]" />
+                                        {p.phone}
+                                      </span>
+                                    </>
+                                  )}
+                                  <span>• Slot: {p.time}</span>
                                 </p>
                               </div>
                             </div>
@@ -1278,8 +1312,18 @@ function DashboardContent() {
                         <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                           <div>
                             <h2 className="text-base sm:text-lg font-bold text-[#16191E]">{activePatient.name}</h2>
-                            <p className="text-xs text-[#8A909D] font-medium mt-0.5">
-                              {activePatient.age} Yrs • {activePatient.gender} • Slot: {activePatient.time}
+                            <p className="text-xs text-[#8A909D] font-medium mt-0.5 flex items-center flex-wrap gap-1.5">
+                              <span>{activePatient.age} Yrs • {activePatient.gender}</span>
+                              {activePatient.phone && (
+                                <>
+                                  <span>•</span>
+                                  <span className="inline-flex items-center gap-1 text-[#16191E]">
+                                    <Phone className="w-3 h-3 text-[#2563EB]" />
+                                    {activePatient.phone}
+                                  </span>
+                                </>
+                              )}
+                              <span>• Slot: {activePatient.time}</span>
                             </p>
                           </div>
                           <span className="text-xs font-bold bg-[#EBECEF] text-[#16191E] px-3.5 py-1.5 rounded-xl self-start sm:self-auto">
@@ -1728,6 +1772,20 @@ function DashboardContent() {
                       />
                     </div>
 
+                    <div>
+                      <label className="text-xs font-semibold text-[#8A909D] block mb-1">Phone Number</label>
+                      <div className="relative">
+                        <input
+                          type="tel"
+                          placeholder="e.g. +91 98460 12345"
+                          value={walkinPhone}
+                          onChange={(e) => setWalkinPhone(e.target.value)}
+                          className="w-full p-2.5 pl-9 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-sm outline-none focus:ring-1 focus:ring-gray-300"
+                        />
+                        <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-3 pointer-events-none" />
+                      </div>
+                    </div>
+
                     <div className="flex gap-3">
                       <div className="w-1/3">
                         <label className="text-xs font-semibold text-[#8A909D] block mb-1">Age</label>
@@ -1735,6 +1793,7 @@ function DashboardContent() {
                           type="number"
                           required
                           min="1"
+                          max="120"
                           placeholder="Age"
                           value={walkinAge}
                           onChange={(e) => setWalkinAge(e.target.value)}
@@ -1745,11 +1804,12 @@ function DashboardContent() {
                         <label className="text-xs font-semibold text-[#8A909D] block mb-1">Gender</label>
                         <select
                           value={walkinGender}
-                          onChange={(e) => setWalkinGender(e.target.value as 'Male' | 'Female')}
+                          onChange={(e) => setWalkinGender(e.target.value as 'Male' | 'Female' | 'Other')}
                           className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-sm outline-none focus:ring-1 focus:ring-gray-300 cursor-pointer"
                         >
                           <option value="Male">Male</option>
                           <option value="Female">Female</option>
+                          <option value="Other">Other</option>
                         </select>
                       </div>
                     </div>
@@ -1846,7 +1906,9 @@ function DashboardContent() {
                     </p>
                     <p>
                       <span className="font-bold text-[#16191E]">Demographics:</span>
-                      <span className="ml-2">{printRecord.demographics}</span>
+                      <span className="ml-2">
+                        {printRecord.demographics} {printRecord.patientPhone ? `• Phone: ${printRecord.patientPhone}` : ''}
+                      </span>
                     </p>
                   </div>
 

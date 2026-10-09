@@ -12,7 +12,8 @@ import {
   Clock,
   AlertTriangle,
   ArrowRight,
-  ShieldAlert
+  ShieldAlert,
+  Phone
 } from 'lucide-react';
 
 export default function ConsultationView() {
@@ -119,10 +120,19 @@ export default function ConsultationView() {
                 {activePatient.id}
               </span>
             </div>
-            <p className="text-xs font-sans text-blue-100/85 mt-1 flex items-center gap-2 font-medium">
+            <p className="text-xs font-sans text-blue-100/85 mt-1 flex flex-wrap items-center gap-2 font-medium">
               <span>{activePatient.age} Yrs</span>
               <span className="text-white/40">•</span>
               <span>{activePatient.gender}</span>
+              {activePatient.phone && (
+                <>
+                  <span className="text-white/40">•</span>
+                  <span className="inline-flex items-center gap-1 text-blue-100">
+                    <Phone className="w-3 h-3 text-sky-300" />
+                    {activePatient.phone}
+                  </span>
+                </>
+              )}
               <span className="text-white/40">•</span>
               <span className="flex items-center gap-1">
                 <Clock className="w-3 h-3 text-sky-300" />
