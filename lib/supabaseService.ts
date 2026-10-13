@@ -10,7 +10,7 @@ import {
 } from '@/types/database';
 
 export interface FormattedQueuePatient {
-  id: string; // appointment id
+  id: string; 
   patientDbId: string;
   name: string;
   age: number;
