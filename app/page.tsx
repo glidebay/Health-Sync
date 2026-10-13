@@ -5,7 +5,6 @@ import Image from 'next/image';
 import { motion, AnimatePresence, useMotionValue, useTransform, animate, type Variants } from 'framer-motion';
 import EcgLoadingScreen from '@/components/loading/EcgLoadingScreen';
 
-/* --------------- Responsive Hook --------------- */
 function useIsMobile(breakpoint = 768) {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -67,7 +66,6 @@ import {
   Database,
 } from 'lucide-react';
 
-/* --------------- Types --------------- */
 interface Patient {
   id: string;
   name: string;
@@ -92,12 +90,10 @@ interface PrescriptionItem {
 
 type NavSection = 'dashboard' | 'assistant' | 'queue' | 'consult' | 'inventory' | 'analytics';
 
-/* --------------- Initial Data --------------- */
 const INITIAL_QUEUE: Patient[] = [];
 
 const INITIAL_INVENTORY: InventoryItem[] = [];
 
-/* --------------- Motion Variants --------------- */
 const sidebarVariants: Variants = {
   hidden: { x: -280, opacity: 0 },
   visible: {
@@ -150,7 +146,6 @@ const fadeScale: Variants = {
   },
 };
 
-/* --------------- Animated Components --------------- */
 function AnimatedCounter({ target, duration = 1.6 }: { target: number; duration?: number }) {
   const count = useMotionValue(0);
   const rounded = useTransform(count, (v) => Math.round(v).toLocaleString());
@@ -184,7 +179,6 @@ function AnimatedProgress({ percent, delay = 0 }: { percent: number; delay?: num
 function DashboardContent() {
   const { isLoading } = useClinic();
   const isMobile = useIsMobile();
-  /* --------------- State --------------- */
   const [activeSection, setActiveSection] = useState<NavSection>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -313,7 +307,6 @@ function DashboardContent() {
     items: PrescriptionItem[];
   } | null>(null);
 
-  /* --------------- Navigation & Auth --------------- */
   const navItems = [
     { id: 'dashboard' as NavSection, label: 'Dashboard', icon: Home, reqAuth: false },
     { id: 'assistant' as NavSection, label: 'Assistant Desk', icon: ClipboardList, reqAuth: false },
@@ -369,7 +362,6 @@ function DashboardContent() {
     }
   };
 
-  /* --------------- Clinic Actions --------------- */
   const handleRegisterWalkin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!walkinName.trim() || !walkinAge) return;
@@ -579,7 +571,6 @@ function DashboardContent() {
 
   return (
     <>
-      {/* --------------- Initial ECG Splash Screen --------------- */}
       <EcgLoadingScreen />
 
       {!isLoading && (
@@ -591,7 +582,6 @@ function DashboardContent() {
           className={`h-screen bg-[#F8F9FB] flex antialiased select-none text-[#16191E] overflow-hidden ${isMobile ? 'flex-col' : 'flex-row'}`}
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
-          {/* --------------- Print Styles --------------- */}
           <style jsx global>{`
             @media print {
               body * {
@@ -617,7 +607,6 @@ function DashboardContent() {
             }
           `}</style>
 
-          {/* --------------- BEGIN: Sidebar (Desktop only) --------------- */}
           {!isMobile && (
             <AnimatePresence initial={false}>
               {isSidebarOpen && (
@@ -636,7 +625,6 @@ function DashboardContent() {
                 >
                   <div className="w-64 min-w-[256px] py-8 px-6 flex flex-col justify-between h-full overflow-y-auto">
                     <div className="flex flex-col space-y-9">
-                      {/* Brand Logo & ChatGPT style Close Sidebar Button */}
                       <motion.div
                         variants={navItemVariants}
                         className="flex items-center justify-between px-1"
@@ -659,7 +647,6 @@ function DashboardContent() {
 
                       </motion.div>
 
-                      {/* Navigation Menu with Animated Pill */}
                       <nav aria-label="Sidebar" className="space-y-1.5">
                         {navItems.map((item) => {
                           const Icon = item.icon;
@@ -697,14 +684,12 @@ function DashboardContent() {
                       </nav>
                     </div>
 
-                    {/* Upgrade / Doctor Auth Card */}
                     <motion.div
                       initial={{ opacity: 0, y: 24 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.5, type: 'spring', damping: 20 }}
                       className="bg-[#F8F9FB] rounded-3xl p-5 pt-8 text-center border border-[#ECEEF2] flex flex-col items-center"
                     >
-                      {/* Animated Lock Body Graphic */}
                       <motion.div
                         animate={{ y: [0, -4, 0] }}
                         transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
@@ -748,18 +733,14 @@ function DashboardContent() {
               )}
             </AnimatePresence>
           )}
-          {/* --------------- END: Sidebar --------------- */}
 
-          {/* --------------- BEGIN: Main Content Area --------------- */}
           <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden transition-all duration-300">
-            {/* Top Header with Animations */}
             <motion.header
               initial={{ opacity: 0, y: -16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.45, ease: 'easeOut' }}
               className={`w-full bg-[#F8F9FB] flex items-center justify-between no-print ${isMobile ? 'px-4 py-3.5 border-b border-[#ECEEF2]' : 'px-8 lg:px-10 py-7'}`}
             >
-              {/* Left: Sidebar Trigger + Current Section Indicator */}
               <div className="flex items-center space-x-3.5">
                 {!isMobile && (
                   <motion.button
@@ -796,7 +777,6 @@ function DashboardContent() {
                 )}
               </div>
 
-              {/* Search & Sign In Button */}
               <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-4'}`}>
 
                 {!isMobile && (
@@ -849,9 +829,7 @@ function DashboardContent() {
               </div>
             </motion.header>
 
-            {/* Dashboard Dynamic Viewport */}
             <main className={`flex-1 overflow-y-auto no-print ${isMobile ? 'px-3.5 sm:px-6 pt-3 pb-28' : 'px-8 lg:px-10 pb-12'}`}>
-              {/* Welcome Profile Banner */}
               <motion.section
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -894,7 +872,6 @@ function DashboardContent() {
                 </div>
               </motion.section>
 
-              {/* Mobile Search Bar for Fast Lookup */}
               {isMobile && (
                 <motion.div
                   initial={{ opacity: 0, y: 6 }}
@@ -917,7 +894,6 @@ function DashboardContent() {
 
 
 
-              {/* --------------- View 1: DASHBOARD (Exact layout from screenshot with Animations) --------------- */}
               <AnimatePresence mode="wait">
                 {activeSection === 'dashboard' && (
                   <motion.div
@@ -927,14 +903,12 @@ function DashboardContent() {
                     exit={{ opacity: 0, y: -14 }}
                     transition={{ duration: 0.25 }}
                   >
-                    {/* 3 Metric Overview Cards */}
                     <motion.section
                       variants={staggerContainer}
                       initial="hidden"
                       animate="visible"
                       className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-10"
                     >
-                      {/* Metric 1 */}
                       <motion.div
                         variants={fadeScale}
                         whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(0,0,0,0.08)' }}
@@ -955,7 +929,6 @@ function DashboardContent() {
                         </motion.div>
                       </motion.div>
 
-                      {/* Metric 2 */}
                       <motion.div
                         variants={fadeScale}
                         whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(0,0,0,0.08)' }}
@@ -976,7 +949,6 @@ function DashboardContent() {
                         </motion.div>
                       </motion.div>
 
-                      {/* Metric 3 */}
                       <motion.div
                         variants={fadeScale}
                         whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(0,0,0,0.08)' }}
@@ -998,7 +970,6 @@ function DashboardContent() {
                       </motion.div>
                     </motion.section>
 
-                    {/* Recent Active Chamber & Daily Progress */}
                     <section className="mb-8 sm:mb-10">
                       <div className="flex items-center justify-between mb-4 sm:mb-5">
                         <h2 className="text-base sm:text-lg font-bold text-[#16191E] tracking-tight">
@@ -1017,7 +988,6 @@ function DashboardContent() {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 sm:gap-6">
-                        {/* Card 1: Active Doctor Consultation */}
                         <motion.div
                           whileHover={{
                             y: -4,
@@ -1050,7 +1020,6 @@ function DashboardContent() {
                           </div>
                         </motion.div>
 
-                        {/* Card 2: Next in Queue */}
                         <motion.div
                           whileHover={{
                             y: -4,
@@ -1083,7 +1052,6 @@ function DashboardContent() {
                           </div>
                         </motion.div>
 
-                        {/* Daily Progress Widget */}
                         <motion.div
                           whileHover={{
                             y: -4,
@@ -1116,9 +1084,7 @@ function DashboardContent() {
                       </div>
                     </section>
 
-                    {/* Bottom Split Section (Recent enrolled class & Upcoming Class) */}
                     <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
-                      {/* Left: Recent Queue list */}
                       <div className="lg:col-span-7 flex flex-col">
                         <div className="flex items-center justify-between mb-4 sm:mb-5">
                           <h2 className="text-base font-bold text-[#16191E]">Live Queue Oversight</h2>
@@ -1212,7 +1178,6 @@ function DashboardContent() {
                         </div>
                       </div>
 
-                      {/* Right: Upcoming Consultations */}
                       <div className="lg:col-span-5 flex flex-col">
                         <h2 className="text-base font-bold text-[#16191E] mb-4 sm:mb-5">Upcoming Consultations</h2>
                         <div className="space-y-3 sm:space-y-4">
@@ -1257,7 +1222,6 @@ function DashboardContent() {
                   </motion.div>
                 )}
 
-                {/* --------------- View 2: ASSISTANT DESK --------------- */}
                 {activeSection === 'assistant' && (
                   <motion.section
                     key="assistant"
@@ -1346,7 +1310,6 @@ function DashboardContent() {
                   </motion.section>
                 )}
 
-                {/* ─────────────── View 3: DOCTOR QUEUE ─────────────── */}
                 {activeSection === 'queue' && (
                   <motion.section
                     key="queue"
@@ -1437,7 +1400,6 @@ function DashboardContent() {
                   </motion.section>
                 )}
 
-                {/* ─────────────── View 4: CONSULTATION & RX BUILDER ─────────────── */}
                 {activeSection === 'consult' && (
                   <motion.section
                     key="consult"
@@ -1465,7 +1427,6 @@ function DashboardContent() {
                       </div>
                     ) : (
                       <div className="space-y-4 sm:space-y-6">
-                        {/* Patient Banner */}
                         <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                           <div>
                             <h2 className="text-base sm:text-lg font-bold text-[#16191E]">{activePatient.name}</h2>
@@ -1488,7 +1449,6 @@ function DashboardContent() {
                           </span>
                         </div>
 
-                        {/* Diagnostic Notes */}
                         <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
                           <h3 className="text-sm font-bold text-[#16191E] mb-3">Clinical Diagnostic Notes</h3>
                           <textarea
@@ -1500,7 +1460,6 @@ function DashboardContent() {
                           />
                         </div>
 
-                        {/* Prescription Builder */}
                         <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-4">
                             <h3 className="text-sm font-bold text-[#16191E]">
@@ -1546,7 +1505,6 @@ function DashboardContent() {
                             </div>
                           </div>
 
-                          {/* Prescribed List */}
                           <div className="border border-[#ECEEF2] rounded-xl p-3 sm:p-4 bg-[#F8F9FB] min-h-[100px]">
                             {currentPrescription.length === 0 ? (
                               <p className="text-xs text-[#8A909D] italic text-center py-4">
@@ -1580,7 +1538,6 @@ function DashboardContent() {
                             )}
                           </div>
 
-                          {/* Complete & Print */}
                           <motion.button
                             whileHover={{ scale: 1.02, y: -1 }}
                             whileTap={{ scale: 0.98 }}
@@ -1596,7 +1553,6 @@ function DashboardContent() {
                   </motion.section>
                 )}
 
-                {/* --------------- View 5: PHARMACY INVENTORY --------------- */}
                 {activeSection === 'inventory' && (
                   <motion.section
                     key="inventory"
@@ -1606,9 +1562,7 @@ function DashboardContent() {
                     transition={{ duration: 0.25 }}
                     className="space-y-4 sm:space-y-6"
                   >
-                    {/* Inventory Summary Cards */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                      {/* Total Molecules */}
                       <motion.div
                         whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(37,99,235,0.12)' }}
                         transition={{ type: 'spring', damping: 18, stiffness: 300 }}
@@ -1623,7 +1577,6 @@ function DashboardContent() {
                         </div>
                       </motion.div>
 
-                      {/* Adequate Stocks */}
                       <motion.div
                         whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(5,150,105,0.12)' }}
                         transition={{ type: 'spring', damping: 18, stiffness: 300 }}
@@ -1638,7 +1591,6 @@ function DashboardContent() {
                         </div>
                       </motion.div>
 
-                      {/* Low Stock Alert */}
                       <motion.div
                         whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(217,119,6,0.12)' }}
                         transition={{ type: 'spring', damping: 18, stiffness: 300 }}
@@ -1653,7 +1605,6 @@ function DashboardContent() {
                         </div>
                       </motion.div>
 
-                      {/* Stock Depleted */}
                       <motion.div
                         whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(220,38,38,0.12)' }}
                         transition={{ type: 'spring', damping: 18, stiffness: 300 }}
@@ -1669,7 +1620,6 @@ function DashboardContent() {
                       </motion.div>
                     </div>
 
-                    {/* Register Procurement */}
                     <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
                       <h3 className="text-sm font-bold text-[#16191E] mb-3">Register New Procurement</h3>
                       <form onSubmit={handleAddNewProcurement} className="grid grid-cols-1 sm:grid-cols-12 gap-3">
@@ -1711,7 +1661,6 @@ function DashboardContent() {
                       </form>
                     </div>
 
-                    {/* Master Inventory List */}
                     <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
                       <h3 className="text-sm font-bold text-[#16191E] mb-4">Master Inventory Status</h3>
                       <div className="space-y-3">
@@ -1779,7 +1728,6 @@ function DashboardContent() {
                   </motion.section>
                 )}
 
-                {/* --------------- View 6: OPERATIONAL ANALYTICS --------------- */}
                 {activeSection === 'analytics' && (
                   <motion.section
                     key="analytics"
@@ -1812,7 +1760,6 @@ function DashboardContent() {
                       </motion.div>
                     </div>
 
-                    {/* Consultation Breakdown */}
                     <motion.div
                       whileHover={{ y: -2 }}
                       className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm"
@@ -1821,7 +1768,6 @@ function DashboardContent() {
                         Consultation Case Breakdown
                       </h3>
                       <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-8">
-                        {/* SVG Doughnut */}
                         <div className="relative w-36 h-36 sm:w-44 sm:h-44 flex-shrink-0">
                           <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                             <circle
@@ -1881,7 +1827,6 @@ function DashboardContent() {
                           </div>
                         </div>
 
-                        {/* Legend */}
                         <div className="space-y-2 text-xs font-medium w-full sm:w-auto">
                           {[
                             { label: 'Viral Fever & URI', pct: '45%', color: 'bg-[#2563EB]' },
@@ -1907,7 +1852,6 @@ function DashboardContent() {
             </main>
           </div>
 
-          {/* --------------- MODAL 1: Walk-in Registration Modal --------------- */}
           <AnimatePresence>
             {showWalkinModal && (
               <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
@@ -1996,7 +1940,6 @@ function DashboardContent() {
             )}
           </AnimatePresence>
 
-          {/* --------------- MODAL 2: Doctor PIN Modal --------------- */}
           <AnimatePresence>
             {showPinModal && (
               <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
@@ -2049,7 +1992,6 @@ function DashboardContent() {
             )}
           </AnimatePresence>
 
-          {/* --------------- MODAL 3: Prescription Print Modal --------------- */}
           <AnimatePresence>
             {showPrintModal && printRecord && (
               <div
@@ -2141,7 +2083,6 @@ function DashboardContent() {
         </motion.div>
       )}
 
-      {/* --------------- Mobile Bottom Navigation Bar --------------- */}
       {!isLoading && isMobile && (
         <motion.nav
           initial={{ y: 80 }}

@@ -34,7 +34,6 @@ export interface FormattedInventoryItem {
   reorderThreshold?: number;
 }
 
-// ----------------- DOCTORS -----------------
 export async function getDoctors(): Promise<DbDoctor[]> {
   try {
     const { data, error } = await supabase.from('doctors').select('*');
@@ -139,7 +138,6 @@ export async function verifyDoctorPin(
   }
 }
 
-// ----------------- DOCTOR SESSION PERSISTENCE & LOGOUT -----------------
 const DOCTOR_SESSION_KEY = 'healthsync_active_doctor_session';
 
 export interface DoctorSessionData {
@@ -201,7 +199,6 @@ export async function logoutDoctorSessionDb(doctorId?: string): Promise<void> {
   }
 }
 
-// ----------------- QUEUE / APPOINTMENTS -----------------
 export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
   try {
     const { data, error } = await supabase
@@ -499,7 +496,6 @@ export async function completeConsultationDb(params: {
   }
 }
 
-// ----------------- INVENTORY -----------------
 export async function fetchInventoryFromDb(): Promise<FormattedInventoryItem[]> {
   try {
     const { data, error } = await supabase
@@ -607,7 +603,6 @@ export async function restockInventoryItemDb(
   }
 }
 
-// ----------------- REALTIME SUBSCRIPTION -----------------
 export function subscribeToClinicUpdates(onUpdate: () => void) {
   const channelName = `clinic_realtime_${Math.random().toString(36).substring(2, 9)}`;
   const channel = supabase
