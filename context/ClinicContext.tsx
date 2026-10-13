@@ -11,6 +11,17 @@ import {
   PatientStatus
 } from '@/types';
 import { INITIAL_PATIENTS, INITIAL_INVENTORY, CLINIC_CONFIG } from '@/data/initial-data';
+import {
+  fetchQueueFromDb,
+  fetchInventoryFromDb,
+  subscribeToClinicUpdates,
+  registerWalkinPatientDb,
+  reallocateSlotDb,
+  updateAppointmentStatusDb,
+  completeConsultationDb,
+  addInventoryItemDb,
+  restockInventoryItemDb,
+} from '@/lib/supabaseService';
 
 interface ClinicContextType {
   role: Role;
@@ -27,7 +38,6 @@ interface ClinicContextType {
   isPrintModalOpen: boolean;
   isLoading: boolean;
   
-  // Actions
   switchTab: (tab: TabType) => void;
   openAuthModal: (targetTab?: TabType) => void;
   closeAuthModal: () => void;
@@ -46,14 +56,14 @@ interface ClinicContextType {
   
   startConsultation: (patientId: string) => void;
   setDiagnosticNotes: (notes: string) => void;
-  addMedicineToRx: (medId: number, qty: number, dosage?: string) => { success: boolean; message?: string };
+  addMedicineToRx: (medId: number | string, qty: number, dosage?: string) => { success: boolean; message?: string };
   removeMedicineFromRx: (index: number) => void;
   completeConsultation: () => boolean;
   closePrintModal: () => void;
   reprintConsultation: (record: ConsultationRecord) => void;
   
   addNewInventoryItem: (generic: string, brand: string, qty: number, unit?: string) => boolean;
-  restockItem: (id: number, additionalQty: number) => boolean;
+  restockItem: (id: number | string, additionalQty: number) => boolean;
   
   dismissLoading: () => void;
   replayLoading: () => void;
@@ -86,6 +96,42 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     }, 1800);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Fetch only DB data and subscribe to live updates
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDbData() {
+      try {
+        const [dbPatients, dbInventory] = await Promise.all([
+          fetchQueueFromDb(),
+          fetchInventoryFromDb(),
+        ]);
+
+        if (isMounted) {
+          if (dbPatients) {
+            setPatients(dbPatients as unknown as Patient[]);
+          }
+          if (dbInventory) {
+            setInventory(dbInventory as unknown as InventoryItem[]);
+          }
+        }
+      } catch (err) {
+        console.warn('ClinicContext Supabase error:', err);
+      }
+    }
+
+    loadDbData();
+
+    const unsubscribe = subscribeToClinicUpdates(() => {
+      loadDbData();
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const switchTab = (tab: TabType) => {
@@ -130,7 +176,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     setActiveTab('assistant');
   };
 
-  const registerPatient = (
+  const registerPatient = async (
     name: string,
     age: number,
     gender: 'Male' | 'Female' | 'Other',
@@ -147,47 +193,36 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       phone = phoneOrPriority;
     }
 
-    const nextToken = patients.length + 1;
-    const now = new Date();
-    const timeString = now.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-
-    const newPatient: Patient = {
-      id: `P0${nextToken < 10 ? '0' + nextToken : nextToken}`,
-      tokenNumber: nextToken,
+    const dbPat = await registerWalkinPatientDb({
       name,
       age,
       gender,
-      phone: phone?.trim() || undefined,
-      status: 'Waiting',
-      time: timeString,
-      priority
-    };
+      phone,
+      priority,
+    });
 
-    setPatients(prev => [newPatient, ...prev]);
+    if (dbPat) {
+      setPatients(prev => [
+        { ...dbPat, tokenNumber: prev.length + 1 },
+        ...prev,
+      ]);
+    }
   };
 
-  const updatePatientStatus = (patientId: string, status: PatientStatus) => {
+  const updatePatientStatus = async (patientId: string, status: PatientStatus) => {
     setPatients(prev =>
       prev.map(p => (p.id === patientId ? { ...p, status } : p))
     );
+    await updateAppointmentStatusDb(patientId, status);
   };
 
-  const reallocateSlot = (patientId: string) => {
-    const now = new Date();
-    now.setMinutes(now.getMinutes() + 15);
-    const newSlotTime = now.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-
-    setPatients(prev =>
-      prev.map(p => (p.id === patientId ? { ...p, time: newSlotTime } : p))
-    );
+  const reallocateSlot = async (patientId: string) => {
+    const newTime = await reallocateSlotDb(patientId);
+    if (newTime) {
+      setPatients(prev =>
+        prev.map(p => (p.id === patientId ? { ...p, time: newTime } : p))
+      );
+    }
   };
 
   const startConsultation = (patientId: string) => {
@@ -202,11 +237,11 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addMedicineToRx = (
-    medId: number,
+    medId: number | string,
     qty: number,
     dosage: string = '1-0-1 After Food'
   ): { success: boolean; message?: string } => {
-    const item = inventory.find(m => m.id === medId);
+    const item = inventory.find(m => String(m.id) === String(medId));
     if (!item) return { success: false, message: 'Medicine not found' };
 
     if (qty > item.stock) {
@@ -216,7 +251,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       };
     }
 
-    const existingIdx = currentPrescription.findIndex(p => p.med.id === medId);
+    const existingIdx = currentPrescription.findIndex(p => String(p.med.id) === String(medId));
     if (existingIdx !== -1) {
       const combinedQty = currentPrescription[existingIdx].qty + qty;
       if (combinedQty > item.stock) {
@@ -291,6 +326,16 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     setCurrentPrescription([]);
     setDiagnosticNotes('');
 
+    // Call Supabase DB to record consultation, prescriptions, and deduct inventory
+    completeConsultationDb({
+      appointmentId: activePatient.id,
+      prescriptions: currentPrescription.map(p => ({
+        inventoryId: p.med.id,
+        qty: p.qty,
+      })),
+      notes: diagnosticNotes.trim() || undefined,
+    }).catch(err => console.warn('Consultation DB completion error:', err));
+
     return true;
   };
 
@@ -323,16 +368,23 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     };
 
     setInventory(prev => [newItem, ...prev]);
+    addInventoryItemDb({
+      generic: generic.trim(),
+      brand: brand.trim(),
+      stock: qty,
+    }).catch(err => console.warn('Inventory DB addition error:', err));
+
     return true;
   };
 
-  const restockItem = (id: number, additionalQty: number): boolean => {
+  const restockItem = (id: number | string, additionalQty: number): boolean => {
     if (additionalQty <= 0) return false;
     setInventory(prev =>
       prev.map(item =>
-        item.id === id ? { ...item, stock: item.stock + additionalQty } : item
+        String(item.id) === String(id) ? { ...item, stock: item.stock + additionalQty } : item
       )
     );
+    restockInventoryItemDb(id, additionalQty).catch(err => console.warn('Restock DB error:', err));
     return true;
   };
 

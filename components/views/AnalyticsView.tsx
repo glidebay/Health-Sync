@@ -32,7 +32,7 @@ export default function AnalyticsView() {
     { label: 'Orthopedic & Joint', value: 5, color: '#8b5cf6', count: 3 }
   ];
 
-  const totalPatientsToday = 54 + patients.length - 6;
+  const totalPatientsToday = patients.length;
   const completedCount = completedConsultations.length;
 
   return (

@@ -27,7 +27,7 @@ export default function InventoryView() {
   const [successMsg, setSuccessMsg] = useState(false);
 
   // Quick replenish input state map
-  const [restockInputs, setRestockInputs] = useState<Record<number, string>>({});
+  const [restockInputs, setRestockInputs] = useState<Record<string | number, string>>({});
   const [activeFilter, setActiveFilter] = useState<'all' | 'low' | 'out'>('all');
 
   const handleAddProcurement = (e: React.FormEvent) => {
@@ -45,7 +45,7 @@ export default function InventoryView() {
     }
   };
 
-  const handleRestockSubmit = (id: number) => {
+  const handleRestockSubmit = (id: string | number) => {
     const amount = parseInt(restockInputs[id] || '0', 10);
     if (amount > 0) {
       restockItem(id, amount);
