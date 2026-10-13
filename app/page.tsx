@@ -19,6 +19,19 @@ function useIsMobile(breakpoint = 768) {
 }
 import { ClinicProvider, useClinic } from '@/context/ClinicContext';
 import {
+  fetchQueueFromDb,
+  fetchInventoryFromDb,
+  registerWalkinPatientDb,
+  reallocateSlotDb,
+  updateAppointmentStatusDb,
+  completeConsultationDb,
+  addInventoryItemDb,
+  restockInventoryItemDb,
+  verifyDoctorPin,
+  getDoctors,
+  subscribeToClinicUpdates
+} from '@/lib/supabaseService';
+import {
   HeartPulse,
   Home,
   Users,
@@ -47,6 +60,7 @@ import {
   Sparkles,
   PanelLeft,
   Phone,
+  Database,
 } from 'lucide-react';
 
 /* --------------- Types --------------- */
@@ -61,7 +75,7 @@ interface Patient {
 }
 
 interface InventoryItem {
-  id: number;
+  id: string | number;
   generic: string;
   brand: string;
   stock: number;
@@ -75,21 +89,9 @@ interface PrescriptionItem {
 type NavSection = 'dashboard' | 'assistant' | 'queue' | 'consult' | 'inventory' | 'analytics';
 
 /* --------------- Initial Data --------------- */
-const INITIAL_QUEUE: Patient[] = [
-  { id: 'P01', name: 'Unnikrishnan Menon', age: 62, gender: 'Male', phone: '+91 98470 11223', status: 'Waiting', time: '09:30 AM' },
-  { id: 'P02', name: 'Lakshmi Namboothiri', age: 45, gender: 'Female', phone: '+91 94471 22334', status: 'In Progress', time: '09:45 AM' },
-  { id: 'P03', name: 'Abdul Rahman', age: 34, gender: 'Male', phone: '+91 97452 33445', status: 'Waiting', time: '10:00 AM' },
-  { id: 'P04', name: 'Thomas Varghese', age: 55, gender: 'Male', phone: '+91 98953 44556', status: 'Waiting', time: '10:15 AM' },
-  { id: 'P05', name: 'Parvathy Nair', age: 28, gender: 'Female', phone: '+91 94004 55667', status: 'Waiting', time: '10:30 AM' },
-  { id: 'P06', name: 'Sreenivasan Pillai', age: 71, gender: 'Male', phone: '+91 98465 66778', status: 'Waiting', time: '10:45 AM' },
-];
+const INITIAL_QUEUE: Patient[] = [];
 
-const INITIAL_INVENTORY: InventoryItem[] = [
-  { id: 1, generic: 'Paracetamol 650mg', brand: 'Dolo 650', stock: 150 },
-  { id: 2, generic: 'Amoxicillin 500mg', brand: 'Novamox', stock: 45 },
-  { id: 3, generic: 'Fexofenadine 120mg', brand: 'Allegra', stock: 12 },
-  { id: 4, generic: 'Pantoprazole 40mg', brand: 'Pan 40', stock: 0 },
-];
+const INITIAL_INVENTORY: InventoryItem[] = [];
 
 /* --------------- Motion Variants --------------- */
 const sidebarVariants: Variants = {
@@ -211,6 +213,52 @@ function DashboardContent() {
   const [activePatient, setActivePatient] = useState<Patient | null>(null);
   const [currentPrescription, setCurrentPrescription] = useState<PrescriptionItem[]>([]);
   const [diagnosticNotes, setDiagnosticNotes] = useState('');
+  const [isDbSynced, setIsDbSynced] = useState(false);
+  const [doctorProfile, setDoctorProfile] = useState<{ name: string; title: string }>({
+    name: 'Doctor',
+    title: 'General Medicine',
+  });
+
+  // Load initial data from Supabase DB and subscribe to live changes
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadData() {
+      try {
+        const [dbQueue, dbInventory, dbDoctors] = await Promise.all([
+          fetchQueueFromDb(),
+          fetchInventoryFromDb(),
+          getDoctors(),
+        ]);
+
+        if (isMounted) {
+          setQueue(dbQueue || []);
+          setInventory(dbInventory || []);
+          if (dbDoctors && dbDoctors.length > 0) {
+            setDoctorProfile({
+              name: dbDoctors[0].full_name,
+              title: dbDoctors[0].specialization || 'General Medicine',
+            });
+          }
+          setIsDbSynced(true);
+        }
+      } catch (err) {
+        console.warn('Failed to load initial Supabase data:', err);
+      }
+    }
+
+    loadData();
+
+    // Subscribe to realtime changes on Supabase tables
+    const unsubscribe = subscribeToClinicUpdates(() => {
+      loadData();
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -226,7 +274,7 @@ function DashboardContent() {
   const [newGeneric, setNewGeneric] = useState('');
   const [newBrand, setNewBrand] = useState('');
   const [newQty, setNewQty] = useState('');
-  const [stockUpdates, setStockUpdates] = useState<Record<number, string>>({});
+  const [stockUpdates, setStockUpdates] = useState<Record<string, string>>({});
 
   // Prescription builder form
   const [selectedMedId, setSelectedMedId] = useState('');
@@ -262,8 +310,9 @@ function DashboardContent() {
     setActiveSection(section);
   };
 
-  const handlePinSubmit = () => {
-    if (pinInput.trim() === '1234') {
+  const handlePinSubmit = async () => {
+    const isValid = await verifyDoctorPin(pinInput.trim());
+    if (isValid) {
       setIsLoggedIn(true);
       setShowPinModal(false);
       setPinError(false);
@@ -278,27 +327,26 @@ function DashboardContent() {
   };
 
   /* --------------- Clinic Actions --------------- */
-  const handleRegisterWalkin = (e: React.FormEvent) => {
+  const handleRegisterWalkin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!walkinName.trim() || !walkinAge) return;
 
-    const timeStr = new Date().toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
-
-    const newPat: Patient = {
-      id: `P${String(queue.length + 1).padStart(2, '0')}`,
+    const ageNum = parseInt(walkinAge, 10);
+    const dbPat = await registerWalkinPatientDb({
       name: walkinName.trim(),
-      age: parseInt(walkinAge, 10),
+      age: ageNum,
       gender: walkinGender,
       phone: walkinPhone.trim() || undefined,
-      status: 'Waiting',
-      time: timeStr,
-    };
+      priority: 'Normal',
+    });
 
-    setQueue((prev) => [...prev, newPat]);
+    if (dbPat) {
+      setQueue((prev) => [
+        { ...dbPat, tokenNumber: prev.length + 1 },
+        ...prev,
+      ]);
+    }
+
     setWalkinName('');
     setWalkinAge('');
     setWalkinPhone('');
@@ -306,23 +354,28 @@ function DashboardContent() {
     setShowWalkinModal(false);
   };
 
-  const handleReallocate = (id: string) => {
+  const handleReallocate = async (id: string) => {
+    const newTime = await reallocateSlotDb(id);
     setQueue((prev) =>
       prev.map((p) => {
         if (p.id === id) {
-          const nextTime = new Date(Date.now() + 20 * 60000).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true,
-          });
-          return { ...p, time: nextTime };
+          return {
+            ...p,
+            time:
+              newTime ||
+              new Date(Date.now() + 20 * 60000).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true,
+              }),
+          };
         }
         return p;
       })
     );
   };
 
-  const startConsultation = (patientId: string) => {
+  const startConsultation = async (patientId: string) => {
     const patient = queue.find((p) => p.id === patientId);
     if (!patient) return;
 
@@ -331,6 +384,8 @@ function DashboardContent() {
     setDiagnosticNotes('');
     setSelectedMedId('');
     setRxQty('');
+
+    await updateAppointmentStatusDb(patientId, 'In Progress');
 
     setQueue((prev) =>
       prev.map((p) => (p.id === patientId ? { ...p, status: 'In Progress' } : p))
@@ -344,7 +399,7 @@ function DashboardContent() {
     const qtyNum = parseInt(rxQty, 10);
     if (qtyNum <= 0) return;
 
-    const med = inventory.find((m) => m.id === parseInt(selectedMedId, 10));
+    const med = inventory.find((m) => String(m.id) === String(selectedMedId));
     if (!med) return;
 
     if (qtyNum > med.stock) {
@@ -352,14 +407,14 @@ function DashboardContent() {
       return;
     }
 
-    const existing = currentPrescription.find((p) => p.med.id === med.id);
+    const existing = currentPrescription.find((p) => String(p.med.id) === String(med.id));
     if (existing) {
       if (existing.qty + qtyNum > med.stock) {
         alert(`Combined total exceeds available stock of ${med.stock}.`);
         return;
       }
       setCurrentPrescription((prev) =>
-        prev.map((p) => (p.med.id === med.id ? { ...p, qty: p.qty + qtyNum } : p))
+        prev.map((p) => (String(p.med.id) === String(med.id) ? { ...p, qty: p.qty + qtyNum } : p))
       );
     } else {
       setCurrentPrescription((prev) => [...prev, { med, qty: qtyNum }]);
@@ -373,13 +428,23 @@ function DashboardContent() {
     setCurrentPrescription((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const completeConsultation = () => {
+  const completeConsultation = async () => {
     if (!activePatient) return;
 
-    // Deduct stock in real time
+    // Deduct stock and save consultation to Supabase
+    await completeConsultationDb({
+      appointmentId: activePatient.id,
+      notes: diagnosticNotes || 'Clinical examination normal. Prescription issued.',
+      prescriptions: currentPrescription.map((p) => ({
+        inventoryId: String(p.med.id),
+        qty: p.qty,
+      })),
+    });
+
+    // Deduct stock in real time locally
     setInventory((prevInv) =>
       prevInv.map((item) => {
-        const prescribed = currentPrescription.find((p) => p.med.id === item.id);
+        const prescribed = currentPrescription.find((p) => String(p.med.id) === String(item.id));
         if (prescribed) {
           return { ...item, stock: Math.max(0, item.stock - prescribed.qty) };
         }
@@ -413,28 +478,40 @@ function DashboardContent() {
     setActivePatient(null);
   };
 
-  const handleAddNewProcurement = (e: React.FormEvent) => {
+  const handleAddNewProcurement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGeneric.trim() || !newBrand.trim() || !newQty) return;
     const qtyNum = parseInt(newQty, 10);
     if (qtyNum <= 0) return;
 
-    setInventory((prev) => [
-      ...prev,
-      { id: Date.now(), generic: newGeneric.trim(), brand: newBrand.trim(), stock: qtyNum },
-    ]);
+    const dbItem = await addInventoryItemDb({
+      generic: newGeneric.trim(),
+      brand: newBrand.trim(),
+      stock: qtyNum,
+    });
+
+    if (dbItem) {
+      setInventory((prev) => [dbItem, ...prev]);
+    } else {
+      setInventory((prev) => [
+        ...prev,
+        { id: `inv-${Date.now()}`, generic: newGeneric.trim(), brand: newBrand.trim(), stock: qtyNum },
+      ]);
+    }
+
     setNewGeneric('');
     setNewBrand('');
     setNewQty('');
   };
 
-  const handleUpdateStock = (id: number) => {
-    const val = parseInt(stockUpdates[id] || '0', 10);
+  const handleUpdateStock = async (id: string | number) => {
+    const val = parseInt(stockUpdates[String(id)] || '0', 10);
     if (val > 0) {
+      await restockInventoryItemDb(String(id), val);
       setInventory((prev) =>
-        prev.map((item) => (item.id === id ? { ...item, stock: item.stock + val } : item))
+        prev.map((item) => (String(item.id) === String(id) ? { ...item, stock: item.stock + val } : item))
       );
-      setStockUpdates((prev) => ({ ...prev, [id]: '' }));
+      setStockUpdates((prev) => ({ ...prev, [String(id)]: '' }));
     }
   };
 
@@ -445,9 +522,12 @@ function DashboardContent() {
       p.id.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const totalPatientsCount = 54 + queue.length - 6;
+  const totalPatientsCount = queue.length;
   const waitingPatientsCount = queue.filter((p) => p.status === 'Waiting').length;
+  const inProgressPatientsCount = queue.filter((p) => p.status === 'In Progress').length;
   const completedPatientsCount = queue.filter((p) => p.status === 'Completed').length;
+  const inChamberPatient = queue.find((p) => p.status === 'In Progress');
+  const nextWaitingPatient = queue.find((p) => p.status === 'Waiting');
   const totalStockUnits = inventory.reduce((acc, curr) => acc + curr.stock, 0);
   const totalMolecules = inventory.length;
   const adequateStocks = inventory.filter((m) => m.stock > 20).length;
@@ -594,7 +674,7 @@ function DashboardContent() {
                       </motion.div>
 
                       <p className="text-xs font-bold text-[#16191E] leading-relaxed max-w-[160px] mb-4">
-                        {isLoggedIn ? 'Doctor Authenticated • Dr. Sunny' : 'Doctor Security PIN Required for Triage & Rx'}
+                        {isLoggedIn ? `Doctor Authenticated • ${doctorProfile.name}` : 'Doctor Security PIN Required for Triage & Rx'}
                       </p>
 
                       {isLoggedIn ? (
@@ -677,7 +757,14 @@ function DashboardContent() {
               </div>
 
               {/* Search & Sign In Button */}
-              <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-6'}`}>
+              <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-4'}`}>
+                {!isMobile && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/70 text-xs font-semibold text-emerald-700 shadow-2xs">
+                    <Database className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Supabase Live</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  </div>
+                )}
                 {!isMobile && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.92 }}
@@ -701,7 +788,7 @@ function DashboardContent() {
                 {isLoggedIn ? (
                   <div className="flex items-center space-x-2">
                     <span className={`font-bold bg-[#EBECEF] text-[#16191E] rounded-xl border border-[#ECEEF2] ${isMobile ? 'text-[10px] px-2.5 py-2' : 'text-xs px-4 py-2.5'}`}>
-                      {isMobile ? 'Dr. Sunny' : 'Dr. Sunny (MD)'}
+                      {isMobile ? doctorProfile.name : `${doctorProfile.name} (${doctorProfile.title})`}
                     </span>
                     <motion.button
                       whileHover={{ scale: 1.04 }}
@@ -844,7 +931,7 @@ function DashboardContent() {
                         <div>
                           <span className="text-xs sm:text-sm font-semibold text-[#16191E] block mb-3 sm:mb-6">Completed Consults</span>
                           <span className="text-xs text-[#8A909D] font-medium tracking-wide">
-                            <AnimatedCounter target={completedPatientsCount + 50} />
+                            <AnimatedCounter target={completedPatientsCount} />
                           </span>
                         </div>
                         <motion.div
@@ -911,13 +998,19 @@ function DashboardContent() {
                             <Stethoscope className="w-5 h-5 stroke-[1.8]" />
                           </motion.div>
                           <div>
-                            <h3 className="text-sm font-bold text-[#16191E] mb-3">
-                              Lakshmi Namboothiri (In Chamber)
+                            <h3 className="text-sm font-bold text-[#16191E] mb-3 truncate">
+                              {inChamberPatient ? `${inChamberPatient.name} (In Chamber)` : 'No Patient in Chamber'}
                             </h3>
                             <div className="flex items-center justify-between gap-2">
-                              <AnimatedProgress percent={75} delay={0.1} />
+                              <AnimatedProgress percent={inChamberPatient ? 85 : 0} delay={0.1} />
                               <span className="text-xs font-semibold text-[#8A909D] whitespace-nowrap">
-                                <strong className="text-[#16191E]">45</strong> Yrs • Female
+                                {inChamberPatient ? (
+                                  <>
+                                    <strong className="text-[#16191E]">{inChamberPatient.age}</strong> Yrs • {inChamberPatient.gender}
+                                  </>
+                                ) : (
+                                  'Chamber Available'
+                                )}
                               </span>
                             </div>
                           </div>
@@ -938,13 +1031,19 @@ function DashboardContent() {
                             <Clock className="w-5 h-5 stroke-[1.8]" />
                           </motion.div>
                           <div>
-                            <h3 className="text-sm font-bold text-[#16191E] mb-3">
-                              Unnikrishnan Menon (Waiting)
+                            <h3 className="text-sm font-bold text-[#16191E] mb-3 truncate">
+                              {nextWaitingPatient ? `${nextWaitingPatient.name} (Next)` : 'No Waiting Patients'}
                             </h3>
                             <div className="flex items-center justify-between gap-2">
-                              <AnimatedProgress percent={45} delay={0.2} />
+                              <AnimatedProgress percent={nextWaitingPatient ? 50 : 0} delay={0.2} />
                               <span className="text-xs font-semibold text-[#8A909D] whitespace-nowrap">
-                                <strong className="text-[#16191E]">09:30</strong> AM Slot
+                                {nextWaitingPatient ? (
+                                  <>
+                                    <strong className="text-[#16191E]">{nextWaitingPatient.time}</strong> Slot
+                                  </>
+                                ) : (
+                                  'Queue Clear'
+                                )}
                               </span>
                             </div>
                           </div>
@@ -1010,7 +1109,14 @@ function DashboardContent() {
                         </div>
 
                         <div className="space-y-3 sm:space-y-4">
-                          {filteredQueue.slice(0, 3).map((p) => (
+                          {filteredQueue.length === 0 ? (
+                            <div className="bg-white rounded-2xl p-8 border border-[#ECEEF2] text-center shadow-xs">
+                              <Users className="w-8 h-8 text-gray-300 mx-auto mb-2 stroke-[1.5]" />
+                              <p className="text-sm font-semibold text-gray-700">No Patients in Database Queue</p>
+                              <p className="text-xs text-gray-400 mt-1">Register walk-in patients from Assistant Desk to populate live queue.</p>
+                            </div>
+                          ) : (
+                            filteredQueue.slice(0, 3).map((p) => (
                             <motion.div
                               key={p.id}
                               whileHover={{
@@ -1069,7 +1175,7 @@ function DashboardContent() {
                                 </div>
                               </div>
                             </motion.div>
-                          ))}
+                          )))}
                         </div>
                       </div>
 
@@ -1147,7 +1253,16 @@ function DashboardContent() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                      {queue.map((p) => (
+                      {queue.length === 0 ? (
+                        <div className="col-span-full bg-white rounded-2xl p-10 border border-[#ECEEF2] text-center shadow-xs">
+                          <Users className="w-10 h-10 text-gray-300 mx-auto mb-3 stroke-[1.5]" />
+                          <h3 className="text-sm font-bold text-[#16191E]">No Patients Registered in Database</h3>
+                          <p className="text-xs text-[#8A909D] mt-1 max-w-sm mx-auto">
+                            Use the "Register Walk-in" button above to insert patient records directly into Supabase.
+                          </p>
+                        </div>
+                      ) : (
+                        queue.map((p) => (
                         <motion.div
                           key={p.id}
                           whileHover={{ y: -2 }}
@@ -1193,7 +1308,7 @@ function DashboardContent() {
                             </motion.button>
                           )}
                         </motion.div>
-                      ))}
+                      )))}
                     </div>
                   </motion.section>
                 )}
@@ -1218,7 +1333,16 @@ function DashboardContent() {
                     </div>
 
                     <div className="space-y-3 sm:space-y-4">
-                      {queue.map((p) => {
+                      {queue.length === 0 ? (
+                        <div className="bg-white rounded-2xl p-10 border border-[#ECEEF2] text-center shadow-xs">
+                          <Stethoscope className="w-10 h-10 text-gray-300 mx-auto mb-3 stroke-[1.5]" />
+                          <h3 className="text-sm font-bold text-[#16191E]">No Active Patients in Consultation Queue</h3>
+                          <p className="text-xs text-[#8A909D] mt-1 max-w-sm mx-auto">
+                            Patients registered at the Assistant Desk will appear here in real time.
+                          </p>
+                        </div>
+                      ) : (
+                        queue.map((p) => {
                         const isCompleted = p.status === 'Completed';
                         return (
                           <motion.div
@@ -1275,7 +1399,7 @@ function DashboardContent() {
                             </div>
                           </motion.div>
                         );
-                      })}
+                      }))}
                     </div>
                   </motion.section>
                 )}
@@ -1558,7 +1682,16 @@ function DashboardContent() {
                     <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
                       <h3 className="text-sm font-bold text-[#16191E] mb-4">Master Inventory Status</h3>
                       <div className="space-y-3">
-                        {inventory.map((item) => {
+                        {inventory.length === 0 ? (
+                          <div className="p-8 text-center bg-[#F8F9FB] rounded-xl border border-[#ECEEF2]">
+                            <Boxes className="w-8 h-8 text-gray-300 mx-auto mb-2 stroke-[1.5]" />
+                            <p className="text-sm font-semibold text-gray-700">No Inventory Items in Database</p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              Add pharmacy molecules above or run the SQL seed in your Supabase dashboard.
+                            </p>
+                          </div>
+                        ) : (
+                          inventory.map((item) => {
                           const isHigh = item.stock > 20;
                           const isLow = item.stock > 0 && item.stock <= 20;
 
@@ -1607,7 +1740,7 @@ function DashboardContent() {
                               </div>
                             </motion.div>
                           );
-                        })}
+                        }))}
                       </div>
                     </div>
                   </motion.section>
@@ -1628,7 +1761,9 @@ function DashboardContent() {
                         whileHover={{ y: -3 }}
                         className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm text-center"
                       >
-                        <span className="text-3xl sm:text-4xl font-extrabold text-[#16191E] block mb-1">54</span>
+                        <span className="text-3xl sm:text-4xl font-extrabold text-[#16191E] block mb-1">
+                          {totalPatientsCount}
+                        </span>
                         <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
                           Total Patients Today
                         </span>

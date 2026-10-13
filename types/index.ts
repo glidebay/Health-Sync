@@ -15,7 +15,7 @@ export interface Patient {
 }
 
 export interface InventoryItem {
-  id: number;
+  id: number | string;
   generic: string;
   brand: string;
   stock: number;
