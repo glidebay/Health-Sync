@@ -29,7 +29,11 @@ import {
   restockInventoryItemDb,
   verifyDoctorPin,
   getDoctors,
-  subscribeToClinicUpdates
+  subscribeToClinicUpdates,
+  saveDoctorSessionLocal,
+  getDoctorSessionLocal,
+  clearDoctorSessionLocal,
+  logoutDoctorSessionDb,
 } from '@/lib/supabaseService';
 import {
   HeartPulse,
@@ -235,10 +239,28 @@ function DashboardContent() {
           setQueue(dbQueue || []);
           setInventory(dbInventory || []);
           if (dbDoctors && dbDoctors.length > 0) {
-            setDoctorProfile({
-              name: dbDoctors[0].full_name,
-              title: dbDoctors[0].specialization || 'General Medicine',
-            });
+            const savedSession = getDoctorSessionLocal();
+            if (savedSession) {
+              const matched = dbDoctors.find((d) => d.id === savedSession.doctorId);
+              if (
+                matched &&
+                matched.pin_session_until &&
+                new Date(matched.pin_session_until).getTime() > Date.now()
+              ) {
+                // Restore session on refresh for the authenticated doctor
+                setDoctorProfile({
+                  name: matched.full_name,
+                  title: matched.specialization || 'General Medicine',
+                });
+                setIsLoggedIn(true);
+              } else {
+                clearDoctorSessionLocal();
+                setIsLoggedIn(false);
+              }
+            } else {
+              // First screen: strictly locked!
+              setIsLoggedIn(false);
+            }
           }
           setIsDbSynced(true);
         }
@@ -311,11 +333,22 @@ function DashboardContent() {
   };
 
   const handlePinSubmit = async () => {
-    const isValid = await verifyDoctorPin(pinInput.trim());
-    if (isValid) {
+    const res = await verifyDoctorPin(pinInput.trim());
+    if (res.success && res.doctor) {
+      saveDoctorSessionLocal({
+        doctorId: res.doctor.id,
+        name: res.doctor.full_name,
+        title: res.doctor.specialization || 'General Medicine',
+        expiresAt: Date.now() + 30 * 60 * 1000,
+      });
+
       setIsLoggedIn(true);
       setShowPinModal(false);
       setPinError(false);
+      setDoctorProfile({
+        name: res.doctor.full_name,
+        title: res.doctor.specialization || 'General Medicine',
+      });
       const target = intendedSection || 'queue';
       setActiveSection(target);
       setIntendedSection(null);
@@ -323,6 +356,16 @@ function DashboardContent() {
     } else {
       setPinError(true);
       setTimeout(() => setPinError(false), 2000);
+    }
+  };
+
+  const handleLogout = async () => {
+    const savedSession = getDoctorSessionLocal();
+    clearDoctorSessionLocal();
+    setIsLoggedIn(false);
+    setActiveSection('dashboard');
+    if (savedSession?.doctorId) {
+      await logoutDoctorSessionDb(savedSession.doctorId);
     }
   };
 
@@ -628,8 +671,8 @@ function DashboardContent() {
                               <button
                                 onClick={() => handleNavClick(item.id, item.reqAuth)}
                                 className={`relative w-full flex items-center justify-between px-4 py-3 rounded-xl font-semibold text-sm transition-colors duration-200 cursor-pointer text-left group ${isActive
-                                    ? 'text-[#16191E] font-semibold'
-                                    : 'text-[#5E6470] hover:text-[#16191E] hover:bg-gray-50/80 font-medium'
+                                  ? 'text-[#16191E] font-semibold'
+                                  : 'text-[#5E6470] hover:text-[#16191E] hover:bg-gray-50/80 font-medium'
                                   }`}
                               >
                                 {isActive && (
@@ -681,10 +724,7 @@ function DashboardContent() {
                         <motion.button
                           whileHover={{ scale: 1.03, y: -1 }}
                           whileTap={{ scale: 0.97 }}
-                          onClick={() => {
-                            setIsLoggedIn(false);
-                            setActiveSection('dashboard');
-                          }}
+                          onClick={handleLogout}
                           className="w-full py-2.5 px-4 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition duration-150 shadow-sm cursor-pointer"
                         >
                           Lock Session
@@ -758,13 +798,7 @@ function DashboardContent() {
 
               {/* Search & Sign In Button */}
               <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-4'}`}>
-                {!isMobile && (
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/70 text-xs font-semibold text-emerald-700 shadow-2xs">
-                    <Database className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Supabase Live</span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  </div>
-                )}
+
                 {!isMobile && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.92 }}
@@ -793,7 +827,7 @@ function DashboardContent() {
                     <motion.button
                       whileHover={{ scale: 1.04 }}
                       whileTap={{ scale: 0.96 }}
-                      onClick={() => setIsLoggedIn(false)}
+                      onClick={handleLogout}
                       className={`bg-[#2563EB] hover:bg-blue-700 text-white font-medium rounded-xl transition duration-150 cursor-pointer ${isMobile ? 'text-[10px] px-3 py-2' : 'text-xs px-4 py-2.5'}`}
                     >
                       Exit
@@ -845,7 +879,7 @@ function DashboardContent() {
                     transition={{ delay: 0.2 }}
                     className={`font-bold text-[#16191E] leading-snug ${isMobile ? 'text-base' : 'text-xl'}`}
                   >
-                    Welcome Back {isLoggedIn ? 'Dr. Sunny' : 'Jack (Assistant)'}
+                    Welcome Back {isLoggedIn ? doctorProfile.name : 'Jack (Assistant)'}
                   </motion.h1>
                   <motion.p
                     initial={{ opacity: 0, x: -16 }}
@@ -1117,65 +1151,64 @@ function DashboardContent() {
                             </div>
                           ) : (
                             filteredQueue.slice(0, 3).map((p) => (
-                            <motion.div
-                              key={p.id}
-                              whileHover={{
-                                y: -3,
-                                boxShadow: '0 10px 24px -6px rgba(0,0,0,0.07)',
-                              }}
-                              className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex items-center space-x-3 sm:space-x-4 cursor-default"
-                            >
                               <motion.div
-                                whileHover={{ rotate: 10 }}
-                                className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0 text-[#2563EB]"
+                                key={p.id}
+                                whileHover={{
+                                  y: -3,
+                                  boxShadow: '0 10px 24px -6px rgba(0,0,0,0.07)',
+                                }}
+                                className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex items-center space-x-3 sm:space-x-4 cursor-default"
                               >
-                                <User className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2]" />
-                              </motion.div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-                                  <h3 className="text-sm font-bold text-[#16191E] truncate">{p.name}</h3>
-                                  <span
-                                    className={`text-[10px] sm:text-xs font-bold px-2 sm:px-2.5 py-0.5 rounded-full flex-shrink-0 ml-2 ${
-                                      p.status === 'Completed'
-                                        ? 'bg-gray-100 text-gray-600'
-                                        : p.status === 'In Progress'
-                                          ? 'bg-emerald-100 text-emerald-800'
-                                          : 'bg-blue-50 text-blue-700'
-                                    }`}
-                                  >
-                                    {p.status}
-                                  </span>
-                                </div>
-                                <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-xs text-[#5E6470] font-medium">
-                                  <div className="flex items-center space-x-1.5">
-                                    <Clock className="w-3.5 h-3.5 text-[#2563EB] stroke-[2]" />
-                                    <span>{p.time}</span>
-                                  </div>
-                                  <div className="flex items-center space-x-1.5">
-                                    <span>
-                                      {p.age} Yrs • {p.gender}
+                                <motion.div
+                                  whileHover={{ rotate: 10 }}
+                                  className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0 text-[#2563EB]"
+                                >
+                                  <User className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2]" />
+                                </motion.div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+                                    <h3 className="text-sm font-bold text-[#16191E] truncate">{p.name}</h3>
+                                    <span
+                                      className={`text-[10px] sm:text-xs font-bold px-2 sm:px-2.5 py-0.5 rounded-full flex-shrink-0 ml-2 ${p.status === 'Completed'
+                                          ? 'bg-gray-100 text-gray-600'
+                                          : p.status === 'In Progress'
+                                            ? 'bg-emerald-100 text-emerald-800'
+                                            : 'bg-blue-50 text-blue-700'
+                                        }`}
+                                    >
+                                      {p.status}
                                     </span>
                                   </div>
-                                  {p.phone && (
-                                    <div className="flex items-center space-x-1 text-gray-500">
-                                      <Phone className="w-3 h-3 text-[#2563EB]" />
-                                      <span>{p.phone}</span>
+                                  <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-xs text-[#5E6470] font-medium">
+                                    <div className="flex items-center space-x-1.5">
+                                      <Clock className="w-3.5 h-3.5 text-[#2563EB] stroke-[2]" />
+                                      <span>{p.time}</span>
                                     </div>
-                                  )}
-                                  {p.status === 'Waiting' && (
-                                    <motion.button
-                                      whileHover={{ scale: 1.05 }}
-                                      whileTap={{ scale: 0.95 }}
-                                      onClick={() => handleReallocate(p.id)}
-                                      className="text-[#2563EB] hover:underline font-semibold cursor-pointer"
-                                    >
-                                      Reallocate
-                                    </motion.button>
-                                  )}
+                                    <div className="flex items-center space-x-1.5">
+                                      <span>
+                                        {p.age} Yrs • {p.gender}
+                                      </span>
+                                    </div>
+                                    {p.phone && (
+                                      <div className="flex items-center space-x-1 text-gray-500">
+                                        <Phone className="w-3 h-3 text-[#2563EB]" />
+                                        <span>{p.phone}</span>
+                                      </div>
+                                    )}
+                                    {p.status === 'Waiting' && (
+                                      <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={() => handleReallocate(p.id)}
+                                        className="text-[#2563EB] hover:underline font-semibold cursor-pointer"
+                                      >
+                                        Reallocate
+                                      </motion.button>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            </motion.div>
-                          )))}
+                              </motion.div>
+                            )))}
                         </div>
                       </div>
 
@@ -1263,52 +1296,52 @@ function DashboardContent() {
                         </div>
                       ) : (
                         queue.map((p) => (
-                        <motion.div
-                          key={p.id}
-                          whileHover={{ y: -2 }}
-                          className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex items-center justify-between gap-3"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center space-x-2">
-                              <span className="font-bold text-sm text-[#16191E] truncate">{p.name}</span>
-                              <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${p.status === 'Completed'
+                          <motion.div
+                            key={p.id}
+                            whileHover={{ y: -2 }}
+                            className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex items-center justify-between gap-3"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center space-x-2">
+                                <span className="font-bold text-sm text-[#16191E] truncate">{p.name}</span>
+                                <span
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${p.status === 'Completed'
                                     ? 'bg-gray-100 text-gray-600'
                                     : p.status === 'In Progress'
                                       ? 'bg-emerald-100 text-emerald-800'
                                       : 'bg-blue-50 text-blue-700'
-                                  }`}
-                              >
-                                {p.status}
-                              </span>
+                                    }`}
+                                >
+                                  {p.status}
+                                </span>
+                              </div>
+                              <p className="text-xs text-[#8A909D] font-medium mt-1 truncate flex items-center flex-wrap gap-1">
+                                <span>{p.age} Yrs • {p.gender}</span>
+                                {p.phone && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="inline-flex items-center gap-1 text-[#5E6470]">
+                                      <Phone className="w-3 h-3 text-[#2563EB]" />
+                                      {p.phone}
+                                    </span>
+                                  </>
+                                )}
+                                <span>• Slot: {p.time}</span>
+                              </p>
                             </div>
-                            <p className="text-xs text-[#8A909D] font-medium mt-1 truncate flex items-center flex-wrap gap-1">
-                              <span>{p.age} Yrs • {p.gender}</span>
-                              {p.phone && (
-                                <>
-                                  <span>•</span>
-                                  <span className="inline-flex items-center gap-1 text-[#5E6470]">
-                                    <Phone className="w-3 h-3 text-[#2563EB]" />
-                                    {p.phone}
-                                  </span>
-                                </>
-                              )}
-                              <span>• Slot: {p.time}</span>
-                            </p>
-                          </div>
 
-                          {p.status === 'Waiting' && (
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={() => handleReallocate(p.id)}
-                              className="text-xs font-semibold px-3 py-1.5 border border-blue-200 text-[#2563EB] rounded-xl hover:bg-blue-50 transition cursor-pointer flex-shrink-0"
-                            >
-                              Reallocate
-                            </motion.button>
-                          )}
-                        </motion.div>
-                      )))}
+                            {p.status === 'Waiting' && (
+                              <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handleReallocate(p.id)}
+                                className="text-xs font-semibold px-3 py-1.5 border border-blue-200 text-[#2563EB] rounded-xl hover:bg-blue-50 transition cursor-pointer flex-shrink-0"
+                              >
+                                Reallocate
+                              </motion.button>
+                            )}
+                          </motion.div>
+                        )))}
                     </div>
                   </motion.section>
                 )}
@@ -1343,63 +1376,63 @@ function DashboardContent() {
                         </div>
                       ) : (
                         queue.map((p) => {
-                        const isCompleted = p.status === 'Completed';
-                        return (
-                          <motion.div
-                            key={p.id}
-                            whileHover={!isCompleted ? { y: -3, boxShadow: '0 10px 24px -6px rgba(0,0,0,0.07)' } : {}}
-                            onClick={() => !isCompleted && startConsultation(p.id)}
-                            className={`bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${isCompleted ? 'opacity-60 cursor-default' : 'cursor-pointer hover:border-gray-300'
-                              }`}
-                          >
-                            <div className="flex items-center space-x-3 sm:space-x-4 min-w-0">
-                              <motion.div
-                                whileHover={{ rotate: 8 }}
-                                className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-blue-50 flex items-center justify-center text-[#2563EB] flex-shrink-0"
-                              >
-                                <User className="w-5 h-5 stroke-[2]" />
-                              </motion.div>
-                              <div className="min-w-0">
-                                <div className="flex items-center space-x-2">
-                                  <h3 className="text-sm font-bold text-[#16191E] truncate">{p.name}</h3>
-                                  <span className="text-xs text-[#8A909D] flex-shrink-0">({p.id})</span>
+                          const isCompleted = p.status === 'Completed';
+                          return (
+                            <motion.div
+                              key={p.id}
+                              whileHover={!isCompleted ? { y: -3, boxShadow: '0 10px 24px -6px rgba(0,0,0,0.07)' } : {}}
+                              onClick={() => !isCompleted && startConsultation(p.id)}
+                              className={`bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${isCompleted ? 'opacity-60 cursor-default' : 'cursor-pointer hover:border-gray-300'
+                                }`}
+                            >
+                              <div className="flex items-center space-x-3 sm:space-x-4 min-w-0">
+                                <motion.div
+                                  whileHover={{ rotate: 8 }}
+                                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-blue-50 flex items-center justify-center text-[#2563EB] flex-shrink-0"
+                                >
+                                  <User className="w-5 h-5 stroke-[2]" />
+                                </motion.div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center space-x-2">
+                                    <h3 className="text-sm font-bold text-[#16191E] truncate">{p.name}</h3>
+                                    <span className="text-xs text-[#8A909D] flex-shrink-0">({p.id})</span>
+                                  </div>
+                                  <p className="text-xs text-[#5E6470] mt-0.5 truncate flex items-center flex-wrap gap-1">
+                                    <span>{p.age} Yrs • {p.gender}</span>
+                                    {p.phone && (
+                                      <>
+                                        <span>•</span>
+                                        <span className="inline-flex items-center gap-1 text-gray-600">
+                                          <Phone className="w-3 h-3 text-[#2563EB]" />
+                                          {p.phone}
+                                        </span>
+                                      </>
+                                    )}
+                                    <span>• Slot: {p.time}</span>
+                                  </p>
                                 </div>
-                                <p className="text-xs text-[#5E6470] mt-0.5 truncate flex items-center flex-wrap gap-1">
-                                  <span>{p.age} Yrs • {p.gender}</span>
-                                  {p.phone && (
-                                    <>
-                                      <span>•</span>
-                                      <span className="inline-flex items-center gap-1 text-gray-600">
-                                        <Phone className="w-3 h-3 text-[#2563EB]" />
-                                        {p.phone}
-                                      </span>
-                                    </>
-                                  )}
-                                  <span>• Slot: {p.time}</span>
-                                </p>
                               </div>
-                            </div>
 
-                            <div className="flex items-center justify-between sm:justify-end space-x-2 sm:space-x-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#ECEEF2]">
-                              <span
-                                className={`text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1 rounded-xl ${isCompleted
+                              <div className="flex items-center justify-between sm:justify-end space-x-2 sm:space-x-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#ECEEF2]">
+                                <span
+                                  className={`text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1 rounded-xl ${isCompleted
                                     ? 'bg-gray-100 text-gray-600'
                                     : p.status === 'In Progress'
                                       ? 'bg-emerald-100 text-emerald-800'
                                       : 'bg-blue-50 text-blue-700'
-                                  }`}
-                              >
-                                {p.status}
-                              </span>
-                              {!isCompleted && (
-                                <span className="text-xs font-bold text-white bg-[#2563EB] hover:bg-blue-700 px-3.5 py-1.5 rounded-xl transition cursor-pointer shadow-xs whitespace-nowrap">
-                                  Start Consult &rarr;
+                                    }`}
+                                >
+                                  {p.status}
                                 </span>
-                              )}
-                            </div>
-                          </motion.div>
-                        );
-                      }))}
+                                {!isCompleted && (
+                                  <span className="text-xs font-bold text-white bg-[#2563EB] hover:bg-blue-700 px-3.5 py-1.5 rounded-xl transition cursor-pointer shadow-xs whitespace-nowrap">
+                                    Start Consult &rarr;
+                                  </span>
+                                )}
+                              </div>
+                            </motion.div>
+                          );
+                        }))}
                     </div>
                   </motion.section>
                 )}
@@ -1582,7 +1615,7 @@ function DashboardContent() {
                         className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3 cursor-default"
                       >
                         <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-50 flex items-center justify-center text-[#2563EB]">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18" /></svg>
                         </div>
                         <div>
                           <p className="text-xl sm:text-2xl font-extrabold text-[#16191E]">{totalMolecules}</p>
@@ -1597,7 +1630,7 @@ function DashboardContent() {
                         className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3 cursor-default"
                       >
                         <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
                         </div>
                         <div>
                           <p className="text-xl sm:text-2xl font-extrabold text-emerald-600">{adequateStocks}</p>
@@ -1612,7 +1645,7 @@ function DashboardContent() {
                         className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3 cursor-default"
                       >
                         <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><line x1="12" x2="12" y1="9" y2="13" /><line x1="12" x2="12.01" y1="17" y2="17" /></svg>
                         </div>
                         <div>
                           <p className="text-xl sm:text-2xl font-extrabold text-amber-600">{lowStockAlerts}</p>
@@ -1627,7 +1660,7 @@ function DashboardContent() {
                         className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3 cursor-default"
                       >
                         <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-red-50 flex items-center justify-center text-red-600">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="15" x2="9" y1="9" y2="15" /><line x1="9" x2="15" y1="9" y2="15" /></svg>
                         </div>
                         <div>
                           <p className="text-xl sm:text-2xl font-extrabold text-red-600">{stockDepleted}</p>
@@ -1692,55 +1725,55 @@ function DashboardContent() {
                           </div>
                         ) : (
                           inventory.map((item) => {
-                          const isHigh = item.stock > 20;
-                          const isLow = item.stock > 0 && item.stock <= 20;
+                            const isHigh = item.stock > 20;
+                            const isLow = item.stock > 0 && item.stock <= 20;
 
-                          return (
-                            <motion.div
-                              key={item.id}
-                              whileHover={{ y: -2 }}
-                              className="p-3.5 sm:p-4 bg-[#F8F9FB] rounded-xl border border-[#ECEEF2] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                            >
-                              <div>
-                                <div className="flex items-center space-x-2">
-                                  <span className="font-bold text-sm text-[#16191E]">{item.brand}</span>
-                                  <span
-                                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isHigh
+                            return (
+                              <motion.div
+                                key={item.id}
+                                whileHover={{ y: -2 }}
+                                className="p-3.5 sm:p-4 bg-[#F8F9FB] rounded-xl border border-[#ECEEF2] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                              >
+                                <div>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-bold text-sm text-[#16191E]">{item.brand}</span>
+                                    <span
+                                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isHigh
                                         ? 'bg-emerald-100 text-emerald-800'
                                         : isLow
                                           ? 'bg-amber-100 text-amber-800'
                                           : 'bg-red-100 text-red-800'
-                                      }`}
-                                  >
-                                    {item.stock} Units
-                                  </span>
+                                        }`}
+                                    >
+                                      {item.stock} Units
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-[#8A909D] font-medium mt-0.5">{item.generic}</p>
                                 </div>
-                                <p className="text-xs text-[#8A909D] font-medium mt-0.5">{item.generic}</p>
-                              </div>
 
-                              <div className="flex items-center space-x-2 self-end sm:self-auto">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  placeholder="Add Qty"
-                                  value={stockUpdates[item.id] || ''}
-                                  onChange={(e) =>
-                                    setStockUpdates((prev) => ({ ...prev, [item.id]: e.target.value }))
-                                  }
-                                  className="w-20 sm:w-24 p-1.5 bg-white border border-[#ECEEF2] rounded-xl text-xs outline-none"
-                                />
-                                <motion.button
-                                  whileHover={{ scale: 1.05 }}
-                                  whileTap={{ scale: 0.95 }}
-                                  onClick={() => handleUpdateStock(item.id)}
-                                  className="bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition cursor-pointer"
-                                >
-                                  Update
-                                </motion.button>
-                              </div>
-                            </motion.div>
-                          );
-                        }))}
+                                <div className="flex items-center space-x-2 self-end sm:self-auto">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    placeholder="Add Qty"
+                                    value={stockUpdates[item.id] || ''}
+                                    onChange={(e) =>
+                                      setStockUpdates((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                    }
+                                    className="w-20 sm:w-24 p-1.5 bg-white border border-[#ECEEF2] rounded-xl text-xs outline-none"
+                                  />
+                                  <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => handleUpdateStock(item.id)}
+                                    className="bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition cursor-pointer"
+                                  >
+                                    Update
+                                  </motion.button>
+                                </div>
+                              </motion.div>
+                            );
+                          }))}
                       </div>
                     </div>
                   </motion.section>
@@ -1978,7 +2011,7 @@ function DashboardContent() {
                     <Lock className="w-5 h-5 text-[#2563EB]" />
                   </div>
                   <h3 className="text-base font-bold text-[#16191E] mb-1">Doctor Authentication</h3>
-                  <p className="text-xs text-[#8A909D] mb-4">Enter security PIN (try 1234)</p>
+                  <p className="text-xs text-[#8A909D] mb-4">Enter your 4-digit doctor security PIN</p>
 
                   <input
                     type="password"
@@ -1991,7 +2024,7 @@ function DashboardContent() {
                       }`}
                   />
 
-                  {pinError && <p className="text-xs text-red-500 font-medium mb-3">Invalid PIN. Try 1234</p>}
+                  {pinError && <p className="text-xs text-red-500 font-medium mb-3">Invalid Security PIN</p>}
 
                   <motion.button
                     whileHover={{ scale: 1.02 }}
@@ -2027,7 +2060,7 @@ function DashboardContent() {
                   <div className="flex justify-between items-end border-b-2 border-[#16191E] pb-4 mb-6">
                     <div>
                       <h2 className="text-xl sm:text-2xl font-bold text-[#16191E]">HealthSync Clinic</h2>
-                      <p className="text-xs text-[#5E6470] font-medium">Dr. Sunny • General Medicine</p>
+                      <p className="text-xs text-[#5E6470] font-medium">{doctorProfile.name} • {doctorProfile.title}</p>
                     </div>
                     <div className="text-right text-xs text-[#8A909D]">
                       <p>{printRecord.date}</p>
@@ -2127,11 +2160,10 @@ function DashboardContent() {
                 <button
                   key={item.id}
                   onClick={() => handleNavClick(item.id, item.reqAuth)}
-                  className={`relative flex flex-col items-center justify-center py-1.5 px-1 sm:px-2 rounded-xl transition-all duration-200 cursor-pointer min-w-0 flex-1 ${
-                    isActive
+                  className={`relative flex flex-col items-center justify-center py-1.5 px-1 sm:px-2 rounded-xl transition-all duration-200 cursor-pointer min-w-0 flex-1 ${isActive
                       ? 'text-[#2563EB]'
                       : 'text-[#8A909D]'
-                  }`}
+                    }`}
                 >
                   {isActive && (
                     <motion.div
@@ -2142,17 +2174,15 @@ function DashboardContent() {
                   )}
                   <div className="relative">
                     <Icon
-                      className={`w-5 h-5 transition-transform duration-200 ${
-                        isActive ? 'stroke-[2.2] scale-110' : 'stroke-[1.6]'
-                      }`}
+                      className={`w-5 h-5 transition-transform duration-200 ${isActive ? 'stroke-[2.2] scale-110' : 'stroke-[1.6]'
+                        }`}
                     />
                     {isLocked && (
                       <Lock className="absolute -top-1 -right-1.5 w-2.5 h-2.5 text-[#8A909D]" />
                     )}
                   </div>
-                  <span className={`text-[9px] mt-0.5 leading-tight truncate max-w-full ${
-                    isActive ? 'font-bold' : 'font-medium'
-                  }`}>
+                  <span className={`text-[9px] mt-0.5 leading-tight truncate max-w-full ${isActive ? 'font-bold' : 'font-medium'
+                    }`}>
                     {item.id === 'dashboard' ? 'Home' : item.id === 'assistant' ? 'Desk' : item.id === 'queue' ? 'Queue' : item.id === 'consult' ? 'Consult' : item.id === 'inventory' ? 'Stock' : 'Stats'}
                   </span>
                 </button>

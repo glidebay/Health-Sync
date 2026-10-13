@@ -22,7 +22,8 @@ export default function AssistantView() {
     reallocateSlot,
     updatePatientStatus,
     openAuthModal,
-    isLoggedIn
+    isLoggedIn,
+    currentDoctor,
   } = useClinic();
 
   const [name, setName] = useState('');
@@ -67,7 +68,7 @@ export default function AssistantView() {
               Patient Triage & Registration
             </h1>
             <p className="text-sm font-sans text-blue-100/80 mt-2 max-w-xl leading-relaxed">
-              Coordinate patient walk-ins, manage slot allocations, and streamline flow for Dr. Sunny.
+              Coordinate patient walk-ins, manage slot allocations, and streamline flow for {currentDoctor?.name || 'the physician'}.
             </p>
           </div>
 
@@ -236,7 +237,7 @@ export default function AssistantView() {
               </div>
               <div>
                 <h3 className="font-display font-bold text-slate-900 text-base tracking-tight">Register Walk-in Patient</h3>
-                <p className="text-xs font-sans text-slate-500 mt-0.5">Add patient directly to Dr. Sunny&apos;s queue</p>
+                <p className="text-xs font-sans text-slate-500 mt-0.5">Add patient directly to {currentDoctor?.name || 'Doctor'}&apos;s queue</p>
               </div>
             </div>
 
@@ -346,7 +347,7 @@ export default function AssistantView() {
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-display font-semibold text-sm shadow-md shadow-blue-500/20 active:scale-98 transition-all flex items-center justify-center gap-2 mt-3 cursor-pointer"
               >
                 <Sparkles className="w-4 h-4 text-sky-200" />
-                <span>Queue Patient for Dr. Sunny</span>
+                <span>Queue Patient for {currentDoctor?.name || 'Doctor'}</span>
               </button>
             </form>
           </div>

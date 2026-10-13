@@ -19,7 +19,8 @@ export default function QueueView() {
     patients,
     startConsultation,
     reprintConsultation,
-    completedConsultations
+    completedConsultations,
+    currentDoctor,
   } = useClinic();
 
   const [filter, setFilter] = useState<'all' | 'waiting' | 'completed'>('all');
@@ -39,7 +40,7 @@ export default function QueueView() {
             <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
             <span>Clinical Worklist</span>
             <span className="text-slate-300">•</span>
-            <span className="text-blue-700 font-bold">Dr. Sunny MD</span>
+            <span className="text-blue-700 font-bold">{currentDoctor ? `${currentDoctor.name} • ${currentDoctor.title}` : 'Doctor Chamber'}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-display font-bold text-slate-900 tracking-tight leading-tight">
             Consultation Queue
@@ -164,7 +165,7 @@ export default function QueueView() {
               <div className="flex items-center justify-between pt-3.5 border-t border-slate-100 text-xs font-sans">
                 <div className="text-slate-400 font-medium flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Scheduled for Dr. Sunny</span>
+                  <span>Scheduled for {currentDoctor?.name || 'Doctor'}</span>
                 </div>
 
                 {isCompleted ? (

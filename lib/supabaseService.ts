@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import { supabase } from './supabase';
 import {
   DbDoctor,
@@ -48,25 +49,155 @@ export async function getDoctors(): Promise<DbDoctor[]> {
   }
 }
 
-export async function verifyDoctorPin(pin: string): Promise<boolean> {
-  // Always allow fallback PIN '1234' for developer and quick demo access
-  if (pin === '1234') return true;
+export interface VerifyDoctorPinResult {
+  success: boolean;
+  doctor?: DbDoctor;
+  message?: string;
+}
+
+export async function verifyDoctorPin(
+  pin: string,
+  doctorId?: string
+): Promise<VerifyDoctorPinResult> {
+  const cleanPin = pin ? pin.trim() : '';
+  if (!cleanPin) return { success: false, message: 'PIN is required' };
 
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('doctors')
-      .select('id, pin_code')
-      .eq('pin_code', pin)
-      .limit(1);
+      .select('id, auth_id, full_name, pin_code, failed_attempts, locked_until, pin_session_until, specialization, reg_no');
 
-    if (error) {
-      console.warn('Doctor PIN check error:', error.message);
-      return false;
+    if (doctorId) {
+      query = query.eq('id', doctorId);
     }
-    return (data && data.length > 0) || false;
+
+    const { data: doctors, error } = await query;
+
+    if (error || !doctors || doctors.length === 0) {
+      console.warn('Doctor PIN check query error:', error?.message);
+      return { success: false, message: 'No doctors found' };
+    }
+
+    // Find the doctor whose pin_code matches the entered PIN
+    let matchedDoctor: DbDoctor | null = null;
+    for (const doc of doctors) {
+      if (doc.pin_code && bcrypt.compareSync(cleanPin, doc.pin_code)) {
+        matchedDoctor = doc;
+        break;
+      }
+    }
+
+    if (!matchedDoctor) {
+      // If doctorId was provided, increment failed attempts on that doctor
+      if (doctorId && doctors.length > 0) {
+        const doc = doctors[0];
+        const currentFailed = (doc.failed_attempts || 0) + 1;
+        const lockDurationMs = currentFailed >= 3 ? 15 * 60 * 1000 : 30 * 1000;
+        const lockExpiry = new Date(Date.now() + lockDurationMs).toISOString();
+
+        await supabase
+          .from('doctors')
+          .update({
+            failed_attempts: currentFailed,
+            locked_until: lockExpiry,
+          })
+          .eq('id', doc.id);
+      }
+      return { success: false, message: 'Invalid Security PIN' };
+    }
+
+    // Check if the matched doctor PIN entry is locked
+    if (matchedDoctor.locked_until && new Date(matchedDoctor.locked_until).getTime() > Date.now()) {
+      const waitSec = Math.ceil((new Date(matchedDoctor.locked_until).getTime() - Date.now()) / 1000);
+      console.warn(`Doctor profile locked for ${waitSec}s`);
+      return { success: false, message: `Account locked. Retry in ${waitSec}s` };
+    }
+
+    // Correct PIN: reset failed attempts, clear lock, open 30-minute PIN session
+    const pinSessionUntil = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    await supabase
+      .from('doctors')
+      .update({
+        failed_attempts: 0,
+        locked_until: null,
+        pin_session_until: pinSessionUntil,
+      })
+      .eq('id', matchedDoctor.id);
+
+    return {
+      success: true,
+      doctor: {
+        ...matchedDoctor,
+        pin_session_until: pinSessionUntil,
+        failed_attempts: 0,
+        locked_until: null,
+      },
+    };
   } catch (err) {
     console.warn('Doctor PIN check exception:', err);
-    return false;
+    return { success: false, message: 'Error verifying PIN' };
+  }
+}
+
+// ----------------- DOCTOR SESSION PERSISTENCE & LOGOUT -----------------
+const DOCTOR_SESSION_KEY = 'healthsync_active_doctor_session';
+
+export interface DoctorSessionData {
+  doctorId: string;
+  name: string;
+  title: string;
+  expiresAt: number;
+}
+
+export function saveDoctorSessionLocal(data: DoctorSessionData): void {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(DOCTOR_SESSION_KEY, JSON.stringify(data));
+    }
+  } catch (err) {
+    console.warn('Failed to save session to localStorage:', err);
+  }
+}
+
+export function getDoctorSessionLocal(): DoctorSessionData | null {
+  try {
+    if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem(DOCTOR_SESSION_KEY);
+      if (!raw) return null;
+      const parsed: DoctorSessionData = JSON.parse(raw);
+      if (parsed && parsed.expiresAt && parsed.expiresAt > Date.now()) {
+        return parsed;
+      }
+      localStorage.removeItem(DOCTOR_SESSION_KEY);
+    }
+  } catch (err) {
+    console.warn('Failed to read session from localStorage:', err);
+  }
+  return null;
+}
+
+export function clearDoctorSessionLocal(): void {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(DOCTOR_SESSION_KEY);
+    }
+  } catch (err) {
+    console.warn('Failed to clear session from localStorage:', err);
+  }
+}
+
+export async function logoutDoctorSessionDb(doctorId?: string): Promise<void> {
+  clearDoctorSessionLocal();
+  try {
+    if (doctorId) {
+      await supabase
+        .from('doctors')
+        .update({ pin_session_until: null })
+        .eq('id', doctorId);
+    }
+    await supabase.rpc('end_pin_session');
+  } catch (err) {
+    console.warn('Error clearing doctor session in Supabase:', err);
   }
 }
 
@@ -139,40 +270,66 @@ export async function registerWalkinPatientDb(params: {
   priority?: 'Normal' | 'Urgent';
 }): Promise<FormattedQueuePatient | null> {
   try {
-    // 1. Insert patient
-    const { data: patientData, error: patientError } = await supabase
-      .from('patients')
-      .insert([
-        {
-          full_name: params.name,
-          age: params.age,
-          gender: params.gender,
-          phone_number: params.phone || null,
-        },
-      ])
-      .select()
-      .single();
+    // 1. Phone number is required by NOT NULL constraint in Supabase (Section 3.2: Primary lookup key)
+    const rawPhone = params.phone ? params.phone.trim() : '';
+    const patientPhone = rawPhone.length > 0 ? rawPhone : `+91-WLK-${Date.now().toString().slice(-8)}`;
 
-    if (patientError || !patientData) {
-      console.error('Error creating patient:', patientError);
-      return null;
+    let patientId: string | null = null;
+    let patientName = params.name;
+    let patientAge = params.age;
+    let patientGender = params.gender;
+
+    // Check if returning patient exists by phone number
+    const { data: existingPatient } = await supabase
+      .from('patients')
+      .select('id, full_name, age, gender, phone_number')
+      .eq('phone_number', patientPhone)
+      .maybeSingle();
+
+    if (existingPatient) {
+      patientId = existingPatient.id;
+      patientName = existingPatient.full_name || params.name;
+      patientAge = existingPatient.age || params.age;
+      patientGender = existingPatient.gender || params.gender;
+    } else {
+      const { data: patientData, error: patientError } = await supabase
+        .from('patients')
+        .insert([
+          {
+            full_name: params.name,
+            age: params.age,
+            gender: params.gender,
+            phone_number: patientPhone,
+          },
+        ])
+        .select()
+        .single();
+
+      if (patientError || !patientData) {
+        console.error('Error creating patient:', patientError);
+        return null;
+      }
+      patientId = patientData.id;
     }
 
     // 2. Fetch default doctor if available
     const { data: doctorData } = await supabase.from('doctors').select('id').limit(1);
     const doctorId = doctorData && doctorData.length > 0 ? doctorData[0].id : null;
 
-    // 3. Insert appointment
+    // 3. Insert appointment (visit_type must strictly satisfy check constraint: 'Walk-in', 'WhatsApp Link', 'WhatsApp Bot')
     const scheduledTime = new Date().toISOString();
+    const clinicalNotes = params.priority === 'Urgent' ? '[URGENT TRIAGE]' : null;
+
     const { data: apptData, error: apptError } = await supabase
       .from('appointments')
       .insert([
         {
-          patient_id: patientData.id,
+          patient_id: patientId,
           doctor_id: doctorId,
           scheduled_time: scheduledTime,
           status: 'Waiting',
           visit_type: 'Walk-in',
+          clinical_notes: clinicalNotes,
         },
       ])
       .select()
@@ -180,7 +337,6 @@ export async function registerWalkinPatientDb(params: {
 
     if (apptError || !apptData) {
       console.error('Error creating appointment:', apptError?.message || apptError);
-      await supabase.from('patients').delete().eq('id', patientData.id);
       return null;
     }
 
@@ -190,13 +346,18 @@ export async function registerWalkinPatientDb(params: {
       hour12: true,
     });
 
+    if (!patientId) {
+      console.error('Missing patient ID after registration');
+      return null;
+    }
+
     return {
       id: apptData.id,
-      patientDbId: patientData.id,
-      name: patientData.full_name,
-      age: patientData.age,
-      gender: (patientData.gender as any) || 'Male',
-      phone: patientData.phone_number || undefined,
+      patientDbId: patientId,
+      name: patientName,
+      age: patientAge,
+      gender: (patientGender as any) || 'Male',
+      phone: patientPhone,
       status: 'Waiting',
       time: timeStr,
       tokenNumber: 1,

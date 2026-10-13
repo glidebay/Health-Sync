@@ -79,7 +79,8 @@ export default function SideMenu() {
     logoutDoctor,
     replayLoading,
     patients,
-    inventory
+    inventory,
+    currentDoctor,
   } = useClinic();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -256,8 +257,8 @@ export default function SideMenu() {
                 {!isCollapsed && (
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-display font-bold truncate">Dr. Sunny</span>
-                      <span className="text-[9px] bg-white/25 px-1 py-0.2 rounded font-mono font-bold">MD</span>
+                      <span className="text-xs font-display font-bold truncate">{currentDoctor?.name || 'Doctor'}</span>
+                      <span className="text-[9px] bg-white/25 px-1 py-0.2 rounded font-mono font-bold">{currentDoctor?.title ? currentDoctor.title.slice(0, 4) : 'MD'}</span>
                     </div>
                     <p className="text-[10px] text-blue-100/80 font-sans truncate">Chamber Active</p>
                   </div>

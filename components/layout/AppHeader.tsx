@@ -14,7 +14,8 @@ export default function AppHeader() {
     switchTab,
     openAuthModal,
     logoutDoctor,
-    replayLoading
+    replayLoading,
+    currentDoctor,
   } = useClinic();
 
   const tabs: { id: TabType; label: string; icon: string; doctorOnly: boolean }[] = [
@@ -86,8 +87,8 @@ export default function AppHeader() {
             <div className="flex items-center gap-2 pl-2 border-l border-slate-200/80">
               <div className="flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full text-xs font-display font-semibold shadow-xs">
                 <ShieldCheck className="w-3.5 h-3.5 text-sky-200" />
-                <span>Dr. Sunny</span>
-                <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-full font-bold">MD</span>
+                <span>{currentDoctor?.name || 'Doctor'}</span>
+                <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-full font-bold">{currentDoctor?.title ? currentDoctor.title.slice(0, 4) : 'MD'}</span>
               </div>
               <button
                 onClick={logoutDoctor}

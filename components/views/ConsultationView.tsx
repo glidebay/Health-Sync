@@ -26,7 +26,8 @@ export default function ConsultationView() {
     addMedicineToRx,
     removeMedicineFromRx,
     completeConsultation,
-    switchTab
+    switchTab,
+    currentDoctor,
   } = useClinic();
 
   const [selectedMedId, setSelectedMedId] = useState<string>('');
@@ -157,7 +158,9 @@ export default function ConsultationView() {
             <Stethoscope className="w-5 h-5 text-blue-600" />
             <span>Clinical Diagnostics & Observations</span>
           </h3>
-          <span className="text-xs font-display font-medium text-slate-500">Dr. Sunny MD</span>
+          <span className="text-xs font-display font-medium text-slate-500">
+            {currentDoctor ? `${currentDoctor.name} • ${currentDoctor.title}` : 'Clinical Diagnostics'}
+          </span>
         </div>
 
         {/* Quick symptom pill tags */}

@@ -21,7 +21,14 @@ import {
   completeConsultationDb,
   addInventoryItemDb,
   restockInventoryItemDb,
+  verifyDoctorPin,
+  getDoctors,
+  saveDoctorSessionLocal,
+  getDoctorSessionLocal,
+  clearDoctorSessionLocal,
+  logoutDoctorSessionDb,
 } from '@/lib/supabaseService';
+import { DbDoctor } from '@/types/database';
 
 interface ClinicContextType {
   role: Role;
@@ -37,11 +44,12 @@ interface ClinicContextType {
   isAuthModalOpen: boolean;
   isPrintModalOpen: boolean;
   isLoading: boolean;
+  currentDoctor: { id: string; name: string; title: string; regNo?: string } | null;
   
   switchTab: (tab: TabType) => void;
   openAuthModal: (targetTab?: TabType) => void;
   closeAuthModal: () => void;
-  authenticateDoctor: (pin: string) => boolean;
+  authenticateDoctor: (pin: string) => Promise<boolean>;
   logoutDoctor: () => void;
   
   registerPatient: (
@@ -87,6 +95,12 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
   const [completedConsultations, setCompletedConsultations] = useState<ConsultationRecord[]>([]);
   const [activePrintRecord, setActivePrintRecord] = useState<ConsultationRecord | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
+  const [currentDoctor, setCurrentDoctor] = useState<{
+    id: string;
+    name: string;
+    title: string;
+    regNo?: string;
+  } | null>(null);
   
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -104,9 +118,10 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
 
     async function loadDbData() {
       try {
-        const [dbPatients, dbInventory] = await Promise.all([
+        const [dbPatients, dbInventory, dbDoctors] = await Promise.all([
           fetchQueueFromDb(),
           fetchInventoryFromDb(),
+          getDoctors(),
         ]);
 
         if (isMounted) {
@@ -115,6 +130,39 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
           }
           if (dbInventory) {
             setInventory(dbInventory as unknown as InventoryItem[]);
+          }
+          if (dbDoctors && dbDoctors.length > 0) {
+            // Check if THIS browser client has an active authenticated session
+            const savedSession = getDoctorSessionLocal();
+            if (savedSession) {
+              const matched = dbDoctors.find((d: DbDoctor) => d.id === savedSession.doctorId);
+              if (
+                matched &&
+                matched.pin_session_until &&
+                new Date(matched.pin_session_until).getTime() > Date.now()
+              ) {
+                // Restore session on page refresh for the specific logged-in doctor
+                setCurrentDoctor({
+                  id: matched.id,
+                  name: matched.full_name,
+                  title: matched.specialization || 'General Medicine',
+                  regNo: matched.reg_no || undefined,
+                });
+                setIsLoggedIn(true);
+                setRole('doctor');
+              } else {
+                // Expired session: clear local storage and stay locked
+                clearDoctorSessionLocal();
+                setIsLoggedIn(false);
+                setRole('assistant');
+                setCurrentDoctor(null);
+              }
+            } else {
+              // First screen / fresh visit: strictly locked screen!
+              setIsLoggedIn(false);
+              setRole('assistant');
+              setCurrentDoctor(null);
+            }
           }
         }
       } catch (err) {
@@ -154,10 +202,25 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     setIntendedTab(null);
   };
 
-  const authenticateDoctor = (pin: string): boolean => {
-    if (pin === '1234') {
+  const authenticateDoctor = async (pin: string): Promise<boolean> => {
+    const res = await verifyDoctorPin(pin);
+    if (res.success && res.doctor) {
+      // Save authenticated doctor session locally so page refresh preserves it
+      saveDoctorSessionLocal({
+        doctorId: res.doctor.id,
+        name: res.doctor.full_name,
+        title: res.doctor.specialization || 'General Medicine',
+        expiresAt: Date.now() + 30 * 60 * 1000,
+      });
+
       setIsLoggedIn(true);
       setRole('doctor');
+      setCurrentDoctor({
+        id: res.doctor.id,
+        name: res.doctor.full_name,
+        title: res.doctor.specialization || 'General Medicine',
+        regNo: res.doctor.reg_no || undefined,
+      });
       setIsAuthModalOpen(false);
       if (intendedTab) {
         setActiveTab(intendedTab);
@@ -170,10 +233,16 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     return false;
   };
 
-  const logoutDoctor = () => {
+  const logoutDoctor = async () => {
+    const activeDocId = currentDoctor?.id;
+    clearDoctorSessionLocal();
     setIsLoggedIn(false);
     setRole('assistant');
+    setCurrentDoctor(null);
     setActiveTab('assistant');
+    if (activeDocId) {
+      await logoutDoctorSessionDb(activeDocId);
+    }
   };
 
   const registerPatient = async (
@@ -407,6 +476,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
         isAuthModalOpen,
         isPrintModalOpen,
         isLoading,
+        currentDoctor,
         switchTab,
         openAuthModal,
         closeAuthModal,

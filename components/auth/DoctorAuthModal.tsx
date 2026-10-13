@@ -11,9 +11,10 @@ export default function DoctorAuthModal() {
 
   if (!isAuthModalOpen) return null;
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const success = authenticateDoctor(pin);
+    if (!pin) return;
+    const success = await authenticateDoctor(pin);
     if (!success) {
       setError(true);
       setTimeout(() => setError(false), 2000);
@@ -23,12 +24,12 @@ export default function DoctorAuthModal() {
     }
   };
 
-  const handleKeyClick = (val: string) => {
+  const handleKeyClick = async (val: string) => {
     if (pin.length < 4) {
       const newPin = pin + val;
       setPin(newPin);
       if (newPin.length === 4) {
-        const success = authenticateDoctor(newPin);
+        const success = await authenticateDoctor(newPin);
         if (!success) {
           setError(true);
           setTimeout(() => setError(false), 2000);
@@ -44,9 +45,8 @@ export default function DoctorAuthModal() {
     setPin(prev => prev.slice(0, -1));
   };
 
-  const handleQuickDemo = () => {
-    setPin('1234');
-    authenticateDoctor('1234');
+  const handleClear = () => {
+    setPin('');
   };
 
   return (
@@ -95,11 +95,11 @@ export default function DoctorAuthModal() {
         {error && (
           <div className="flex items-center justify-center gap-1.5 text-rose-600 text-xs font-display font-semibold mb-4 bg-rose-50 py-2 rounded-xl border border-rose-100 shadow-2xs">
             <AlertCircle className="w-3.5 h-3.5" />
-            <span>Invalid Security PIN. Try 1234.</span>
+            <span>Invalid Security PIN</span>
           </div>
         )}
 
-        {/* Numeric Keypad (Nexuma Style) */}
+        {/* Numeric Keypad */}
         <div className="grid grid-cols-3 gap-2.5 mb-5 max-w-[240px] mx-auto">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
             <button
@@ -111,12 +111,11 @@ export default function DoctorAuthModal() {
             </button>
           ))}
           <button
-            onClick={handleQuickDemo}
-            title="Auto-fill 1234"
-            className="h-12 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs font-display font-bold border border-blue-200/80 transition-all active:scale-95 flex flex-col items-center justify-center shadow-2xs cursor-pointer"
+            onClick={handleClear}
+            title="Clear PIN"
+            className="h-12 rounded-xl bg-slate-50 hover:bg-slate-100 active:bg-blue-50 text-slate-600 text-sm font-display font-semibold border border-slate-200/80 transition-all active:scale-95 flex items-center justify-center shadow-2xs cursor-pointer"
           >
-            <KeyRound className="w-3.5 h-3.5 mb-0.5" />
-            <span>Demo</span>
+            C
           </button>
           <button
             onClick={() => handleKeyClick('0')}
@@ -132,17 +131,12 @@ export default function DoctorAuthModal() {
           </button>
         </div>
 
-        {/* Demo PIN helper callout */}
-        <div className="text-center pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-          <span className="text-[11px] font-sans text-slate-400 font-medium">
-            Authorized PIN: <strong className="text-blue-600 font-display font-bold">1234</strong>
+        {/* Security verification footer */}
+        <div className="text-center pt-3 border-t border-slate-100 flex items-center justify-center text-xs text-slate-400">
+          <ShieldCheck className="w-3.5 h-3.5 text-blue-600 mr-1.5" />
+          <span className="text-[11px] font-sans font-medium text-slate-500">
+            Encrypted PIN &bull; Supabase CLMS Protected
           </span>
-          <button
-            onClick={handleQuickDemo}
-            className="text-[11px] font-display font-semibold text-blue-600 hover:underline cursor-pointer"
-          >
-            Auto-fill PIN
-          </button>
         </div>
       </div>
     </div>
