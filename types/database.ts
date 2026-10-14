@@ -86,7 +86,6 @@ export interface DbAppointmentLog {
   logged_at?: string;
 }
 
-// Joined types for front-end view consumption
 export interface AppointmentWithPatient extends DbAppointment {
   patient?: DbPatient;
   doctor?: DbDoctor;

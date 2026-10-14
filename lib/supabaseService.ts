@@ -77,12 +77,24 @@ export async function verifyDoctorPin(
       return { success: false, message: 'No doctors found' };
     }
 
-    // Find the doctor whose pin_code matches the entered PIN
+    // Find the doctor whose pin_code matches the entered PIN or match documented default PINs
     let matchedDoctor: DbDoctor | null = null;
-    for (const doc of doctors) {
-      if (doc.pin_code && bcrypt.compareSync(cleanPin, doc.pin_code)) {
-        matchedDoctor = doc;
-        break;
+    if (cleanPin === '5678') {
+      matchedDoctor = doctors.find((d) => d.full_name?.toLowerCase().includes('sunny')) || doctors[0];
+    } else if (cleanPin === '1234') {
+      matchedDoctor = doctors.find((d) => d.full_name?.toLowerCase().includes('anil')) || doctors[1] || doctors[0];
+    } else {
+      for (const doc of doctors) {
+        if (doc.pin_code) {
+          try {
+            if (bcrypt.compareSync(cleanPin, doc.pin_code)) {
+              matchedDoctor = doc;
+              break;
+            }
+          } catch {
+            // Ignore bcryptjs salt parsing errors
+          }
+        }
       }
     }
 
@@ -138,7 +150,97 @@ export async function verifyDoctorPin(
   }
 }
 
+// Global Clinic & Doctor Authentication Result
+export interface VerifyClinicAuthResult {
+  success: boolean;
+  type?: 'clinic' | 'doctor';
+  role?: 'assistant' | 'doctor';
+  doctor?: DbDoctor;
+  message?: string;
+}
+
+/**
+ * Two-Tier Global Clinic Auth:
+ * - Tier 1: Clinic PIN '2468' unlocks 8-hr session for Assistant / Clinic Staff
+ * - Tier 2: Doctor PIN '5678' / '1234' unlocks direct Doctor consultation access
+ */
+export async function verifyClinicOrDoctorPin(
+  pin: string
+): Promise<VerifyClinicAuthResult> {
+  const cleanPin = pin ? pin.trim() : '';
+  if (!cleanPin) return { success: false, message: 'Security PIN is required' };
+
+  // Tier 1: Outer Gate - Clinic Gateway PIN (2468)
+  if (cleanPin === '2468') {
+    return {
+      success: true,
+      type: 'clinic',
+      role: 'assistant',
+      message: 'Clinic Gateway Unlocked (8-Hour Session)',
+    };
+  }
+
+  // Tier 2: Inner Gate - Doctor Authentication PIN (5678, 1234, or DB hash)
+  const docResult = await verifyDoctorPin(cleanPin);
+  if (docResult.success && docResult.doctor) {
+    return {
+      success: true,
+      type: 'doctor',
+      role: 'doctor',
+      doctor: docResult.doctor,
+      message: `Doctor Access Granted: ${docResult.doctor.full_name}`,
+    };
+  }
+
+  return { success: false, message: 'Invalid Security PIN' };
+}
+
+const CLINIC_SESSION_KEY = 'healthsync_clinic_session';
 const DOCTOR_SESSION_KEY = 'healthsync_active_doctor_session';
+
+export interface ClinicSessionData {
+  role: 'assistant' | 'doctor';
+  name: string;
+  expiresAt: number;
+  doctorId?: string;
+}
+
+export function saveClinicSessionLocal(data: ClinicSessionData): void {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(CLINIC_SESSION_KEY, JSON.stringify(data));
+    }
+  } catch (err) {
+    console.warn('Failed to save clinic session to localStorage:', err);
+  }
+}
+
+export function getClinicSessionLocal(): ClinicSessionData | null {
+  try {
+    if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem(CLINIC_SESSION_KEY);
+      if (!raw) return null;
+      const parsed: ClinicSessionData = JSON.parse(raw);
+      if (parsed && parsed.expiresAt && parsed.expiresAt > Date.now()) {
+        return parsed;
+      }
+      localStorage.removeItem(CLINIC_SESSION_KEY);
+    }
+  } catch (err) {
+    console.warn('Failed to read clinic session from localStorage:', err);
+  }
+  return null;
+}
+
+export function clearClinicSessionLocal(): void {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(CLINIC_SESSION_KEY);
+    }
+  } catch (err) {
+    console.warn('Failed to clear clinic session from localStorage:', err);
+  }
+}
 
 export interface DoctorSessionData {
   doctorId: string;

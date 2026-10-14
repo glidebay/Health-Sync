@@ -10,7 +10,7 @@ export interface Patient {
   phone?: string;
   status: PatientStatus;
   time: string;
-  tokenNumber: number;
+  tokenNumber?: number;
   priority?: 'Normal' | 'Urgent';
 }
 
@@ -19,7 +19,7 @@ export interface InventoryItem {
   generic: string;
   brand: string;
   stock: number;
-  unit: string;
+  unit?: string;
   category?: string;
   batchNo?: string;
 }
@@ -40,9 +40,24 @@ export interface ConsultationRecord {
   patientPhone?: string;
   doctorName: string;
   date: string;
-  timestamp: number;
+  timestamp?: number;
   diagnostics: string;
-  prescription: PrescriptionItem[];
+  prescription?: PrescriptionItem[];
+  items?: PrescriptionItem[];
+  demographics?: string;
 }
 
 export type TabType = 'assistant' | 'queue' | 'consult' | 'inventory' | 'analytics';
+
+export type NavSection = 'dashboard' | 'booking' | 'assistant' | 'queue' | 'consult' | 'inventory' | 'analytics';
+
+export type PortalMode = 'gateway' | 'booking' | 'dashboard';
+
+export interface ConfirmedToken {
+  tokenNumber: number;
+  name: string;
+  time: string;
+  phone?: string;
+  doctorName: string;
+  priority: string;
+}
