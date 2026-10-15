@@ -1,29 +1,259 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   HeartPulse,
-  Users,
   Stethoscope,
   Clock,
   CheckCircle2,
   AlertTriangle,
   User,
   Check,
-  Search,
   PlusCircle,
   CalendarPlus,
   ArrowLeft,
   Ticket,
   Printer,
   Phone,
+  ChevronDown,
+  X,
 } from 'lucide-react';
 import { Patient, ConfirmedToken } from '@/types';
 import { DbDoctor } from '@/types/database';
-import { AVAILABLE_SLOTS, QUICK_SYMPTOMS, staggerContainer, fadeScale } from '@/lib/constants';
-import { AnimatedCounter } from '@/components/common/AnimatedCounter';
-import { AnimatedProgress } from '@/components/common/AnimatedProgress';
+import { AVAILABLE_SLOTS, QUICK_SYMPTOMS } from '@/lib/constants';
+
+interface DoctorSearchComboboxProps {
+  doctors: DbDoctor[];
+  selectedDoctorId: string;
+  onSelectDoctorId: (id: string) => void;
+}
+
+function DoctorSearchCombobox({
+  doctors,
+  selectedDoctorId,
+  onSelectDoctorId,
+}: DoctorSearchComboboxProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const selectedDoctor = useMemo(() => {
+    return doctors.find((d) => d.id === selectedDoctorId) || doctors[0] || null;
+  }, [doctors, selectedDoctorId]);
+
+  useEffect(() => {
+    if (selectedDoctor) {
+      setQuery(`${selectedDoctor.full_name} (${selectedDoctor.specialization || 'General Medicine'})`);
+    } else {
+      setQuery('');
+    }
+  }, [selectedDoctor]);
+
+  const filteredDoctors = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const isExact =
+      selectedDoctor &&
+      query === `${selectedDoctor.full_name} (${selectedDoctor.specialization || 'General Medicine'})`;
+    if (!q || isExact) return doctors;
+    return doctors.filter(
+      (d) =>
+        d.full_name.toLowerCase().includes(q) ||
+        (d.specialization && d.specialization.toLowerCase().includes(q))
+    );
+  }, [doctors, query, selectedDoctor]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        if (selectedDoctor) {
+          setQuery(`${selectedDoctor.full_name} (${selectedDoctor.specialization || 'General Medicine'})`);
+        } else {
+          setQuery('');
+        }
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [selectedDoctor]);
+
+  const handleSelect = (doc: DbDoctor) => {
+    onSelectDoctorId(doc.id);
+    setQuery(`${doc.full_name} (${doc.specialization || 'General Medicine'})`);
+    setIsOpen(false);
+    setHighlightedIndex(-1);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
+        e.preventDefault();
+        setIsOpen(true);
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev + 1 >= filteredDoctors.length ? 0 : prev + 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev - 1 < 0 ? filteredDoctors.length - 1 : prev - 1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightedIndex >= 0 && highlightedIndex < filteredDoctors.length) {
+        handleSelect(filteredDoctors[highlightedIndex]);
+      } else if (filteredDoctors.length === 1) {
+        handleSelect(filteredDoctors[0]);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsOpen(false);
+      if (selectedDoctor) {
+        setQuery(`${selectedDoctor.full_name} (${selectedDoctor.specialization || 'General Medicine'})`);
+      }
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div
+        onClick={() => {
+          setIsOpen(true);
+          inputRef.current?.focus();
+        }}
+        className={`w-full flex items-center gap-2.5 px-3.5 py-3 bg-[#F8F9FB] border rounded-xl text-xs sm:text-sm cursor-text transition-all duration-150 ${
+          isOpen
+            ? 'border-[#2563EB] ring-2 ring-blue-500/10 bg-white shadow-xs'
+            : 'border-[#ECEEF2] hover:border-gray-300'
+        }`}
+      >
+        <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB] flex-shrink-0">
+          <Stethoscope className="w-3.5 h-3.5 stroke-[2.2]" />
+        </div>
+
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            if (!isOpen) setIsOpen(true);
+            setHighlightedIndex(0);
+          }}
+          onFocus={() => {
+            setIsOpen(true);
+            inputRef.current?.select();
+          }}
+          onKeyDown={handleKeyDown}
+          placeholder="Search physician by name or specialty..."
+          className="w-full bg-transparent outline-none text-[#16191E] placeholder:text-[#8A909D] font-semibold text-xs sm:text-sm"
+        />
+
+        {query ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setQuery('');
+              setIsOpen(true);
+              setHighlightedIndex(-1);
+              inputRef.current?.focus();
+            }}
+            title="Clear"
+            className="p-1 hover:bg-gray-200 rounded-md text-gray-400 hover:text-gray-700 transition"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsOpen((prev) => !prev);
+            if (!isOpen) inputRef.current?.focus();
+          }}
+          className="p-1 text-[#8A909D] hover:text-[#16191E] transition"
+        >
+          <ChevronDown
+            className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180 text-[#2563EB]' : ''}`}
+          />
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.15 }}
+            className="absolute left-0 right-0 top-full mt-1.5 z-40 bg-white border border-[#ECEEF2] rounded-xl shadow-xl overflow-hidden"
+          >
+            <ul ref={listRef} className="max-h-60 overflow-y-auto divide-y divide-[#F1F3F6] p-1">
+              {filteredDoctors.length === 0 ? (
+                <li className="px-4 py-5 text-center text-xs text-[#8A909D]">
+                  <p className="font-semibold text-gray-600">No matching doctors found</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Try searching with another name or specialty</p>
+                </li>
+              ) : (
+                filteredDoctors.map((doc, idx) => {
+                  const isSelected = doc.id === selectedDoctorId;
+                  const isHighlighted = highlightedIndex === idx;
+
+                  return (
+                    <li
+                      key={doc.id}
+                      onClick={() => handleSelect(doc)}
+                      onMouseEnter={() => setHighlightedIndex(idx)}
+                      className={`px-3.5 py-2.5 rounded-lg flex items-center justify-between gap-3 text-xs cursor-pointer transition-colors ${
+                        isSelected
+                          ? 'bg-blue-50 text-[#2563EB]'
+                          : isHighlighted
+                          ? 'bg-[#F4F5F7]'
+                          : 'hover:bg-[#F8F9FB]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
+                            isSelected ? 'bg-[#2563EB] text-white' : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {doc.full_name.charAt(doc.full_name.startsWith('Dr.') ? 4 : 0)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`font-bold truncate ${isSelected ? 'text-[#2563EB]' : 'text-[#16191E]'}`}>
+                              {doc.full_name}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-[#2563EB] border border-blue-100 font-semibold">
+                              {doc.specialization || 'General Medicine'}
+                            </span>
+                          </div>
+                          {doc.reg_no && (
+                            <span className="text-[10px] text-[#8A909D] block mt-0.5">Reg No: {doc.reg_no}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {isSelected && <Check className="w-4 h-4 text-[#2563EB] flex-shrink-0" />}
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 interface SlotBookingViewProps {
   queue: Patient[];
@@ -57,8 +287,6 @@ interface SlotBookingViewProps {
 
 export function SlotBookingView({
   queue,
-  waitingPatientsCount,
-  doctorProfile,
   availableDoctors,
   bookName,
   setBookName,
@@ -85,526 +313,397 @@ export function SlotBookingView({
   isStandalone = false,
 }: SlotBookingViewProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<'All' | 'Morning' | 'Afternoon' | 'Evening'>('All');
-  const [scheduleSearch, setScheduleSearch] = useState('');
 
   const filteredSlots = AVAILABLE_SLOTS.filter(
     (slot) => selectedPeriod === 'All' || slot.period === selectedPeriod
   );
 
-  const filteredQueue = queue.filter(
-    (p) =>
-      p.name.toLowerCase().includes(scheduleSearch.toLowerCase()) ||
-      p.id.toLowerCase().includes(scheduleSearch.toLowerCase()) ||
-      (p.phone && p.phone.includes(scheduleSearch))
-  );
-
   const content = (
-    <div className="w-full space-y-6">
-      <motion.section
-        variants={staggerContainer}
-        initial="hidden"
-        animate="visible"
-        className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4"
-      >
-        <motion.div
-          variants={fadeScale}
-          whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(0,0,0,0.08)' }}
-          transition={{ type: 'spring', damping: 18, stiffness: 300 }}
-          className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-5 border border-[#ECEEF2] shadow-sm cursor-default"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] sm:text-[11px] font-bold text-[#8A909D] uppercase tracking-wider">Next Token</span>
+    <div className="w-full">
+      <AnimatePresence mode="wait">
+        {confirmedToken ? (
+          <motion.div
+            key="confirmed-card"
+            initial={{ opacity: 0, scale: 0.92, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ type: 'spring', damping: 18, stiffness: 220 }}
+            className="bg-white rounded-3xl p-8 sm:p-12 border border-emerald-200 shadow-md text-center max-w-xl mx-auto"
+          >
             <motion.div
-              whileHover={{ rotate: 12, scale: 1.1 }}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-50 text-[#2563EB] flex items-center justify-center shadow-2xs"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.12, type: 'spring', damping: 12, stiffness: 240 }}
+              className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto mb-4 text-emerald-600 shadow-sm"
             >
-              <Ticket className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2]" />
+              <CheckCircle2 className="w-9 h-9 stroke-[2.2]" />
             </motion.div>
-          </div>
-          <div className="text-lg sm:text-2xl font-black text-[#16191E]">
-            #<AnimatedCounter target={queue.length + 1} />
-          </div>
-          <div className="flex items-center space-x-1.5 mt-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[9px] sm:text-[10px] text-emerald-600 font-bold">Live OPD Issuer</span>
-          </div>
-        </motion.div>
+            <div className="inline-flex items-center px-3.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold tracking-wide uppercase mb-2">
+              Slot Confirmed & Token Generated
+            </div>
+            <h3 className="text-xl sm:text-2xl font-bold text-[#16191E] mb-1">Appointment Successfully Booked</h3>
+            <p className="text-xs sm:text-sm text-[#8A909D] mb-6">Present this token at reception or clinical waiting lounge</p>
 
-        <motion.div
-          variants={fadeScale}
-          whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(0,0,0,0.08)' }}
-          transition={{ type: 'spring', damping: 18, stiffness: 300 }}
-          className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-5 border border-[#ECEEF2] shadow-sm cursor-default"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] sm:text-[11px] font-bold text-[#8A909D] uppercase tracking-wider">Queue Waiting</span>
-            <motion.div
-              whileHover={{ rotate: -12, scale: 1.1 }}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shadow-2xs"
-            >
-              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2]" />
-            </motion.div>
-          </div>
-          <div className="text-lg sm:text-2xl font-black text-[#16191E]">
-            <AnimatedCounter target={waitingPatientsCount} />
-          </div>
-          <div className="mt-2">
-            <AnimatedProgress
-              percent={Math.min(100, Math.max(12, waitingPatientsCount * 16))}
-              delay={0.15}
-              className="w-full h-1.5"
-            />
-            <span className="text-[9px] sm:text-[10px] text-[#8A909D] font-medium block mt-1 truncate">
-              Patients in chamber queue
-            </span>
-          </div>
-        </motion.div>
+            <div className="bg-[#F8F9FB] rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] max-w-md mx-auto mb-6 text-left">
+              <div className="flex items-center justify-between pb-4 border-b border-[#ECEEF2]">
+                <div>
+                  <span className="text-[11px] font-bold text-[#8A909D] uppercase tracking-wider block">OPD Token Number</span>
+                  <span className="text-3xl font-black text-[#2563EB]">
+                    {String(confirmedToken.tokenNumber).startsWith('P')
+                      ? confirmedToken.tokenNumber
+                      : `P${String(confirmedToken.tokenNumber).padStart(3, '0')}`}
+                  </span>
+                </div>
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-bold ${
+                    confirmedToken.priority === 'Urgent'
+                      ? 'bg-red-50 text-red-600 border border-red-200'
+                      : 'bg-blue-50 text-[#2563EB] border border-blue-100'
+                  }`}
+                >
+                  {confirmedToken.priority} Visit
+                </span>
+              </div>
 
-        <motion.div
-          variants={fadeScale}
-          whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(0,0,0,0.08)' }}
-          transition={{ type: 'spring', damping: 18, stiffness: 300 }}
-          className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-5 border border-[#ECEEF2] shadow-sm cursor-default"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] sm:text-[11px] font-bold text-[#8A909D] uppercase tracking-wider">Consulting Doctor</span>
-            <motion.div
-              whileHover={{ rotate: 12, scale: 1.1 }}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-50 text-[#2563EB] flex items-center justify-center shadow-2xs"
-            >
-              <Stethoscope className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2]" />
-            </motion.div>
-          </div>
-          <div className="text-xs sm:text-base font-bold text-[#16191E] truncate">{doctorProfile.name}</div>
-          <span className="text-[9px] sm:text-[10px] text-[#8A909D] font-medium truncate block mt-0.5">
-            {doctorProfile.title}
-          </span>
-          <div className="flex items-center space-x-1.5 mt-2">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            <span className="text-[9px] sm:text-[10px] text-blue-600 font-bold truncate">Chamber Available</span>
-          </div>
-        </motion.div>
+              <div className="grid grid-cols-2 gap-4 pt-4 text-xs sm:text-sm">
+                <div>
+                  <span className="text-[#8A909D] font-medium block text-xs">Patient Name</span>
+                  <span className="font-bold text-[#16191E]">{confirmedToken.name}</span>
+                </div>
+                <div>
+                  <span className="text-[#8A909D] font-medium block text-xs">Scheduled Time</span>
+                  <span className="font-bold text-[#16191E]">{confirmedToken.time}</span>
+                </div>
+                <div>
+                  <span className="text-[#8A909D] font-medium block text-xs">Consulting Doctor</span>
+                  <span className="font-bold text-[#16191E]">{confirmedToken.doctorName}</span>
+                </div>
+                <div>
+                  <span className="text-[#8A909D] font-medium block text-xs">Phone / Contact</span>
+                  <span className="font-bold text-[#16191E]">{confirmedToken.phone || 'Walk-in Desk'}</span>
+                </div>
+              </div>
+            </div>
 
-        <motion.div
-          variants={fadeScale}
-          whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(0,0,0,0.08)' }}
-          transition={{ type: 'spring', damping: 18, stiffness: 300 }}
-          className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-5 border border-[#ECEEF2] shadow-sm cursor-default"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] sm:text-[11px] font-bold text-[#8A909D] uppercase tracking-wider">Est. Wait Time</span>
-            <motion.div
-              whileHover={{ rotate: -12, scale: 1.1 }}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-50 text-[#2563EB] flex items-center justify-center shadow-2xs"
-            >
-              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2]" />
-            </motion.div>
-          </div>
-          <div className="text-lg sm:text-2xl font-black text-[#16191E]">
-            ~<AnimatedCounter target={Math.max(5, waitingPatientsCount * 10)} />m
-          </div>
-          <div className="mt-2">
-            <AnimatedProgress
-              percent={Math.min(100, Math.max(15, (waitingPatientsCount * 10 / 60) * 100))}
-              delay={0.25}
-              className="w-full h-1.5"
-            />
-            <span className="text-[9px] sm:text-[10px] text-blue-600 font-bold block mt-1">
-              ~10 mins / consult
-            </span>
-          </div>
-        </motion.div>
-      </motion.section>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+                onClick={() => window.print()}
+                className="px-5 py-2.5 rounded-xl bg-white border border-[#ECEEF2] hover:bg-gray-50 text-xs font-bold text-[#16191E] flex items-center space-x-2 transition cursor-pointer shadow-2xs"
+              >
+                <Printer className="w-4 h-4 text-gray-600" />
+                <span>Print Token Slip</span>
+              </motion.button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        <div className="lg:col-span-7">
-          <AnimatePresence mode="wait">
-            {confirmedToken ? (
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+                onClick={() => setConfirmedToken(null)}
+                className="px-5 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold flex items-center space-x-2 transition cursor-pointer shadow-xs"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Book Another Slot</span>
+              </motion.button>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.form
+            key="booking-form"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.3 }}
+            onSubmit={handleBookSlotSubmit}
+            className="bg-white rounded-2xl border border-[#ECEEF2] p-5 sm:p-8 lg:p-10 shadow-sm space-y-7"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-5 border-b border-[#ECEEF2]">
+              <div>
+                <h2 className="text-base sm:text-xl font-bold text-[#16191E]">Book a Consultation Slot</h2>
+                <p className="text-xs sm:text-sm text-[#8A909D] mt-0.5">
+                  Select your preferred consultation time & register patient details
+                </p>
+              </div>
               <motion.div
-                key="confirmed-card"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-white rounded-3xl p-6 sm:p-8 border border-emerald-200 shadow-md text-center"
+                whileHover={{ rotate: 12, scale: 1.08 }}
+                transition={{ type: 'spring', damping: 15 }}
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB] shadow-2xs flex-shrink-0"
               >
-                <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto mb-4 text-emerald-600">
-                  <CheckCircle2 className="w-9 h-9 stroke-[2.2]" />
-                </div>
-                <div className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold tracking-wide uppercase mb-2">
-                  Slot Confirmed & Token Generated
-                </div>
-                <h3 className="text-xl font-bold text-[#16191E] mb-1">Appointment Successfully Booked</h3>
-                <p className="text-xs text-[#8A909D] mb-6">Present this token at the reception or clinical waiting lounge</p>
-
-                <div className="bg-[#F8F9FB] rounded-2xl p-6 border border-[#ECEEF2] max-w-md mx-auto mb-6 text-left">
-                  <div className="flex items-center justify-between pb-4 border-b border-[#ECEEF2]">
-                    <div>
-                      <span className="text-[11px] font-bold text-[#8A909D] uppercase tracking-wider block">OPD Token Number</span>
-                      <span className="text-3xl font-black text-[#2563EB]">#{confirmedToken.tokenNumber}</span>
-                    </div>
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-xs font-bold ${confirmedToken.priority === 'Urgent'
-                          ? 'bg-red-50 text-red-600 border border-red-200'
-                          : 'bg-blue-50 text-[#2563EB] border border-blue-100'
-                        }`}
-                    >
-                      {confirmedToken.priority} Visit
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 pt-4 text-xs">
-                    <div>
-                      <span className="text-[#8A909D] font-medium block">Patient Name</span>
-                      <span className="font-bold text-[#16191E]">{confirmedToken.name}</span>
-                    </div>
-                    <div>
-                      <span className="text-[#8A909D] font-medium block">Scheduled Time</span>
-                      <span className="font-bold text-[#16191E]">{confirmedToken.time}</span>
-                    </div>
-                    <div>
-                      <span className="text-[#8A909D] font-medium block">Consulting Doctor</span>
-                      <span className="font-bold text-[#16191E]">{confirmedToken.doctorName}</span>
-                    </div>
-                    <div>
-                      <span className="text-[#8A909D] font-medium block">Phone / Contact</span>
-                      <span className="font-bold text-[#16191E]">{confirmedToken.phone || 'Walk-in Desk'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-center gap-3">
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.96 }}
-                    onClick={() => window.print()}
-                    className="px-5 py-2.5 rounded-xl bg-white border border-[#ECEEF2] hover:bg-gray-50 text-xs font-bold text-[#16191E] flex items-center space-x-1.5 transition cursor-pointer shadow-2xs"
-                  >
-                    <Printer className="w-4 h-4 text-gray-600" />
-                    <span>Print Token Slip</span>
-                  </motion.button>
-
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.96 }}
-                    onClick={() => setConfirmedToken(null)}
-                    className="px-5 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold flex items-center space-x-1.5 transition cursor-pointer shadow-xs"
-                  >
-                    <PlusCircle className="w-4 h-4" />
-                    <span>Book Another Slot</span>
-                  </motion.button>
-
-                  {onGoToConsulting && (
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.96 }}
-                      onClick={onGoToConsulting}
-                      className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-xs font-bold text-[#16191E] flex items-center space-x-1.5 transition cursor-pointer"
-                    >
-                      <Users className="w-4 h-4 text-gray-600" />
-                      <span>View Live Queue</span>
-                    </motion.button>
-                  )}
-                </div>
+                <CalendarPlus className="w-5 h-5 stroke-[2.2]" />
               </motion.div>
-            ) : (
-              <motion.form
-                key="booking-form"
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15, duration: 0.4 }}
-                onSubmit={handleBookSlotSubmit}
-                className="bg-white rounded-3xl p-6 sm:p-7 border border-[#ECEEF2] shadow-xs space-y-6"
-              >
-                <div className="flex items-center justify-between pb-4 border-b border-[#ECEEF2]">
-                  <div>
-                    <h3 className="text-base sm:text-lg font-bold text-[#16191E]">Book a Consultation Slot</h3>
-                    <p className="text-xs text-[#8A909D]">Choose your preferred consultation time & register patient</p>
-                  </div>
-                  <motion.div
-                    whileHover={{ rotate: 12, scale: 1.1 }}
-                    className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB] shadow-2xs"
-                  >
-                    <CalendarPlus className="w-5 h-5 stroke-[2.2]" />
-                  </motion.div>
+            </div>
+
+            {/* 1. Time Slot Selection */}
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-[#2563EB]" />
+                  <span>1. Select Time Slot</span>
+                  {bookSlotTime && (
+                    <motion.span
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="ml-1 text-xs font-bold text-[#2563EB] bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100 flex items-center gap-1"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] animate-pulse" />
+                      <span>{bookSlotTime}</span>
+                    </motion.span>
+                  )}
+                </label>
+                <div className="flex items-center space-x-1 bg-[#F8F9FB] p-1 rounded-xl border border-[#ECEEF2] self-start sm:self-auto">
+                  {(['All', 'Morning', 'Afternoon', 'Evening'] as const).map((period) => {
+                    const count =
+                      period === 'All'
+                        ? AVAILABLE_SLOTS.length
+                        : AVAILABLE_SLOTS.filter((s) => s.period === period).length;
+                    const isActive = selectedPeriod === period;
+                    return (
+                      <button
+                        key={period}
+                        type="button"
+                        onClick={() => setSelectedPeriod(period)}
+                        className={`relative text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 z-10 ${
+                          isActive ? 'text-[#2563EB]' : 'text-[#8A909D] hover:text-[#16191E]'
+                        }`}
+                      >
+                        {isActive && (
+                          <motion.div
+                            layoutId="activePeriodPill"
+                            className="absolute inset-0 bg-white rounded-lg shadow-2xs -z-10"
+                            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                          />
+                        )}
+                        <span>{period}</span>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                            isActive ? 'bg-blue-50 text-[#2563EB]' : 'bg-gray-200/60 text-gray-500'
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5 p-3.5 bg-[#F8F9FB] rounded-2xl border border-[#ECEEF2]">
+                {filteredSlots.map((slot) => {
+                  const isSelected = bookSlotTime === slot.time;
+                  return (
+                    <motion.button
+                      key={slot.time}
+                      type="button"
+                      whileHover={{ y: -2, scale: 1.03 }}
+                      whileTap={{ scale: 0.96 }}
+                      transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                      onClick={() => setBookSlotTime(slot.time)}
+                      className={`relative py-3 px-2 rounded-xl text-xs sm:text-sm font-bold transition-all text-center cursor-pointer flex flex-col items-center justify-center gap-0.5 overflow-hidden ${
+                        isSelected
+                          ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/20 ring-2 ring-[#2563EB] ring-offset-1'
+                          : 'bg-white hover:bg-blue-50/60 text-[#16191E] border border-[#ECEEF2] hover:border-blue-200'
+                      }`}
+                    >
+                      <span className="tracking-tight">{slot.time}</span>
+                      <span className={`text-[10px] font-medium ${isSelected ? 'text-blue-100' : 'text-[#8A909D]'}`}>
+                        {slot.period}
+                      </span>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2. Consulting Physician (Dropdown Combobox matching Medicine Selection) */}
+            {availableDoctors.length > 0 && (
+              <div className="space-y-2 pt-1 border-t border-[#ECEEF2]">
+                <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-2">
+                  <Stethoscope className="w-4 h-4 text-[#2563EB]" />
+                  <span>2. Consulting Physician</span>
+                </label>
+                <DoctorSearchCombobox
+                  doctors={availableDoctors}
+                  selectedDoctorId={bookDoctorId}
+                  onSelectDoctorId={setBookDoctorId}
+                />
+              </div>
+            )}
+
+            {/* 3. Patient Information */}
+            <div className="space-y-4 pt-1 border-t border-[#ECEEF2]">
+              <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-2">
+                <User className="w-4 h-4 text-[#2563EB]" />
+                <span>3. Patient Information</span>
+              </label>
+
+              {/* Row 1: Name & Phone */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <span className="text-xs font-semibold text-[#8A909D] block mb-1.5">Patient Full Name *</span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Rahul Sharma"
+                    value={bookName}
+                    onChange={(e) => setBookName(e.target.value)}
+                    className="w-full p-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm text-[#16191E] outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-blue-500/10 focus:bg-white transition-all duration-150"
+                  />
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-bold text-[#16191E] flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-[#2563EB]" />
-                      <span>1. Select Time Slot</span>
-                    </label>
-                    <div className="flex items-center space-x-1 bg-[#F8F9FB] p-1 rounded-lg border border-[#ECEEF2]">
-                      {(['All', 'Morning', 'Afternoon', 'Evening'] as const).map((period) => (
-                        <button
-                          key={period}
-                          type="button"
-                          onClick={() => setSelectedPeriod(period)}
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition cursor-pointer ${
-                            selectedPeriod === period
-                              ? 'bg-white text-[#2563EB] shadow-2xs'
-                              : 'text-[#8A909D] hover:text-[#16191E]'
-                          }`}
-                        >
-                          {period}
-                        </button>
-                      ))}
-                    </div>
+                  <span className="text-xs font-semibold text-[#8A909D] block mb-1.5">Phone / Mobile</span>
+                  <div className="relative">
+                    <input
+                      type="tel"
+                      placeholder="e.g. 98460 12345"
+                      value={bookPhone}
+                      onChange={(e) => setBookPhone(e.target.value)}
+                      className="w-full p-3 pl-9 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm text-[#16191E] outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-blue-500/10 focus:bg-white transition-all duration-150"
+                    />
+                    <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-3.5 pointer-events-none" />
                   </div>
+                </div>
+              </div>
 
-                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 max-h-48 overflow-y-auto p-1 bg-[#F8F9FB] rounded-2xl border border-[#ECEEF2]">
-                    {filteredSlots.map((slot, sIdx) => {
-                      const isSelected = bookSlotTime === slot.time;
+              {/* Row 2: Age, Gender, and Priority */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div className="md:col-span-3">
+                  <span className="text-xs font-semibold text-[#8A909D] block mb-1.5">Age (Years)</span>
+                  <input
+                    type="number"
+                    placeholder="e.g. 35"
+                    value={bookAge}
+                    onChange={(e) => setBookAge(e.target.value)}
+                    className="w-full p-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm text-[#16191E] outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-blue-500/10 focus:bg-white transition-all duration-150"
+                  />
+                </div>
+
+                <div className="md:col-span-4">
+                  <span className="text-xs font-semibold text-[#8A909D] block mb-1.5">Gender</span>
+                  <div className="flex bg-[#F8F9FB] p-1 rounded-xl border border-[#ECEEF2] h-[48px] items-center relative">
+                    {(['Male', 'Female', 'Other'] as const).map((g) => {
+                      const isSelected = bookGender === g;
                       return (
-                        <motion.button
-                          key={slot.time}
-                          initial={{ opacity: 0, scale: 0.92 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.1 + sIdx * 0.02 }}
-                          whileHover={{ scale: 1.04 }}
-                          whileTap={{ scale: 0.96 }}
+                        <button
+                          key={g}
                           type="button"
-                          onClick={() => setBookSlotTime(slot.time)}
-                          className={`py-2 px-1.5 rounded-xl text-xs font-bold transition-all text-center cursor-pointer flex flex-col items-center justify-center ${
-                            isSelected
-                              ? 'bg-[#2563EB] text-white shadow-xs'
-                              : 'bg-white hover:bg-blue-50/60 text-[#16191E] border border-[#ECEEF2] hover:border-blue-200'
+                          onClick={() => setBookGender(g)}
+                          className={`relative flex-1 h-full rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center justify-center z-10 ${
+                            isSelected ? 'text-white' : 'text-[#8A909D] hover:text-[#16191E]'
                           }`}
                         >
-                          <span>{slot.time}</span>
-                          <span className={`text-[9px] font-medium ${isSelected ? 'text-blue-100' : 'text-[#8A909D]'}`}>
-                            {slot.period}
-                          </span>
-                        </motion.button>
+                          {isSelected && (
+                            <motion.div
+                              layoutId="activeGenderPill"
+                              className="absolute inset-0 bg-[#2563EB] rounded-lg shadow-xs -z-10"
+                              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                            />
+                          )}
+                          <span>{g}</span>
+                        </button>
                       );
                     })}
                   </div>
                 </div>
 
-                {availableDoctors.length > 0 && (
-                  <div>
-                    <label className="text-xs font-bold text-[#16191E] block mb-1.5 flex items-center gap-1.5">
-                      <Stethoscope className="w-3.5 h-3.5 text-[#2563EB]" />
-                      <span>2. Consulting Physician</span>
-                    </label>
-                    <select
-                      value={bookDoctorId}
-                      onChange={(e) => setBookDoctorId(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs font-semibold text-[#16191E] outline-none focus:ring-1 focus:ring-[#2563EB]"
+                <div className="md:col-span-5">
+                  <span className="text-xs font-semibold text-[#8A909D] block mb-1.5">Visit Priority</span>
+                  <div className="flex gap-2.5 h-[48px]">
+                    <motion.button
+                      type="button"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setBookPriority('Normal')}
+                      className={`flex-1 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
+                        bookPriority === 'Normal'
+                          ? 'bg-blue-50 border-[#2563EB] text-[#2563EB] ring-1 ring-[#2563EB]/20 shadow-xs'
+                          : 'bg-white border-[#ECEEF2] text-[#8A909D] hover:border-gray-300'
+                      }`}
                     >
-                      {availableDoctors.map((doc) => (
-                        <option key={doc.id} value={doc.id}>
-                          {doc.full_name} • {doc.specialization || 'General Medicine'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div className="space-y-3.5 pt-2 border-t border-[#ECEEF2]">
-                  <label className="text-xs font-bold text-[#16191E] block flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-[#2563EB]" />
-                    <span>3. Patient Information</span>
-                  </label>
-
-                  <div>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Patient Full Name *"
-                      value={bookName}
-                      onChange={(e) => setBookName(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs text-[#16191E] outline-none focus:ring-1 focus:ring-[#2563EB]"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="relative">
-                      <input
-                        type="tel"
-                        placeholder="Phone Number (e.g. 98460 12345)"
-                        value={bookPhone}
-                        onChange={(e) => setBookPhone(e.target.value)}
-                        className="w-full p-2.5 pl-8 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs text-[#16191E] outline-none focus:ring-1 focus:ring-[#2563EB]"
+                      <Check
+                        className={`w-3.5 h-3.5 transition-transform ${
+                          bookPriority === 'Normal' ? 'scale-100 opacity-100' : 'scale-75 opacity-0'
+                        }`}
                       />
-                      <Phone className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-3 pointer-events-none" />
-                    </div>
+                      <span>Normal</span>
+                    </motion.button>
 
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        placeholder="Age"
-                        value={bookAge}
-                        onChange={(e) => setBookAge(e.target.value)}
-                        className="w-20 p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs text-[#16191E] outline-none focus:ring-1 focus:ring-[#2563EB]"
-                      />
-                      <div className="flex-1 flex bg-[#F8F9FB] p-1 rounded-xl border border-[#ECEEF2]">
-                        {(['Male', 'Female', 'Other'] as const).map((g) => (
-                          <button
-                            key={g}
-                            type="button"
-                            onClick={() => setBookGender(g)}
-                            className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${bookGender === g
-                                ? 'bg-[#2563EB] text-white shadow-xs'
-                                : 'text-[#8A909D] hover:text-[#16191E]'
-                              }`}
-                          >
-                            {g}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-[11px] font-semibold text-[#8A909D] block mb-1">Visit Priority</span>
-                    <div className="flex gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setBookPriority('Normal')}
-                        className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center justify-center space-x-1.5 ${bookPriority === 'Normal'
-                            ? 'bg-blue-50 border-[#2563EB] text-[#2563EB]'
-                            : 'bg-white border-[#ECEEF2] text-[#8A909D] hover:border-gray-300'
-                          }`}
-                      >
-                        <Check className={`w-3.5 h-3.5 ${bookPriority === 'Normal' ? 'opacity-100' : 'opacity-0'}`} />
-                        <span>Normal Walk-in</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setBookPriority('Urgent')}
-                        className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center justify-center space-x-1.5 ${bookPriority === 'Urgent'
-                            ? 'bg-red-50 border-red-500 text-red-600'
-                            : 'bg-white border-[#ECEEF2] text-[#8A909D] hover:border-gray-300'
-                          }`}
-                      >
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                        <span>Urgent Triage</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-[11px] font-semibold text-[#8A909D] block mb-1.5">Reason for Visit / Symptoms</span>
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {QUICK_SYMPTOMS.map((sym) => (
-                        <button
-                          key={sym}
-                          type="button"
-                          onClick={() => setBookReason(sym)}
-                          className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition cursor-pointer ${bookReason === sym
-                              ? 'bg-blue-50 border-[#2563EB] text-[#2563EB]'
-                              : 'bg-white border-[#ECEEF2] text-[#5E6470] hover:border-blue-200'
-                            }`}
-                        >
-                          {sym}
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Specify custom notes or reason..."
-                      value={bookReason}
-                      onChange={(e) => setBookReason(e.target.value)}
-                      className="w-full p-2 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs text-[#16191E] outline-none focus:ring-1 focus:ring-[#2563EB]"
-                    />
+                    <motion.button
+                      type="button"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setBookPriority('Urgent')}
+                      className={`flex-1 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
+                        bookPriority === 'Urgent'
+                          ? 'bg-red-50 border-red-500 text-red-600 ring-1 ring-red-500/20 shadow-xs'
+                          : 'bg-white border-[#ECEEF2] text-[#8A909D] hover:border-gray-300'
+                      }`}
+                    >
+                      <AlertTriangle className={`w-3.5 h-3.5 ${bookPriority === 'Urgent' ? 'animate-pulse' : ''}`} />
+                      <span>Urgent</span>
+                    </motion.button>
                   </div>
                 </div>
-
-                <motion.button
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.98 }}
-                  type="submit"
-                  disabled={isBookingSubmitting}
-                  className="w-full py-3 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-xs flex items-center justify-center space-x-2 disabled:opacity-50"
-                >
-                  <Ticket className="w-4 h-4" />
-                  <span>{isBookingSubmitting ? 'Allocating Slot...' : `Confirm & Generate Token #${queue.length + 1}`}</span>
-                </motion.button>
-              </motion.form>
-            )}
-          </AnimatePresence>
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.22, duration: 0.4 }}
-          className="lg:col-span-5 bg-white rounded-3xl p-6 sm:p-7 border border-[#ECEEF2] shadow-xs"
-        >
-          <div className="flex items-center justify-between pb-3 border-b border-[#ECEEF2] mb-4">
-            <div>
-              <h3 className="text-sm font-bold text-[#16191E]">Today's Live Queue</h3>
-              <p className="text-[11px] text-[#8A909D]">Real-time OPD token status</p>
-            </div>
-            <span className="px-2.5 py-1 rounded-full bg-blue-50 text-[10px] font-bold text-[#2563EB]">
-              {queue.length} Registered
-            </span>
-          </div>
-
-          <div className="relative mb-3">
-            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Filter by name, token or phone..."
-              value={scheduleSearch}
-              onChange={(e) => setScheduleSearch(e.target.value)}
-              className="w-full py-1.5 pl-8 pr-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-[11px] outline-none focus:ring-1 focus:ring-[#2563EB]"
-            />
-          </div>
-
-          <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
-            {filteredQueue.length === 0 ? (
-              <div className="text-center py-10 text-xs text-[#8A909D]">
-                No patients found in today's worklist.
               </div>
-            ) : (
-              filteredQueue.map((pat, idx) => (
-                <motion.div
-                  key={pat.id || idx}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 + idx * 0.04 }}
-                  whileHover={{ y: -2, boxShadow: '0 6px 16px -4px rgba(0,0,0,0.06)' }}
-                  className="p-3 bg-[#F8F9FB] hover:bg-blue-50/40 rounded-2xl border border-[#ECEEF2] flex items-center justify-between transition cursor-default"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <span className="w-8 h-8 rounded-xl bg-white border border-[#ECEEF2] flex items-center justify-center text-xs font-black text-[#2563EB] shadow-2xs">
-                      #{pat.tokenNumber || idx + 1}
-                    </span>
-                    <div>
-                      <div className="text-xs font-bold text-[#16191E] flex items-center gap-1.5">
-                        <span>{pat.name}</span>
-                        {pat.priority === 'Urgent' && (
-                          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-red-100 text-red-600 font-extrabold">
-                            URGENT
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-[#8A909D] font-medium">
-                        {pat.age}y • {pat.gender} • Slot: {pat.time || 'Walk-in'}
-                      </span>
-                    </div>
-                  </div>
 
-                  <span
-                    className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                      pat.status === 'Completed'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : pat.status === 'In Progress'
-                        ? 'bg-blue-50 text-[#2563EB] border border-blue-200 animate-pulse'
-                        : 'bg-amber-50 text-amber-700 border border-amber-200'
-                    }`}
-                  >
-                    {pat.status}
-                  </span>
-                </motion.div>
-              ))
-            )}
-          </div>
-        </motion.div>
-      </div>
+              {/* Row 3: Symptoms / Chief Complaints */}
+              <div className="pt-1">
+                <span className="text-xs font-semibold text-[#8A909D] block mb-2">Chief Complaints / Symptoms</span>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {QUICK_SYMPTOMS.map((sym) => {
+                    const isSelected = bookReason === sym;
+                    return (
+                      <motion.button
+                        key={sym}
+                        type="button"
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.96 }}
+                        onClick={() => setBookReason(isSelected ? '' : sym)}
+                        className={`text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-blue-50 border-[#2563EB] text-[#2563EB] shadow-2xs font-bold'
+                            : 'bg-white border-[#ECEEF2] text-[#5E6470] hover:border-blue-200'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3 text-[#2563EB]" />}
+                        <span>{sym}</span>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+                <input
+                  type="text"
+                  placeholder="Specify custom reason or clinical remarks..."
+                  value={bookReason}
+                  onChange={(e) => setBookReason(e.target.value)}
+                  className="w-full p-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm text-[#16191E] outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-blue-500/10 focus:bg-white transition-all duration-150"
+                />
+              </div>
+            </div>
+
+            {/* Submit */}
+            <div className="pt-2">
+              <motion.button
+                type="submit"
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                disabled={isBookingSubmitting}
+                className="w-full py-3.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl text-sm font-bold transition cursor-pointer shadow-md shadow-blue-500/20 flex items-center justify-center space-x-2 disabled:opacity-50"
+              >
+                <Ticket className="w-4 h-4" />
+                <span>
+                  {isBookingSubmitting
+                    ? 'Allocating Slot...'
+                    : `Confirm & Book Slot • Token P${String(queue.length + 1).padStart(3, '0')}`}
+                </span>
+              </motion.button>
+            </div>
+          </motion.form>
+        )}
+      </AnimatePresence>
     </div>
   );
 
@@ -618,7 +717,7 @@ export function SlotBookingView({
         className="min-h-screen bg-[#F8F9FB] flex flex-col antialiased text-[#16191E] select-none"
         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
       >
-        <header className="bg-white border-b border-[#ECEEF2] px-3.5 sm:px-8 py-3 sm:py-3.5 flex items-center justify-between sticky top-0 z-30">
+        <header className="bg-white border-b border-[#ECEEF2] px-4 sm:px-8 py-3 sm:py-3.5 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center space-x-2.5 sm:space-x-3">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB] shadow-2xs flex-shrink-0">
               <HeartPulse className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.2]" />
@@ -639,6 +738,7 @@ export function SlotBookingView({
           <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
             {onBackToGateway && (
               <motion.button
+                type="button"
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.96 }}
                 onClick={onBackToGateway}
@@ -651,7 +751,7 @@ export function SlotBookingView({
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-28 sm:pb-8">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 w-full pb-28 sm:pb-12">
           {content}
         </div>
       </motion.div>

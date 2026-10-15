@@ -36,6 +36,8 @@ export interface DbPatient {
   gender: string;
   phone_number?: string | null;
   created_at?: string;
+  patient_number?: number | null;
+  display_id?: string | null;
 }
 
 export interface DbAppointment {

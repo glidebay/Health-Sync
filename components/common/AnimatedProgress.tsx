@@ -11,7 +11,7 @@ interface AnimatedProgressProps {
 
 export function AnimatedProgress({ percent, delay = 0, className = '' }: AnimatedProgressProps) {
   return (
-    <div className={`w-24 sm:w-32 md:w-36 h-2 bg-[#EBECEF] rounded-full overflow-hidden flex flex-shrink-0 ${className}`}>
+    <div className={`h-2 bg-[#EBECEF] rounded-full overflow-hidden flex ${className ? className : 'w-20 sm:w-28 md:w-32 flex-shrink-0'}`}>
       <motion.div
         initial={{ width: 0 }}
         animate={{ width: `${percent}%` }}

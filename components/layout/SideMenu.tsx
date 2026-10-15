@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HeartPulse, Lock, LucideIcon } from 'lucide-react';
+import { HeartPulse, Lock, LogOut, ShieldCheck, CheckCircle2, LucideIcon } from 'lucide-react';
 import { NavSection } from '@/types';
 import { navItemVariants } from '@/lib/constants';
 
@@ -22,6 +22,8 @@ interface SideMenuProps {
   onNavClick: (section: NavSection, reqAuth: boolean) => void;
   onOpenPinModal: () => void;
   onLogout: () => void;
+  onFullLogout?: () => void;
+  requireDoctorPin?: boolean;
 }
 
 export function SideMenu({
@@ -33,6 +35,8 @@ export function SideMenu({
   onNavClick,
   onOpenPinModal,
   onLogout,
+  onFullLogout,
+  requireDoctorPin = true,
 }: SideMenuProps) {
   return (
     <AnimatePresence initial={false}>
@@ -40,7 +44,7 @@ export function SideMenu({
         <motion.aside
           key="sidebar"
           initial={{ width: 0, opacity: 0 }}
-          animate={{ width: 256, opacity: 1 }}
+          animate={{ width: 260, opacity: 1 }}
           exit={{ width: 0, opacity: 0 }}
           transition={{
             type: 'spring',
@@ -50,12 +54,12 @@ export function SideMenu({
           }}
           className="bg-white border-r border-[#ECEEF2] h-screen sticky top-0 no-print overflow-hidden flex-shrink-0 z-30"
         >
-          <div className="w-64 min-w-[256px] py-8 px-6 flex flex-col justify-between h-full overflow-y-auto">
-            <div className="flex flex-col space-y-9">
+          <div className="w-[260px] min-w-[260px] py-6 px-4.5 flex flex-col justify-between h-full overflow-hidden">
+            <div className="flex flex-col space-y-6">
               <motion.div variants={navItemVariants} className="flex items-center justify-between px-1">
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-3.5">
                   <motion.div
-                    whileHover={{ scale: 1.08, rotate: 8 }}
+                    whileHover={{ scale: 1.08, rotate: 6 }}
                     whileTap={{ scale: 0.95 }}
                     className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB] shadow-xs cursor-pointer flex-shrink-0"
                   >
@@ -63,7 +67,7 @@ export function SideMenu({
                   </motion.div>
                   <div className="flex flex-col">
                     <span className="text-xl font-bold tracking-tight text-[#16191E]">HealthSync</span>
-                    <span className="text-[9px] font-bold tracking-wider text-[#8A909D] uppercase -mt-0.5">
+                    <span className="text-[10px] font-bold tracking-wider text-[#8A909D] uppercase -mt-0.5">
                       CLMS Pavilion
                     </span>
                   </div>
@@ -74,13 +78,13 @@ export function SideMenu({
                 {navItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = activeSection === item.id;
-                  const isLocked = item.reqAuth && !isLoggedIn;
+                  const isLocked = item.reqAuth && !isLoggedIn && requireDoctorPin;
 
                   return (
                     <motion.div key={item.id} variants={navItemVariants}>
                       <button
                         onClick={() => onNavClick(item.id, item.reqAuth)}
-                        className={`relative w-full flex items-center justify-between px-4 py-3 rounded-xl font-semibold text-sm transition-colors duration-200 cursor-pointer text-left group ${
+                        className={`relative w-full flex items-center justify-between px-4 py-3 rounded-xl font-semibold text-sm transition-colors duration-150 cursor-pointer text-left group ${
                           isActive
                             ? 'text-[#16191E] font-semibold'
                             : 'text-[#5E6470] hover:text-[#16191E] hover:bg-gray-50/80 font-medium'
@@ -95,7 +99,7 @@ export function SideMenu({
                         )}
                         <div className="relative z-10 flex items-center space-x-3.5">
                           <Icon
-                            className={`w-5 h-5 transition-transform duration-200 group-hover:scale-110 ${
+                            className={`w-5 h-5 transition-transform duration-150 group-hover:scale-110 ${
                               isActive
                                 ? 'text-[#2563EB] stroke-[2.2]'
                                 : 'text-[#8A909D] group-hover:text-[#2563EB] stroke-[1.8]'
@@ -111,47 +115,82 @@ export function SideMenu({
               </nav>
             </div>
 
-            <motion.div
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5, type: 'spring', damping: 20 }}
-              className="bg-[#F8F9FB] rounded-3xl p-5 pt-8 text-center border border-[#ECEEF2] flex flex-col items-center"
-            >
-              <motion.div
-                animate={{ y: [0, -4, 0] }}
-                transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
-                className="relative w-16 h-16 mb-4 flex items-center justify-center"
-              >
-                <div className="w-14 h-12 bg-[#ECEEF2] rounded-2xl relative flex items-center justify-center shadow-inner mt-3">
-                  <div className="w-3.5 h-4 bg-[#2563EB] rounded-full" />
-                  <div className="absolute -top-5 w-8 h-8 border-4 border-blue-200 rounded-t-full bg-transparent" />
+            <div className="flex flex-col space-y-2.5 mt-3 pt-3.5 border-t border-[#ECEEF2]/90 flex-shrink-0">
+              <div className="bg-[#F8F9FB] rounded-2xl p-3 border border-[#ECEEF2] flex items-center justify-between gap-2.5">
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                      !requireDoctorPin
+                        ? 'bg-emerald-50 text-emerald-600'
+                        : isLoggedIn
+                        ? 'bg-blue-50 text-[#2563EB]'
+                        : 'bg-amber-50 text-amber-600'
+                    }`}
+                  >
+                    {!requireDoctorPin ? (
+                      <ShieldCheck className="w-4 h-4 stroke-[2]" />
+                    ) : isLoggedIn ? (
+                      <CheckCircle2 className="w-4 h-4 stroke-[2]" />
+                    ) : (
+                      <Lock className="w-4 h-4 stroke-[2]" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-[#16191E] leading-tight truncate">
+                      {!requireDoctorPin
+                        ? 'Open Access'
+                        : isLoggedIn
+                        ? 'Doctor Verified'
+                        : 'Doctor Locked'}
+                    </p>
+                    <p className="text-[11px] text-[#8A909D] truncate font-medium">
+                      {!requireDoctorPin
+                        ? 'No PIN required'
+                        : isLoggedIn
+                        ? doctorProfile.name
+                        : 'PIN required for Rx'}
+                    </p>
+                  </div>
                 </div>
-              </motion.div>
 
-              <p className="text-xs font-bold text-[#16191E] leading-relaxed max-w-[160px] mb-4">
-                {isLoggedIn ? `Doctor Authenticated • ${doctorProfile.name}` : 'Doctor Security PIN Required for Triage & Rx'}
-              </p>
+                {requireDoctorPin && (
+                  isLoggedIn ? (
+                    <motion.button
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.96 }}
+                      onClick={onLogout}
+                      className="px-2.5 py-1.5 bg-white hover:bg-gray-100 text-[#16191E] text-xs font-semibold rounded-lg border border-[#ECEEF2] transition cursor-pointer flex-shrink-0 shadow-2xs"
+                      title="Lock Doctor Session"
+                    >
+                      Lock
+                    </motion.button>
+                  ) : (
+                    <motion.button
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.96 }}
+                      onClick={onOpenPinModal}
+                      className="px-2.5 py-1.5 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition shadow-2xs cursor-pointer flex-shrink-0"
+                      title="Enter Doctor PIN"
+                    >
+                      Unlock
+                    </motion.button>
+                  )
+                )}
+              </div>
 
-              {isLoggedIn ? (
+              {onFullLogout && (
                 <motion.button
-                  whileHover={{ scale: 1.03, y: -1 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={onLogout}
-                  className="w-full py-2.5 px-4 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition duration-150 shadow-sm cursor-pointer"
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={onFullLogout}
+                  className="w-full py-2.5 px-3.5 rounded-xl border border-[#ECEEF2] bg-white hover:border-red-200 hover:bg-red-50/60 text-[#5E6470] hover:text-red-600 text-xs font-semibold flex items-center justify-center space-x-2 transition-all duration-150 shadow-2xs cursor-pointer"
+                  title="Log Out of Clinic Session"
                 >
-                  Lock Session
-                </motion.button>
-              ) : (
-                <motion.button
-                  whileHover={{ scale: 1.03, y: -1 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={onOpenPinModal}
-                  className="w-full py-2.5 px-4 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition duration-150 shadow-sm cursor-pointer"
-                >
-                  Authenticate PIN
+                  <LogOut className="w-3.5 h-3.5 text-[#8A909D] group-hover:text-red-600 stroke-[2] transition-colors" />
+                  <span>Log Out</span>
                 </motion.button>
               )}
-            </motion.div>
+            </div>
           </div>
         </motion.aside>
       )}

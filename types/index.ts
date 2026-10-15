@@ -10,7 +10,9 @@ export interface Patient {
   phone?: string;
   status: PatientStatus;
   time: string;
-  tokenNumber?: number;
+  tokenNumber?: number | string;
+  patientNumber?: number;
+  displayId?: string;
   priority?: 'Normal' | 'Urgent';
 }
 
@@ -47,14 +49,16 @@ export interface ConsultationRecord {
   demographics?: string;
 }
 
-export type TabType = 'assistant' | 'queue' | 'consult' | 'inventory' | 'analytics';
+export type TabType = 'assistant' | 'queue' | 'consult' | 'inventory' | 'analytics' | 'settings';
 
-export type NavSection = 'dashboard' | 'booking' | 'assistant' | 'queue' | 'consult' | 'inventory' | 'analytics';
+export type NavSection = 'dashboard' | 'booking' | 'assistant' | 'queue' | 'consult' | 'inventory' | 'analytics' | 'settings';
+
+export type { AppConfig } from '@/data/default-config';
 
 export type PortalMode = 'gateway' | 'booking' | 'dashboard';
 
 export interface ConfirmedToken {
-  tokenNumber: number;
+  tokenNumber: number | string;
   name: string;
   time: string;
   phone?: string;

@@ -19,6 +19,8 @@ export interface FormattedQueuePatient {
   status: 'Waiting' | 'In Progress' | 'Completed';
   time: string;
   tokenNumber: number;
+  patientNumber?: number;
+  displayId?: string;
   priority?: 'Normal' | 'Urgent';
   scheduledTime: string;
 }
@@ -320,7 +322,9 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
           age,
           gender,
           phone_number,
-          created_at
+          created_at,
+          patient_number,
+          display_id
         )
       `)
       .order('scheduled_time', { ascending: true });
@@ -341,6 +345,12 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
         hour12: true,
       });
 
+      const patNum = patient?.patient_number ?? (index + 1);
+      const rawDispId = patient?.display_id;
+      const displayId = rawDispId
+        ? (rawDispId.startsWith('P') ? rawDispId : `P${rawDispId}`)
+        : `P${String(patNum).padStart(3, '0')}`;
+
       return {
         id: item.id,
         patientDbId: item.patient_id,
@@ -350,7 +360,9 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
         phone: patient?.phone_number || undefined,
         status: (item.status as 'Waiting' | 'In Progress' | 'Completed') || 'Waiting',
         time: timeStr,
-        tokenNumber: index + 1,
+        tokenNumber: patNum,
+        patientNumber: patNum,
+        displayId,
         priority: item.visit_type === 'Urgent' ? 'Urgent' : 'Normal',
         scheduledTime: item.scheduled_time,
       };
@@ -381,15 +393,22 @@ export async function registerWalkinPatientDb(params: {
     // Check if returning patient exists by phone number
     const { data: existingPatient } = await supabase
       .from('patients')
-      .select('id, full_name, age, gender, phone_number')
+      .select('id, full_name, age, gender, phone_number, patient_number, display_id')
       .eq('phone_number', patientPhone)
       .maybeSingle();
+
+    let patientNumber: number | undefined;
+    let displayId: string | undefined;
 
     if (existingPatient) {
       patientId = existingPatient.id;
       patientName = existingPatient.full_name || params.name;
       patientAge = existingPatient.age || params.age;
       patientGender = existingPatient.gender || params.gender;
+      patientNumber = existingPatient.patient_number || undefined;
+      displayId = existingPatient.display_id
+        ? (existingPatient.display_id.startsWith('P') ? existingPatient.display_id : `P${existingPatient.display_id}`)
+        : undefined;
     } else {
       const { data: patientData, error: patientError } = await supabase
         .from('patients')
@@ -401,7 +420,7 @@ export async function registerWalkinPatientDb(params: {
             phone_number: patientPhone,
           },
         ])
-        .select()
+        .select('id, full_name, age, gender, phone_number, patient_number, display_id')
         .single();
 
       if (patientError || !patientData) {
@@ -409,6 +428,20 @@ export async function registerWalkinPatientDb(params: {
         return null;
       }
       patientId = patientData.id;
+      patientNumber = patientData.patient_number || undefined;
+      displayId = patientData.display_id
+        ? (patientData.display_id.startsWith('P') ? patientData.display_id : `P${patientData.display_id}`)
+        : undefined;
+    }
+
+    // Fallback if patient_number wasn't returned
+    let finalPatNumber = patientNumber;
+    if (!finalPatNumber) {
+      const { count } = await supabase.from('patients').select('*', { count: 'exact', head: true });
+      finalPatNumber = count || 1;
+    }
+    if (!displayId) {
+      displayId = `P${String(finalPatNumber).padStart(3, '0')}`;
     }
 
     // 2. Fetch default doctor if available
@@ -459,7 +492,9 @@ export async function registerWalkinPatientDb(params: {
       phone: patientPhone,
       status: 'Waiting',
       time: timeStr,
-      tokenNumber: 1,
+      tokenNumber: finalPatNumber,
+      patientNumber: finalPatNumber,
+      displayId,
       priority: params.priority || 'Normal',
       scheduledTime,
     };
@@ -718,9 +753,270 @@ export function subscribeToClinicUpdates(onUpdate: () => void) {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => {
       onUpdate();
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, () => {
+      onUpdate();
+    })
     .subscribe();
 
   return () => {
     supabase.removeChannel(channel);
   };
 }
+
+// ====================================================================
+// APPLICATION SETTINGS & PARAMETER CATALOG SERVICES
+// ====================================================================
+
+import { AppConfig, DEFAULT_APP_CONFIG } from '@/data/default-config';
+
+const APP_CONFIG_STORAGE_KEY = 'healthsync_app_config';
+
+export function getAppConfigLocal(): AppConfig {
+  if (typeof window === 'undefined') return DEFAULT_APP_CONFIG;
+  try {
+    const raw = localStorage.getItem(APP_CONFIG_STORAGE_KEY);
+    if (!raw) return DEFAULT_APP_CONFIG;
+    return { ...DEFAULT_APP_CONFIG, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_APP_CONFIG;
+  }
+}
+
+export function saveAppConfigLocal(config: AppConfig): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(APP_CONFIG_STORAGE_KEY, JSON.stringify(config));
+  } catch (e) {
+    console.warn('Failed saving app config locally:', e);
+  }
+}
+
+export async function fetchAppConfigDb(): Promise<AppConfig> {
+  const localConfig = getAppConfigLocal();
+  try {
+    const [configRes, docRes] = await Promise.all([
+      supabase.from('app_config').select('key, value'),
+      supabase.from('doctors').select('daily_quota').limit(1),
+    ]);
+
+    const rows = configRes.data;
+    if (!rows || rows.length === 0) {
+      return localConfig;
+    }
+
+    const merged: Record<string, unknown> = { ...localConfig };
+    rows.forEach((row) => {
+      let val: unknown = row.value;
+      if (typeof val === 'string') {
+        try {
+          val = JSON.parse(val);
+        } catch {
+          // keep as string
+        }
+      }
+      merged[row.key] = val;
+    });
+
+    const booleanKeys: (keyof AppConfig)[] = [
+      'allow_quota_override',
+      'require_doctor_pin',
+      'auto_move_unattended',
+      'enable_whatsapp_autoresponder',
+      'enable_whatsapp_bot',
+      'restrict_out_of_stock_rx',
+      'auto_deduct_inventory',
+      'enable_pwa_offline',
+    ];
+    booleanKeys.forEach((k) => {
+      if (merged[k] !== undefined) {
+        const raw = merged[k];
+        if (typeof raw === 'string') {
+          merged[k] = raw.trim().toLowerCase() === 'true';
+        } else {
+          merged[k] = Boolean(raw);
+        }
+      }
+    });
+
+    const doctorQuota = docRes.data?.[0]?.daily_quota;
+    if (doctorQuota !== undefined) {
+      merged.daily_quota = Number(doctorQuota);
+    }
+
+    const fullConfig = { ...DEFAULT_APP_CONFIG, ...merged } as AppConfig;
+    saveAppConfigLocal(fullConfig);
+    return fullConfig;
+  } catch (err) {
+    console.warn('Error fetching app_config from Supabase, using local:', err);
+    return localConfig;
+  }
+}
+
+export async function updateAppConfigDb(
+  updates: Partial<AppConfig>
+): Promise<{ success: boolean; config: AppConfig; error?: string }> {
+  const current = getAppConfigLocal();
+  const nextConfig: AppConfig = { ...current, ...updates };
+
+  // Save to local storage for instant optimistic UI update
+  saveAppConfigLocal(nextConfig);
+
+  try {
+    // 1. Update app_config table by primary key `key`
+    const updatePromises = Object.entries(updates).map(async ([key, val]) => {
+      let serializedValue: string;
+      if (typeof val === 'boolean') {
+        serializedValue = val ? 'true' : 'false';
+      } else if (typeof val === 'object' && val !== null) {
+        serializedValue = JSON.stringify(val);
+      } else {
+        serializedValue = String(val);
+      }
+
+      const { error } = await supabase
+        .from('app_config')
+        .upsert(
+          {
+            key,
+            value: serializedValue,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'key' }
+        );
+
+      if (error) {
+        // Fallback to direct update
+        await supabase
+          .from('app_config')
+          .update({ value: serializedValue })
+          .eq('key', key);
+      }
+    });
+
+    await Promise.all(updatePromises);
+
+    // 2. Sync doctor daily quota to doctors table if modified
+    if (updates.daily_quota !== undefined) {
+      const { error: docError } = await supabase
+        .from('doctors')
+        .update({ daily_quota: updates.daily_quota })
+        .not('id', 'is', null);
+
+      if (docError) {
+        console.warn('Doctors quota update notice:', docError.message);
+      }
+    }
+
+    return { success: true, config: nextConfig };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.warn('Exception updating app_config in Supabase:', err);
+    return { success: true, config: nextConfig, error: errorMsg };
+  }
+}
+
+export async function resetAppConfigDb(): Promise<AppConfig> {
+  saveAppConfigLocal(DEFAULT_APP_CONFIG);
+  try {
+    await updateAppConfigDb(DEFAULT_APP_CONFIG);
+  } catch (err) {
+    console.warn('Exception resetting app_config:', err);
+  }
+  return DEFAULT_APP_CONFIG;
+}
+
+export async function searchPatientsDb(query: string): Promise<DbPatient[]> {
+  try {
+    const raw = query.trim();
+    if (!raw) return [];
+    const q = raw.toLowerCase();
+
+    let request = supabase
+      .from('patients')
+      .select('id, full_name, age, gender, phone_number, created_at')
+      .limit(40);
+
+    // 1. Age range query - e.g. "between 20 and 50", "20-50", "20 to 50"
+    const rangeMatch = q.match(/(\d+)\s*(?:-|to|and)\s*(\d+)/i);
+    if (rangeMatch) {
+      const min = parseInt(rangeMatch[1], 10);
+      const max = parseInt(rangeMatch[2], 10);
+      request = request.gte('age', min).lte('age', max).order('age', { ascending: true });
+      if (q.includes('female')) {
+        request = request.ilike('gender', 'Female');
+      } else if (q.includes('male')) {
+        request = request.ilike('gender', 'Male');
+      }
+      const { data, error } = await request;
+      if (!error && data) return data;
+    }
+
+    // 2. Senior / greater than match - e.g. ">= 60", "> 40", "60+", "above 60", "senior"
+    const gtMatch = q.match(/(?:>=|>|above)\s*(\d+)|\b(\d+)\s*\+/i);
+    if (gtMatch || q.includes('senior') || q.includes('elderly')) {
+      const min = gtMatch ? parseInt(gtMatch[1] || gtMatch[2], 10) : 60;
+      request = request.gte('age', min).order('age', { ascending: false });
+      if (q.includes('female')) {
+        request = request.ilike('gender', 'Female');
+      } else if (q.includes('male')) {
+        request = request.ilike('gender', 'Male');
+      }
+      const { data, error } = await request;
+      if (!error && data) return data;
+    }
+
+    // 3. Pediatric / under match - e.g. "< 18", "<= 18", "under 18", "pediatric"
+    const ltMatch = q.match(/(?:<=|<|under)\s*(\d+)/i);
+    if (ltMatch || q.includes('pediatric') || q.includes('child')) {
+      const max = ltMatch ? parseInt(ltMatch[1], 10) : 18;
+      request = request.lt('age', max).order('age', { ascending: true });
+      if (q.includes('female')) {
+        request = request.ilike('gender', 'Female');
+      } else if (q.includes('male')) {
+        request = request.ilike('gender', 'Male');
+      }
+      const { data, error } = await request;
+      if (!error && data) return data;
+    }
+
+    // 4. Standalone Gender queries - e.g. "female" or "male"
+    if (q === 'female' || q === 'females' || q === 'women' || q === 'woman') {
+      const { data, error } = await request.ilike('gender', 'Female').order('created_at', { ascending: false });
+      if (!error && data) return data;
+    }
+    if (q === 'male' || q === 'males' || q === 'men' || q === 'man') {
+      const { data, error } = await request.ilike('gender', 'Male').order('created_at', { ascending: false });
+      if (!error && data) return data;
+    }
+
+    // 5. Gender with exact age - e.g. "female 45" or "male 30"
+    const genderAgeMatch = q.match(/(female|male)\s*(\d+)/i);
+    if (genderAgeMatch) {
+      const genderStr = genderAgeMatch[1].toLowerCase() === 'female' ? 'Female' : 'Male';
+      const exactAge = parseInt(genderAgeMatch[2], 10);
+      const { data, error } = await request.ilike('gender', genderStr).eq('age', exactAge);
+      if (!error && data) return data;
+    }
+
+    // 6. Default: Exact Age, Name substring (ilike), or Phone substring (like)
+    const isNum = /^\d+$/.test(raw);
+    const numVal = isNum ? parseInt(raw, 10) : null;
+
+    if (isNum && numVal !== null && numVal <= 120) {
+      request = request.or(`full_name.ilike.%${raw}%,phone_number.ilike.%${raw}%,age.eq.${numVal}`);
+    } else {
+      request = request.or(`full_name.ilike.%${raw}%,phone_number.ilike.%${raw}%,gender.ilike.%${raw}%`);
+    }
+
+    const { data, error } = await request;
+    if (error) {
+      console.warn('Error querying patients in Supabase:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('Exception searching patients in Supabase:', err);
+    return [];
+  }
+}
+

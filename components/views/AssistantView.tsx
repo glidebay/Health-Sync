@@ -16,6 +16,12 @@ export function AssistantView({
   onRegisterWalkin,
   onReallocate,
 }: AssistantViewProps) {
+  const sortedQueue = React.useMemo(() => {
+    const notCompleted = queue.filter((p) => p.status !== 'Completed');
+    const completed = queue.filter((p) => p.status === 'Completed');
+    return [...notCompleted, ...completed];
+  }, [queue]);
+
   return (
     <motion.section
       key="assistant"
@@ -44,7 +50,7 @@ export function AssistantView({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-        {queue.length === 0 ? (
+        {sortedQueue.length === 0 ? (
           <div className="col-span-full bg-white rounded-2xl p-10 border border-[#ECEEF2] text-center shadow-xs">
             <Users className="w-10 h-10 text-gray-300 mx-auto mb-3 stroke-[1.5]" />
             <h3 className="text-sm font-bold text-[#16191E]">No Patients Registered in Database</h3>
@@ -53,7 +59,7 @@ export function AssistantView({
             </p>
           </div>
         ) : (
-          queue.map((p) => (
+          sortedQueue.map((p) => (
             <motion.div
               key={p.id}
               whileHover={{ y: -2 }}
@@ -62,6 +68,9 @@ export function AssistantView({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center space-x-2">
                   <span className="font-bold text-sm text-[#16191E] truncate">{p.name}</span>
+                  <span className="text-xs text-[#8A909D] font-medium flex-shrink-0">
+                    ({p.displayId || (p.tokenNumber ? `P${String(p.tokenNumber).padStart(3, '0')}` : 'P001')})
+                  </span>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
                       p.status === 'Completed'

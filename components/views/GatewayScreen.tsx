@@ -641,19 +641,19 @@ export function GatewayScreen({
       {/* Background Clinic & Doctor Equipment SVG Constellation */}
       {/* Desktop: Spreads from left to center. Mobile: Spreads across the TOP */}
       <div className="absolute inset-0 pointer-events-none select-none overflow-hidden z-0">
-        {/* Soft atmospheric blue glow spots */}
-        <div className="hidden md:block absolute -top-28 -left-28 w-96 h-96 bg-blue-100/40 rounded-full blur-3xl" />
-        <div className="hidden md:block absolute top-1/2 left-6 -translate-y-1/2 w-96 h-96 bg-sky-100/30 rounded-full blur-3xl" />
-        <div className="hidden md:block absolute -bottom-24 left-1/6 w-96 h-96 bg-blue-50/50 rounded-full blur-2xl" />
+        {/* Soft atmospheric subtle grey glow spots */}
+        <div className="hidden md:block absolute -top-28 -left-28 w-96 h-96 bg-gray-100/60 rounded-full blur-3xl" />
+        <div className="hidden md:block absolute top-1/2 left-6 -translate-y-1/2 w-96 h-96 bg-slate-100/50 rounded-full blur-3xl" />
+        <div className="hidden md:block absolute -bottom-24 left-1/6 w-96 h-96 bg-gray-100/50 rounded-full blur-2xl" />
 
         {/* Mobile atmospheric top canopy glow */}
-        <div className="md:hidden absolute -top-24 left-1/2 -translate-x-1/2 w-80 h-80 bg-blue-100/45 rounded-full blur-3xl" />
-        <div className="md:hidden absolute top-16 -left-12 w-48 h-48 bg-sky-100/30 rounded-full blur-2xl" />
-        <div className="md:hidden absolute top-16 -right-12 w-48 h-48 bg-indigo-50/40 rounded-full blur-2xl" />
+        <div className="md:hidden absolute -top-24 left-1/2 -translate-x-1/2 w-80 h-80 bg-gray-100/60 rounded-full blur-3xl" />
+        <div className="md:hidden absolute top-16 -left-12 w-48 h-48 bg-slate-100/50 rounded-full blur-2xl" />
+        <div className="md:hidden absolute top-16 -right-12 w-48 h-48 bg-gray-100/50 rounded-full blur-2xl" />
 
         {/* Mobile Top Canopy Curves */}
         <svg
-          className="block md:hidden absolute inset-0 w-full h-full pointer-events-none opacity-[0.16] stroke-blue-500"
+          className="block md:hidden absolute inset-0 w-full h-full pointer-events-none opacity-[0.2] stroke-gray-400"
           fill="none"
         >
           <path
@@ -675,7 +675,7 @@ export function GatewayScreen({
 
         {/* Desktop Left-to-Center Curves */}
         <svg
-          className="hidden md:block absolute inset-0 w-full h-full pointer-events-none opacity-[0.16] stroke-blue-500"
+          className="hidden md:block absolute inset-0 w-full h-full pointer-events-none opacity-[0.2] stroke-gray-400"
           fill="none"
         >
           <path
@@ -702,14 +702,14 @@ export function GatewayScreen({
 
         {/* Subtle medical dot matrix watermark: Top on mobile, Left on desktop */}
         <div
-          className="absolute opacity-[0.04] [background-size:24px_24px] inset-x-0 top-0 h-2/5 [mask-image:linear-gradient(to_bottom,black_45%,transparent_100%)] md:inset-y-0 md:left-0 md:w-3/5 md:[mask-image:linear-gradient(to_right,black_40%,transparent_100%)]"
+          className="absolute opacity-[0.05] [background-size:24px_24px] inset-x-0 top-0 h-2/5 [mask-image:linear-gradient(to_bottom,black_45%,transparent_100%)] md:inset-y-0 md:left-0 md:w-3/5 md:[mask-image:linear-gradient(to_right,black_40%,transparent_100%)]"
           style={{
             backgroundImage:
-              'radial-gradient(circle, #2563EB 1px, transparent 1px)',
+              'radial-gradient(circle, #9CA3AF 1px, transparent 1px)',
           }}
         />
 
-        {/* Spread of Equipment SVG Elements with Smooth Floating Motion */}
+        {/* Spread of Equipment SVG Elements with Smooth Floating Motion in Clean Grey */}
         {CLINIC_EQUIPMENT.map((item, index) => {
           const ItemIcon = item.Icon;
 
@@ -754,7 +754,7 @@ export function GatewayScreen({
                     delay: item.delay,
                   },
                 }}
-                className={`${item.opacity} ${item.color}`}
+                className={`${item.opacity} text-gray-400 stroke-gray-400`}
               >
                 <ItemIcon className="stroke-[1.8]" />
               </motion.div>

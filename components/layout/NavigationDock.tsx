@@ -11,6 +11,7 @@ interface NavigationDockProps {
   isLoggedIn: boolean;
   navItems: NavItemConfig[];
   onNavClick: (section: NavSection, reqAuth: boolean) => void;
+  requireDoctorPin?: boolean;
 }
 
 export function NavigationDock({
@@ -18,6 +19,7 @@ export function NavigationDock({
   isLoggedIn,
   navItems,
   onNavClick,
+  requireDoctorPin = true,
 }: NavigationDockProps) {
   const getShortLabel = (id: NavSection) => {
     switch (id) {
@@ -33,6 +35,8 @@ export function NavigationDock({
         return 'Stock';
       case 'analytics':
         return 'Stats';
+      case 'settings':
+        return 'Settings';
       default:
         return 'View';
     }
@@ -50,7 +54,7 @@ export function NavigationDock({
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeSection === item.id;
-          const isLocked = item.reqAuth && !isLoggedIn;
+          const isLocked = item.reqAuth && !isLoggedIn && requireDoctorPin;
 
           return (
             <button

@@ -11,6 +11,7 @@ import {
   Boxes,
   BarChart3,
   Search,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 import { ClinicProvider, useClinic } from '@/context/ClinicContext';
@@ -50,6 +51,7 @@ import { DbDoctor } from '@/types/database';
 import EcgLoadingScreen from '@/components/loading/EcgLoadingScreen';
 import { SideMenu, NavItemConfig } from '@/components/layout/SideMenu';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { GlobalPatientSearch } from '@/components/common/GlobalPatientSearch';
 import { NavigationDock } from '@/components/layout/NavigationDock';
 import { DoctorAuthModal } from '@/components/auth/DoctorAuthModal';
 import { WalkinRegisterModal } from '@/components/modals/WalkinRegisterModal';
@@ -64,12 +66,19 @@ import { QueueView } from '@/components/views/QueueView';
 import { ConsultationView } from '@/components/views/ConsultationView';
 import { InventoryView } from '@/components/views/InventoryView';
 import { AnalyticsView } from '@/components/views/AnalyticsView';
+import { SettingsView } from '@/components/views/SettingsView';
 
 const INITIAL_QUEUE: Patient[] = [];
 const INITIAL_INVENTORY: InventoryItem[] = [];
 
+export const sortQueueWithCompletedAtEnd = (patients: Patient[]): Patient[] => {
+  const notCompleted = patients.filter((p) => p.status !== 'Completed');
+  const completed = patients.filter((p) => p.status === 'Completed');
+  return [...notCompleted, ...completed];
+};
+
 function DashboardContent() {
-  const { isLoading } = useClinic();
+  const { isLoading, config } = useClinic();
   const isMobile = useIsMobile();
   const [portalMode, setPortalMode] = useState<PortalMode>(() => {
     if (typeof window !== 'undefined') {
@@ -105,6 +114,7 @@ function DashboardContent() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const [intendedSection, setIntendedSection] = useState<NavSection | null>(null);
+  const [pendingConsultPatient, setPendingConsultPatient] = useState<Patient | null>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
 
@@ -153,6 +163,24 @@ function DashboardContent() {
     title: 'General Medicine',
   });
 
+  const isDoctorUnlocked = isLoggedIn || !config.require_doctor_pin;
+  const effectiveDoctorProfile = React.useMemo(() => {
+    if (isLoggedIn) return doctorProfile;
+    if (!config.require_doctor_pin) {
+      if (availableDoctors.length > 0) {
+        return {
+          name: availableDoctors[0].full_name,
+          title: availableDoctors[0].specialization || 'General Medicine',
+        };
+      }
+      return {
+        name: 'Dr. Sunny',
+        title: 'General Medicine',
+      };
+    }
+    return doctorProfile;
+  }, [isLoggedIn, config.require_doctor_pin, availableDoctors, doctorProfile]);
+
   // Load initial data from Supabase DB and subscribe to live changes
   useEffect(() => {
     let isMounted = true;
@@ -166,7 +194,7 @@ function DashboardContent() {
         ]);
 
         if (isMounted) {
-          setQueue(dbQueue || []);
+          setQueue(sortQueueWithCompletedAtEnd(dbQueue || []));
           setInventory(dbInventory || []);
           if (dbDoctors && dbDoctors.length > 0) {
             setAvailableDoctors(dbDoctors);
@@ -251,10 +279,11 @@ function DashboardContent() {
     { id: 'consult', label: 'Consultation', icon: Stethoscope, reqAuth: true },
     { id: 'inventory', label: 'Pharmacy Stock', icon: Boxes, reqAuth: true },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, reqAuth: true },
+    { id: 'settings', label: 'Settings', icon: SlidersHorizontal, reqAuth: false },
   ];
 
   const handleNavClick = (section: NavSection, reqAuth: boolean) => {
-    if (reqAuth && !isLoggedIn) {
+    if (reqAuth && !isLoggedIn && config.require_doctor_pin) {
       setIntendedSection(section);
       setShowPinModal(true);
       return;
@@ -305,9 +334,17 @@ function DashboardContent() {
       setPinInput('');
       setPortalMode('dashboard');
 
-      const target = intendedSection || 'dashboard';
-      setActiveSection(target);
-      setIntendedSection(null);
+      if (pendingConsultPatient && res.doctor) {
+        const p = pendingConsultPatient;
+        setPendingConsultPatient(null);
+        setTimeout(() => {
+          handleConsultFromSearch(p);
+        }, 100);
+      } else {
+        const target = intendedSection || 'dashboard';
+        setActiveSection(target);
+        setIntendedSection(null);
+      }
     } else {
       setPinError(true);
       setTimeout(() => setPinError(false), 2200);
@@ -358,7 +395,7 @@ function DashboardContent() {
 
     if (dbPat) {
       setQueue((prev) => [
-        { ...dbPat, tokenNumber: prev.length + 1 },
+        { ...dbPat },
         ...prev,
       ]);
     }
@@ -387,7 +424,11 @@ function DashboardContent() {
         priority: bookPriority,
       });
 
-      const newTokNum = dbPat?.tokenNumber || queue.length + 1;
+      const newTokNum =
+        dbPat?.displayId ||
+        (dbPat?.tokenNumber
+          ? `P${String(dbPat.tokenNumber).padStart(3, '0')}`
+          : `P${String(queue.length + 1).padStart(3, '0')}`);
 
       if (dbPat) {
         setQueue((prev) => [
@@ -471,6 +512,38 @@ function DashboardContent() {
     setActiveSection('consult');
   };
 
+  const handleConsultFromSearch = async (patient: Patient) => {
+    if (config.require_doctor_pin && !isLoggedIn) {
+      setPendingConsultPatient(patient);
+      setIntendedSection('consult');
+      setShowPinModal(true);
+      return;
+    }
+
+    const inQueue = queue.find((p) => p.id === patient.id);
+    if (inQueue) {
+      await startConsultation(patient.id);
+    } else {
+      const activeP: Patient = {
+        ...patient,
+        status: 'In Progress',
+        time: patient.time || 'Walk-in Today',
+      };
+      setQueue((prev) => [activeP, ...prev.filter((p) => p.id !== patient.id)]);
+      setActivePatient(activeP);
+      setCurrentPrescription([]);
+      setDiagnosticNotes('');
+      setSelectedMedId('');
+      setRxQty('');
+      try {
+        await updateAppointmentStatusDb(patient.id, 'In Progress');
+      } catch (e) {
+        console.warn('Could not update appointment status in DB:', e);
+      }
+      setActiveSection('consult');
+    }
+  };
+
   const addMedicineToRx = () => {
     if (!selectedMedId || !rxQty) return;
     const qtyNum = parseInt(rxQty, 10);
@@ -528,7 +601,9 @@ function DashboardContent() {
     );
 
     setQueue((prevQueue) =>
-      prevQueue.map((p) => (p.id === activePatient.id ? { ...p, status: 'Completed' } : p))
+      sortQueueWithCompletedAtEnd(
+        prevQueue.map((p) => (p.id === activePatient.id ? { ...p, status: 'Completed' } : p))
+      )
     );
 
     const dateStr = new Date().toLocaleDateString('en-IN', {
@@ -588,11 +663,14 @@ function DashboardContent() {
     }
   };
 
-  const filteredQueue = queue.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.id.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredQueue = React.useMemo(() => {
+    const list = queue.filter(
+      (p) =>
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.id.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    return sortQueueWithCompletedAtEnd(list);
+  }, [queue, searchQuery]);
 
   const totalPatientsCount = queue.length;
   const waitingPatientsCount = queue.filter((p) => p.status === 'Waiting').length;
@@ -616,10 +694,15 @@ function DashboardContent() {
               setActiveSection('booking');
             }}
             onSelectConsulting={() => {
-              setIntendedSection('dashboard');
-              setPinInput('');
-              setPinError(false);
-              setShowPinModal(true);
+              if (config.require_doctor_pin) {
+                setIntendedSection('dashboard');
+                setPinInput('');
+                setPinError(false);
+                setShowPinModal(true);
+              } else {
+                setPortalMode('dashboard');
+                setActiveSection('dashboard');
+              }
             }}
             waitingCount={waitingPatientsCount}
             doctorName={doctorProfile.name}
@@ -656,10 +739,15 @@ function DashboardContent() {
           handleBookSlotSubmit={handleBookSlotSubmit}
           onBackToGateway={() => setPortalMode('gateway')}
           onGoToConsulting={() => {
-            setIntendedSection('dashboard');
-            setPinInput('');
-            setPinError(false);
-            setShowPinModal(true);
+            if (config.require_doctor_pin) {
+              setIntendedSection('dashboard');
+              setPinInput('');
+              setPinError(false);
+              setShowPinModal(true);
+            } else {
+              setPortalMode('dashboard');
+              setActiveSection('dashboard');
+            }
           }}
           isStandalone={true}
         />
@@ -704,8 +792,8 @@ function DashboardContent() {
             <SideMenu
               isOpen={isSidebarOpen}
               activeSection={activeSection}
-              isLoggedIn={isLoggedIn}
-              doctorProfile={doctorProfile}
+              isLoggedIn={isDoctorUnlocked}
+              doctorProfile={effectiveDoctorProfile}
               navItems={navItems}
               onNavClick={handleNavClick}
               onOpenPinModal={() => {
@@ -713,6 +801,8 @@ function DashboardContent() {
                 setShowPinModal(true);
               }}
               onLogout={handleLockDoctorSession}
+              onFullLogout={handleFullLogout}
+              requireDoctorPin={config.require_doctor_pin}
             />
           )}
 
@@ -723,8 +813,8 @@ function DashboardContent() {
               activeSectionLabel={activeSectionLabel}
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
-              isLoggedIn={isLoggedIn}
-              doctorProfile={doctorProfile}
+              isLoggedIn={isDoctorUnlocked}
+              doctorProfile={effectiveDoctorProfile}
               onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
               onBackToGateway={handleFullLogout}
               onOpenPinModal={() => {
@@ -732,23 +822,28 @@ function DashboardContent() {
                 setShowPinModal(true);
               }}
               onLogout={handleLockDoctorSession}
+              requireDoctorPin={config.require_doctor_pin}
+              queue={queue}
+              onSelectConsult={handleConsultFromSearch}
             />
 
             <main
-              className={`flex-1 overflow-y-auto no-print ${isMobile ? 'px-3.5 sm:px-6 pt-3 pb-28' : 'px-8 lg:px-10 pb-12'
-                }`}
+              className={`flex-1 overflow-y-auto no-print ${
+                isMobile ? 'px-3.5 sm:px-6 pt-3 pb-28' : 'px-4 sm:px-6 lg:px-8 xl:px-10 pt-4 sm:pt-6 pb-12'
+              }`}
             >
               <motion.section
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1, duration: 0.45 }}
-                className={`flex items-center mb-6 sm:mb-8 ${isMobile ? 'space-x-3' : 'space-x-4'}`}
+                className={`flex items-center mb-6 sm:mb-8 min-w-0 ${isMobile ? 'space-x-3' : 'space-x-4'}`}
               >
                 <motion.div
                   whileHover={{ scale: 1.08 }}
                   transition={{ type: 'spring', damping: 15 }}
-                  className={`rounded-full overflow-hidden bg-gray-200 border-2 border-white shadow-sm flex-shrink-0 cursor-pointer ${isMobile ? 'w-11 h-11' : 'w-14 h-14'
-                    }`}
+                  className={`rounded-full overflow-hidden bg-gray-200 border-2 border-white shadow-sm flex-shrink-0 cursor-pointer ${
+                    isMobile ? 'w-11 h-11' : 'w-14 h-14'
+                  }`}
                 >
                   <Image
                     src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAlmuC30xuMIZpBDfxi6DcXHu_Ks41P52MELsRuS7q4xgQhHJsRyIAU26SoUhZQ_v01dlHDlWrAAkh3wSZl04MBQqPlT6ErIF8M2Z-BxbP_LDZJwq1ggudaa_bfRN8YDWwtyWd28KCfQfIF40q_rF1P8xus-qeymY-ar5CmL4wz4tzlH8FI1FP7WZ-0sJDAW-0YLEq8Icg9Yn18bC_VJLV-Tv4XaPLEQViv7w4vOCY"
@@ -759,22 +854,22 @@ function DashboardContent() {
                     className="w-full h-full object-cover"
                   />
                 </motion.div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <motion.h1
                     initial={{ opacity: 0, x: -16 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.2 }}
-                    className={`font-bold text-[#16191E] leading-snug ${isMobile ? 'text-base' : 'text-xl'}`}
+                    className={`font-bold text-[#16191E] leading-snug truncate ${isMobile ? 'text-base' : 'text-xl'}`}
                   >
-                    Welcome Back {isLoggedIn ? doctorProfile.name : 'Jack (Assistant)'}
+                    Welcome Back {isDoctorUnlocked ? effectiveDoctorProfile.name : 'Jack (Assistant)'}
                   </motion.h1>
                   <motion.p
                     initial={{ opacity: 0, x: -16 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.28 }}
-                    className="text-xs text-[#8A909D] font-medium"
+                    className="text-xs text-[#8A909D] font-medium truncate"
                   >
-                    {isLoggedIn
+                    {isDoctorUnlocked
                       ? 'Clinical Chamber • OPD consultation worklist & stock link'
                       : "Here is an overview of today's patient queue & triage"}
                   </motion.p>
@@ -788,15 +883,11 @@ function DashboardContent() {
                   transition={{ delay: 0.15 }}
                   className="relative w-full mb-6"
                 >
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[#2563EB]">
-                    <Search className="w-4 h-4 stroke-[2]" />
-                  </span>
-                  <input
-                    type="text"
-                    placeholder="Search patient name or ID..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full py-2.5 pl-10 pr-4 bg-white border border-[#ECEEF2] rounded-xl text-xs placeholder-gray-400 text-gray-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
+                  <GlobalPatientSearch
+                    isMobile
+                    queue={queue}
+                    onSelectConsult={handleConsultFromSearch}
+                    placeholder="Search patient, phone, age, gender (e.g. Menon, 90000, 20-50)..."
                   />
                 </motion.div>
               )}
@@ -832,7 +923,7 @@ function DashboardContent() {
                     onGoToConsulting={() => setActiveSection('queue')}
                     isStandalone={false}
                   />
-                )}
+                )} 
 
                 {activeSection === 'dashboard' && (
                   <DashboardView
@@ -844,14 +935,18 @@ function DashboardContent() {
                     waitingPatientsCount={waitingPatientsCount}
                     filteredQueue={filteredQueue}
                     queue={queue}
-                    isLoggedIn={isLoggedIn}
+                    isLoggedIn={isDoctorUnlocked}
                     onRegisterWalkin={() => setShowWalkinModal(true)}
                     onViewAllQueue={() => setActiveSection('assistant')}
                     onReallocate={handleReallocate}
                     onStartConsultation={startConsultation}
                     onRequireLogin={() => {
-                      setIntendedSection('queue');
-                      setShowPinModal(true);
+                      if (config.require_doctor_pin) {
+                        setIntendedSection('queue');
+                        setShowPinModal(true);
+                      } else {
+                        setActiveSection('queue');
+                      }
                     }}
                   />
                 )}
@@ -908,6 +1003,10 @@ function DashboardContent() {
                 {activeSection === 'analytics' && (
                   <AnalyticsView totalPatientsCount={totalPatientsCount} />
                 )}
+
+                {activeSection === 'settings' && (
+                  <SettingsView isMobile={isMobile} onLogout={handleFullLogout} />
+                )}
               </AnimatePresence>
             </main>
           </div>
@@ -941,7 +1040,8 @@ function DashboardContent() {
       {!isLoading && isMobile && portalMode === 'dashboard' && (
         <NavigationDock
           activeSection={activeSection}
-          isLoggedIn={isLoggedIn}
+          isLoggedIn={isDoctorUnlocked}
+          requireDoctorPin={config.require_doctor_pin}
           navItems={navItems}
           onNavClick={handleNavClick}
         />

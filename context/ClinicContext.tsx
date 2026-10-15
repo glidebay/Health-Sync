@@ -27,8 +27,13 @@ import {
   getDoctorSessionLocal,
   clearDoctorSessionLocal,
   logoutDoctorSessionDb,
+  fetchAppConfigDb,
+  updateAppConfigDb,
+  resetAppConfigDb,
+  getAppConfigLocal,
 } from '@/lib/supabaseService';
 import { DbDoctor } from '@/types/database';
+import { AppConfig, DEFAULT_APP_CONFIG } from '@/data/default-config';
 
 interface ClinicContextType {
   role: Role;
@@ -45,12 +50,16 @@ interface ClinicContextType {
   isPrintModalOpen: boolean;
   isLoading: boolean;
   currentDoctor: { id: string; name: string; title: string; regNo?: string } | null;
+  config: AppConfig;
   
   switchTab: (tab: TabType) => void;
   openAuthModal: (targetTab?: TabType) => void;
   closeAuthModal: () => void;
   authenticateDoctor: (pin: string) => Promise<boolean>;
   logoutDoctor: () => void;
+  updateConfig: <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => Promise<boolean>;
+  updateAllConfigs: (newConfig: Partial<AppConfig>) => Promise<boolean>;
+  resetConfigToDefaults: () => Promise<void>;
   
   registerPatient: (
     name: string,
@@ -102,6 +111,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     regNo?: string;
   } | null>(null);
   
+  const [config, setConfig] = useState<AppConfig>(getAppConfigLocal);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Initial ECG splash screen delay simulation (1.8s for smooth Apple-style intro)
@@ -118,13 +128,17 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
 
     async function loadDbData() {
       try {
-        const [dbPatients, dbInventory, dbDoctors] = await Promise.all([
+        const [dbPatients, dbInventory, dbDoctors, dbConfig] = await Promise.all([
           fetchQueueFromDb(),
           fetchInventoryFromDb(),
           getDoctors(),
+          fetchAppConfigDb(),
         ]);
 
         if (isMounted) {
+          if (dbConfig) {
+            setConfig(dbConfig);
+          }
           if (dbPatients) {
             setPatients(dbPatients as unknown as Patient[]);
           }
@@ -184,7 +198,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
 
   const switchTab = (tab: TabType) => {
     const doctorOnlyTabs: TabType[] = ['queue', 'consult', 'inventory', 'analytics'];
-    if (doctorOnlyTabs.includes(tab) && !isLoggedIn) {
+    if (doctorOnlyTabs.includes(tab) && !isLoggedIn && config.require_doctor_pin) {
       setIntendedTab(tab);
       setIsAuthModalOpen(true);
       return;
@@ -193,6 +207,10 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
   };
 
   const openAuthModal = (targetTab?: TabType) => {
+    if (!config.require_doctor_pin) {
+      if (targetTab) setActiveTab(targetTab);
+      return;
+    }
     if (targetTab) setIntendedTab(targetTab);
     setIsAuthModalOpen(true);
   };
@@ -272,7 +290,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
 
     if (dbPat) {
       setPatients(prev => [
-        { ...dbPat, tokenNumber: prev.length + 1 },
+        { ...dbPat },
         ...prev,
       ]);
     }
@@ -457,14 +475,36 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
+  const updateConfig = async <K extends keyof AppConfig>(key: K, value: AppConfig[K]): Promise<boolean> => {
+    setConfig(prev => ({ ...prev, [key]: value }));
+    const res = await updateAppConfigDb({ [key]: value });
+    if (res.config) setConfig(res.config);
+    return res.success;
+  };
+
+  const updateAllConfigs = async (newConfig: Partial<AppConfig>): Promise<boolean> => {
+    setConfig(prev => ({ ...prev, ...newConfig }));
+    const res = await updateAppConfigDb(newConfig);
+    if (res.config) setConfig(res.config);
+    return res.success;
+  };
+
+  const resetConfigToDefaults = async (): Promise<void> => {
+    setConfig(DEFAULT_APP_CONFIG);
+    await resetAppConfigDb();
+  };
+
   const dismissLoading = () => setIsLoading(false);
   const replayLoading = () => setIsLoading(true);
+
+  const isDoctorUnlocked = isLoggedIn || !config.require_doctor_pin;
+  const effectiveDoctor = currentDoctor || (!config.require_doctor_pin ? { id: 'default', name: 'Dr. John Doe', title: 'Senior Consultant' } : null);
 
   return (
     <ClinicContext.Provider
       value={{
-        role,
-        isLoggedIn,
+        role: isDoctorUnlocked ? 'doctor' : role,
+        isLoggedIn: isDoctorUnlocked,
         activeTab,
         patients,
         inventory,
@@ -476,12 +516,16 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
         isAuthModalOpen,
         isPrintModalOpen,
         isLoading,
-        currentDoctor,
+        currentDoctor: effectiveDoctor,
+        config,
         switchTab,
         openAuthModal,
         closeAuthModal,
         authenticateDoctor,
         logoutDoctor,
+        updateConfig,
+        updateAllConfigs,
+        resetConfigToDefaults,
         registerPatient,
         updatePatientStatus,
         reallocateSlot,

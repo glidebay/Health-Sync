@@ -14,6 +14,12 @@ export function QueueView({
   queue,
   onStartConsultation,
 }: QueueViewProps) {
+  const sortedQueue = React.useMemo(() => {
+    const notCompleted = queue.filter((p) => p.status !== 'Completed');
+    const completed = queue.filter((p) => p.status === 'Completed');
+    return [...notCompleted, ...completed];
+  }, [queue]);
+
   return (
     <motion.section
       key="queue"
@@ -33,7 +39,7 @@ export function QueueView({
       </div>
 
       <div className="space-y-3 sm:space-y-4">
-        {queue.length === 0 ? (
+        {sortedQueue.length === 0 ? (
           <div className="bg-white rounded-2xl p-10 border border-[#ECEEF2] text-center shadow-xs">
             <Stethoscope className="w-10 h-10 text-gray-300 mx-auto mb-3 stroke-[1.5]" />
             <h3 className="text-sm font-bold text-[#16191E]">No Active Patients in Consultation Queue</h3>
@@ -42,7 +48,7 @@ export function QueueView({
             </p>
           </div>
         ) : (
-          queue.map((p) => {
+          sortedQueue.map((p) => {
             const isCompleted = p.status === 'Completed';
             return (
               <motion.div
@@ -63,7 +69,9 @@ export function QueueView({
                   <div className="min-w-0">
                     <div className="flex items-center space-x-2">
                       <h3 className="text-sm font-bold text-[#16191E] truncate">{p.name}</h3>
-                      <span className="text-xs text-[#8A909D] flex-shrink-0">({p.id})</span>
+                      <span className="text-xs text-[#8A909D] font-medium flex-shrink-0">
+                        ({p.displayId || (p.tokenNumber ? `P${String(p.tokenNumber).padStart(3, '0')}` : 'P001')})
+                      </span>
                     </div>
                     <p className="text-xs text-[#5E6470] mt-0.5 truncate flex items-center flex-wrap gap-1">
                       <span>{p.age} Yrs • {p.gender}</span>

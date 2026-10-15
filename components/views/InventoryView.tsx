@@ -46,7 +46,7 @@ export function InventoryView({
       transition={{ duration: 0.25 }}
       className="space-y-4 sm:space-y-6"
     >
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
         <motion.div
           whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(37,99,235,0.12)' }}
           transition={{ type: 'spring', damping: 18, stiffness: 300 }}
@@ -106,14 +106,14 @@ export function InventoryView({
 
       <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
         <h3 className="text-sm font-bold text-[#16191E] mb-3">Register New Procurement</h3>
-        <form onSubmit={onAddNewProcurement} className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+        <form onSubmit={onAddNewProcurement} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3">
           <input
             type="text"
             placeholder="Generic Molecule (e.g. Paracetamol 650mg)"
             value={newGeneric}
             onChange={(e) => setNewGeneric(e.target.value)}
             required
-            className="sm:col-span-5 p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300"
+            className="col-span-1 md:col-span-1 xl:col-span-5 p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300 w-full"
           />
           <input
             type="text"
@@ -121,9 +121,9 @@ export function InventoryView({
             value={newBrand}
             onChange={(e) => setNewBrand(e.target.value)}
             required
-            className="sm:col-span-4 p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300"
+            className="col-span-1 md:col-span-1 xl:col-span-4 p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300 w-full"
           />
-          <div className="sm:col-span-3 flex gap-2">
+          <div className="col-span-1 md:col-span-2 xl:col-span-3 flex gap-2">
             <input
               type="number"
               placeholder="Total Qty"
@@ -131,13 +131,13 @@ export function InventoryView({
               value={newQty}
               onChange={(e) => setNewQty(e.target.value)}
               required
-              className="w-24 sm:w-20 lg:w-24 p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300"
+              className="w-24 sm:w-28 p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300 flex-shrink-0"
             />
             <motion.button
               whileHover={{ scale: 1.04 }}
               whileTap={{ scale: 0.96 }}
               type="submit"
-              className="flex-1 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition cursor-pointer whitespace-nowrap"
+              className="flex-1 xl:flex-initial bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition cursor-pointer whitespace-nowrap min-w-[90px] flex items-center justify-center shadow-xs"
             >
               Add Stock
             </motion.button>
@@ -165,13 +165,13 @@ export function InventoryView({
                 <motion.div
                   key={item.id}
                   whileHover={{ y: -2 }}
-                  className="p-3.5 sm:p-4 bg-[#F8F9FB] rounded-xl border border-[#ECEEF2] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  className="p-3.5 sm:p-4 bg-[#F8F9FB] rounded-xl border border-[#ECEEF2] flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0"
                 >
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="font-bold text-sm text-[#16191E]">{item.brand}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                      <span className="font-bold text-sm text-[#16191E] truncate">{item.brand}</span>
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
                           isHigh
                             ? 'bg-emerald-100 text-emerald-800'
                             : isLow
@@ -182,10 +182,10 @@ export function InventoryView({
                         {item.stock} Units
                       </span>
                     </div>
-                    <p className="text-xs text-[#8A909D] font-medium mt-0.5">{item.generic}</p>
+                    <p className="text-xs text-[#8A909D] font-medium mt-0.5 truncate">{item.generic}</p>
                   </div>
 
-                  <div className="flex items-center space-x-2 self-end sm:self-auto">
+                  <div className="flex items-center space-x-2 self-end sm:self-auto flex-shrink-0">
                     <input
                       type="number"
                       min="1"
@@ -194,13 +194,13 @@ export function InventoryView({
                       onChange={(e) =>
                         setStockUpdates((prev) => ({ ...prev, [item.id]: e.target.value }))
                       }
-                      className="w-20 sm:w-24 p-1.5 bg-white border border-[#ECEEF2] rounded-xl text-xs outline-none"
+                      className="w-20 sm:w-24 p-1.5 bg-white border border-[#ECEEF2] rounded-xl text-xs outline-none focus:ring-1 focus:ring-gray-300"
                     />
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => onUpdateStock(item.id)}
-                      className="bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition cursor-pointer"
+                      className="bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition cursor-pointer flex-shrink-0 shadow-xs"
                     >
                       Update
                     </motion.button>

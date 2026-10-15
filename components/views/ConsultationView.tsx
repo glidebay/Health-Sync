@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Stethoscope, Phone, Trash2, Printer } from 'lucide-react';
 import { Patient, InventoryItem, PrescriptionItem } from '@/types';
+import { MedicineSearchCombobox } from '@/components/common/MedicineSearchCombobox';
 
 interface ConsultationViewProps {
   activePatient: Patient | null;
@@ -36,6 +37,8 @@ export function ConsultationView({
   onCompleteConsultation,
   onGoToQueue,
 }: ConsultationViewProps) {
+  const qtyInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <motion.section
       key="consult"
@@ -65,7 +68,12 @@ export function ConsultationView({
         <div className="space-y-4 sm:space-y-6">
           <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-[#16191E]">{activePatient.name}</h2>
+              <div className="flex items-center space-x-2">
+                <h2 className="text-base sm:text-lg font-bold text-[#16191E]">{activePatient.name}</h2>
+                <span className="text-xs text-[#8A909D] font-semibold">
+                  ({activePatient.displayId || (activePatient.tokenNumber ? `P${String(activePatient.tokenNumber).padStart(3, '0')}` : 'P001')})
+                </span>
+              </div>
               <p className="text-xs text-[#8A909D] font-medium mt-0.5 flex items-center flex-wrap gap-1.5">
                 <span>{activePatient.age} Yrs • {activePatient.gender}</span>
                 {activePatient.phone && (
@@ -99,34 +107,32 @@ export function ConsultationView({
           <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-4">
               <h3 className="text-sm font-bold text-[#16191E]">
-                Prescription Builder (Linked to Live Inventory)
+                Prescription Builder
               </h3>
-              <span className="text-xs text-[#8A909D]">Real-time stock validation</span>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3 mb-5">
-              <select
-                value={selectedMedId}
-                onChange={(e) => setSelectedMedId(e.target.value)}
-                className="w-full sm:flex-1 p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300 font-medium cursor-pointer"
-              >
-                <option value="">-- Select Available Medicine --</option>
-                {inventory
-                  .filter((m) => m.stock > 0)
-                  .map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.brand} ({m.generic}) — {m.stock} units available
-                    </option>
-                  ))}
-              </select>
+              <MedicineSearchCombobox
+                inventory={inventory}
+                selectedMedId={selectedMedId}
+                onSelectMedId={setSelectedMedId}
+                onSelectAndFocusQty={() => qtyInputRef.current?.focus()}
+              />
 
               <div className="flex gap-2">
                 <input
+                  ref={qtyInputRef}
                   type="number"
                   placeholder="Qty"
                   min="1"
                   value={rxQty}
                   onChange={(e) => setRxQty(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      onAddMedicineToRx();
+                    }
+                  }}
                   className="w-24 p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300"
                 />
 
@@ -144,7 +150,7 @@ export function ConsultationView({
             <div className="border border-[#ECEEF2] rounded-xl p-3 sm:p-4 bg-[#F8F9FB] min-h-[100px]">
               {currentPrescription.length === 0 ? (
                 <p className="text-xs text-[#8A909D] italic text-center py-4">
-                  No medicines prescribed yet. Select from the dropdown above.
+                  No medicines prescribed yet. Search and select a medicine from above.
                 </p>
               ) : (
                 <div className="space-y-2">

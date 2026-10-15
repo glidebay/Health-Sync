@@ -66,19 +66,19 @@ export function DashboardView({
         variants={staggerContainer}
         initial="hidden"
         animate="visible"
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-10"
+        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-10"
       >
         <motion.div
           variants={fadeScale}
           whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(0,0,0,0.08)' }}
           transition={{ type: 'spring', damping: 18, stiffness: 300 }}
-          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] flex justify-between items-start shadow-sm cursor-default"
+          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] flex justify-between items-start shadow-sm cursor-default min-w-0"
         >
-          <div>
-            <span className="text-xs sm:text-sm font-semibold text-[#16191E] block mb-3 sm:mb-6">
+          <div className="min-w-0 pr-2">
+            <span className="text-xs sm:text-sm font-semibold text-[#16191E] block mb-2 sm:mb-4 truncate">
               Total Patients Today
             </span>
-            <span className="text-xs text-[#8A909D] font-medium tracking-wide">
+            <span className="text-xl sm:text-2xl font-bold text-[#16191E] tracking-tight block">
               <AnimatedCounter target={totalPatientsCount} />
             </span>
           </div>
@@ -94,13 +94,13 @@ export function DashboardView({
           variants={fadeScale}
           whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(0,0,0,0.08)' }}
           transition={{ type: 'spring', damping: 18, stiffness: 300 }}
-          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] flex justify-between items-start shadow-sm cursor-default"
+          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] flex justify-between items-start shadow-sm cursor-default min-w-0"
         >
-          <div>
-            <span className="text-xs sm:text-sm font-semibold text-[#16191E] block mb-3 sm:mb-6">
+          <div className="min-w-0 pr-2">
+            <span className="text-xs sm:text-sm font-semibold text-[#16191E] block mb-2 sm:mb-4 truncate">
               Completed Consults
             </span>
-            <span className="text-xs text-[#8A909D] font-medium tracking-wide">
+            <span className="text-xl sm:text-2xl font-bold text-[#16191E] tracking-tight block">
               <AnimatedCounter target={completedPatientsCount} />
             </span>
           </div>
@@ -116,13 +116,13 @@ export function DashboardView({
           variants={fadeScale}
           whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(0,0,0,0.08)' }}
           transition={{ type: 'spring', damping: 18, stiffness: 300 }}
-          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] sm:col-span-2 lg:col-span-1 flex justify-between items-start shadow-sm cursor-default"
+          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] sm:col-span-2 xl:col-span-1 flex justify-between items-start shadow-sm cursor-default min-w-0"
         >
-          <div>
-            <span className="text-xs sm:text-sm font-semibold text-[#16191E] block mb-3 sm:mb-6">
+          <div className="min-w-0 pr-2">
+            <span className="text-xs sm:text-sm font-semibold text-[#16191E] block mb-2 sm:mb-4 truncate">
               Pharmacy Units in Stock
             </span>
-            <span className="text-xs text-[#8A909D] font-medium tracking-wide">
+            <span className="text-xl sm:text-2xl font-bold text-[#16191E] tracking-tight block">
               <AnimatedCounter target={totalStockUnits} />
             </span>
           </div>
@@ -136,7 +136,7 @@ export function DashboardView({
       </motion.section>
 
       <section className="mb-8 sm:mb-10">
-        <div className="flex items-center justify-between mb-4 sm:mb-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4 sm:mb-5">
           <h2 className="text-base sm:text-lg font-bold text-[#16191E] tracking-tight">
             Active consultations & Chamber Flow
           </h2>
@@ -152,27 +152,27 @@ export function DashboardView({
           </motion.button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           <motion.div
             whileHover={{
               y: -4,
               boxShadow: '0 14px 32px -8px rgba(0,0,0,0.08)',
             }}
-            className="md:col-span-1 lg:col-span-4 bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col justify-between cursor-default"
+            className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col justify-between cursor-default min-w-0"
           >
             <motion.div
               whileHover={{ rotate: -8, scale: 1.1 }}
-              className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-[#2563EB] mb-6 sm:mb-10"
+              className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-[#2563EB] mb-6 sm:mb-10 flex-shrink-0"
             >
               <Stethoscope className="w-5 h-5 stroke-[1.8]" />
             </motion.div>
-            <div>
-              <h3 className="text-sm font-bold text-[#16191E] mb-3 truncate">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-[#16191E] mb-3 truncate" title={inChamberPatient ? `${inChamberPatient.name} (In Chamber)` : undefined}>
                 {inChamberPatient ? `${inChamberPatient.name} (In Chamber)` : 'No Patient in Chamber'}
               </h3>
-              <div className="flex items-center justify-between gap-2">
-                <AnimatedProgress percent={inChamberPatient ? 85 : 0} delay={0.1} />
-                <span className="text-xs font-semibold text-[#8A909D] whitespace-nowrap">
+              <div className="flex items-center justify-between gap-2.5 min-w-0">
+                <AnimatedProgress percent={inChamberPatient ? 85 : 0} delay={0.1} className="flex-1 min-w-[36px] max-w-[120px]" />
+                <span className="text-xs font-semibold text-[#8A909D] flex-shrink-0 whitespace-nowrap">
                   {inChamberPatient ? (
                     <>
                       <strong className="text-[#16191E]">{inChamberPatient.age}</strong> Yrs • {inChamberPatient.gender}
@@ -190,21 +190,21 @@ export function DashboardView({
               y: -4,
               boxShadow: '0 14px 32px -8px rgba(0,0,0,0.08)',
             }}
-            className="md:col-span-1 lg:col-span-4 bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col justify-between cursor-default"
+            className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col justify-between cursor-default min-w-0"
           >
             <motion.div
               whileHover={{ rotate: 8, scale: 1.1 }}
-              className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-[#2563EB] mb-6 sm:mb-10"
+              className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-[#2563EB] mb-6 sm:mb-10 flex-shrink-0"
             >
               <Clock className="w-5 h-5 stroke-[1.8]" />
             </motion.div>
-            <div>
-              <h3 className="text-sm font-bold text-[#16191E] mb-3 truncate">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-[#16191E] mb-3 truncate" title={nextWaitingPatient ? `${nextWaitingPatient.name} (Next)` : undefined}>
                 {nextWaitingPatient ? `${nextWaitingPatient.name} (Next)` : 'No Waiting Patients'}
               </h3>
-              <div className="flex items-center justify-between gap-2">
-                <AnimatedProgress percent={nextWaitingPatient ? 50 : 0} delay={0.2} />
-                <span className="text-xs font-semibold text-[#8A909D] whitespace-nowrap">
+              <div className="flex items-center justify-between gap-2.5 min-w-0">
+                <AnimatedProgress percent={nextWaitingPatient ? 50 : 0} delay={0.2} className="flex-1 min-w-[36px] max-w-[120px]" />
+                <span className="text-xs font-semibold text-[#8A909D] flex-shrink-0 whitespace-nowrap">
                   {nextWaitingPatient ? (
                     <>
                       <strong className="text-[#16191E]">{nextWaitingPatient.time}</strong> Slot
@@ -222,7 +222,7 @@ export function DashboardView({
               y: -4,
               boxShadow: '0 14px 32px -8px rgba(0,0,0,0.08)',
             }}
-            className="md:col-span-2 lg:col-span-4 bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col justify-start cursor-default"
+            className="md:col-span-2 xl:col-span-1 bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col justify-start cursor-default min-w-0"
           >
             <h3 className="text-base font-bold text-[#16191E] mb-4">Clinic Daily Stream</h3>
             <div className="flex flex-wrap md:flex-col gap-2.5">
@@ -249,8 +249,8 @@ export function DashboardView({
         </div>
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
-        <div className="lg:col-span-7 flex flex-col">
+      <section className="grid grid-cols-1 xl:grid-cols-12 gap-6 sm:gap-8">
+        <div className="xl:col-span-7 flex flex-col min-w-0">
           <div className="flex items-center justify-between mb-4 sm:mb-5">
             <h2 className="text-base font-bold text-[#16191E]">Live Queue Oversight</h2>
             <div className="flex items-center space-x-3.5">
@@ -288,7 +288,7 @@ export function DashboardView({
                     y: -3,
                     boxShadow: '0 10px 24px -6px rgba(0,0,0,0.07)',
                   }}
-                  className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex items-center space-x-3 sm:space-x-4 cursor-default"
+                  className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex items-center space-x-3 sm:space-x-4 cursor-default min-w-0"
                 >
                   <motion.div
                     whileHover={{ rotate: 10 }}
@@ -298,7 +298,12 @@ export function DashboardView({
                   </motion.div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-                      <h3 className="text-sm font-bold text-[#16191E] truncate">{p.name}</h3>
+                      <div className="flex items-center space-x-1.5 min-w-0">
+                        <h3 className="text-sm font-bold text-[#16191E] truncate">{p.name}</h3>
+                        <span className="text-xs text-[#8A909D] font-medium flex-shrink-0">
+                          ({p.displayId || (p.tokenNumber ? `P${String(p.tokenNumber).padStart(3, '0')}` : 'P001')})
+                        </span>
+                      </div>
                       <span
                         className={`text-[10px] sm:text-xs font-bold px-2 sm:px-2.5 py-0.5 rounded-full flex-shrink-0 ml-2 ${
                           p.status === 'Completed'
@@ -311,18 +316,18 @@ export function DashboardView({
                         {p.status}
                       </span>
                     </div>
-                    <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-xs text-[#5E6470] font-medium">
-                      <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center flex-wrap gap-x-3.5 gap-y-1.5 text-xs text-[#5E6470] font-medium">
+                      <div className="flex items-center space-x-1.5 flex-shrink-0">
                         <Clock className="w-3.5 h-3.5 text-[#2563EB] stroke-[2]" />
                         <span>{p.time}</span>
                       </div>
-                      <div className="flex items-center space-x-1.5">
+                      <div className="flex items-center space-x-1.5 flex-shrink-0">
                         <span>
                           {p.age} Yrs • {p.gender}
                         </span>
                       </div>
                       {p.phone && (
-                        <div className="flex items-center space-x-1 text-gray-500">
+                        <div className="flex items-center space-x-1 text-gray-500 flex-shrink-0">
                           <Phone className="w-3 h-3 text-[#2563EB]" />
                           <span>{p.phone}</span>
                         </div>
@@ -332,7 +337,7 @@ export function DashboardView({
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                           onClick={() => onReallocate(p.id)}
-                          className="text-[#2563EB] hover:underline font-semibold cursor-pointer"
+                          className="text-[#2563EB] hover:underline font-semibold cursor-pointer flex-shrink-0"
                         >
                           Reallocate
                         </motion.button>
@@ -345,7 +350,7 @@ export function DashboardView({
           </div>
         </div>
 
-        <div className="lg:col-span-5 flex flex-col">
+        <div className="xl:col-span-5 flex flex-col min-w-0">
           <h2 className="text-base font-bold text-[#16191E] mb-4 sm:mb-5">Upcoming Consultations</h2>
           <div className="space-y-3 sm:space-y-4">
             {queue.slice(2, 5).map((p) => (
@@ -356,7 +361,7 @@ export function DashboardView({
                   x: 4,
                   boxShadow: '0 10px 24px -6px rgba(0,0,0,0.07)',
                 }}
-                className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex items-center space-x-3 sm:space-x-4 cursor-pointer"
+                className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex items-center space-x-3 sm:space-x-4 cursor-pointer min-w-0"
                 onClick={() => {
                   if (isLoggedIn) onStartConsultation(p.id);
                   else onRequireLogin();
@@ -373,7 +378,7 @@ export function DashboardView({
                   <motion.span
                     animate={{ opacity: [0.6, 1, 0.6] }}
                     transition={{ repeat: Infinity, duration: 2.5 }}
-                    className="text-xs text-[#8A909D] font-medium"
+                    className="text-xs text-[#8A909D] font-medium block truncate"
                   >
                     Slot: {p.time} • {p.age} Yrs
                   </motion.span>
