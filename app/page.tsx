@@ -293,7 +293,6 @@ function DashboardContent() {
           title: res.doctor.specialization || 'General Medicine',
         });
       } else {
-        // Assistant PIN (2468) entered
         setIsLoggedIn(false);
         setDoctorProfile({
           name: 'Clinic Assistant',
