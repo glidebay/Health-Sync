@@ -197,7 +197,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const switchTab = (tab: TabType) => {
-    const doctorOnlyTabs: TabType[] = ['queue', 'consult', 'inventory', 'analytics'];
+    const doctorOnlyTabs: TabType[] = ['queue', 'consult', 'inventory', 'analytics', 'settings'];
     if (doctorOnlyTabs.includes(tab) && !isLoggedIn && config.require_doctor_pin) {
       setIntendedTab(tab);
       setIsAuthModalOpen(true);

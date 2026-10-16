@@ -4,6 +4,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Boxes } from 'lucide-react';
 import { InventoryItem } from '@/types';
+import { NumberedPagination } from '@/components/ui/pagination';
 
 interface InventoryViewProps {
   inventory: InventoryItem[];
@@ -19,6 +20,8 @@ interface InventoryViewProps {
   onUpdateStock: (id: string | number) => void;
 }
 
+const ITEMS_PER_PAGE = 5;
+
 export function InventoryView({
   inventory,
   newGeneric,
@@ -32,10 +35,24 @@ export function InventoryView({
   onAddNewProcurement,
   onUpdateStock,
 }: InventoryViewProps) {
+  const [currentPage, setCurrentPage] = React.useState(1);
   const totalMolecules = inventory.length;
   const adequateStocks = inventory.filter((m) => m.stock > 20).length;
   const lowStockAlerts = inventory.filter((m) => m.stock > 0 && m.stock <= 20).length;
   const stockDepleted = inventory.filter((m) => m.stock === 0).length;
+
+  const totalPages = Math.max(1, Math.ceil(inventory.length / ITEMS_PER_PAGE));
+
+  React.useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const paginatedInventory = React.useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return inventory.slice(start, start + ITEMS_PER_PAGE);
+  }, [inventory, currentPage]);
 
   return (
     <motion.section
@@ -157,7 +174,7 @@ export function InventoryView({
               </p>
             </div>
           ) : (
-            inventory.map((item) => {
+            paginatedInventory.map((item) => {
               const isHigh = item.stock > 20;
               const isLow = item.stock > 0 && item.stock <= 20;
 
@@ -209,6 +226,15 @@ export function InventoryView({
               );
             })
           )}
+
+          <NumberedPagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            totalItems={inventory.length}
+            itemsPerPage={ITEMS_PER_PAGE}
+            itemName="molecules"
+          />
         </div>
       </div>
     </motion.section>

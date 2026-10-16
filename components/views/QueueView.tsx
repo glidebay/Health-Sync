@@ -4,21 +4,39 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Stethoscope, User, Phone } from 'lucide-react';
 import { Patient } from '@/types';
+import { NumberedPagination } from '@/components/ui/pagination';
 
 interface QueueViewProps {
   queue: Patient[];
   onStartConsultation: (id: string) => void;
 }
 
+const ITEMS_PER_PAGE = 5;
+
 export function QueueView({
   queue,
   onStartConsultation,
 }: QueueViewProps) {
+  const [currentPage, setCurrentPage] = React.useState(1);
+
   const sortedQueue = React.useMemo(() => {
     const notCompleted = queue.filter((p) => p.status !== 'Completed');
     const completed = queue.filter((p) => p.status === 'Completed');
     return [...notCompleted, ...completed];
   }, [queue]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedQueue.length / ITEMS_PER_PAGE));
+
+  React.useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const paginatedQueue = React.useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return sortedQueue.slice(start, start + ITEMS_PER_PAGE);
+  }, [sortedQueue, currentPage]);
 
   return (
     <motion.section
@@ -48,7 +66,7 @@ export function QueueView({
             </p>
           </div>
         ) : (
-          sortedQueue.map((p) => {
+          paginatedQueue.map((p) => {
             const isCompleted = p.status === 'Completed';
             return (
               <motion.div
@@ -112,6 +130,15 @@ export function QueueView({
           })
         )}
       </div>
+
+      <NumberedPagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+        totalItems={sortedQueue.length}
+        itemsPerPage={ITEMS_PER_PAGE}
+        itemName="patients"
+      />
     </motion.section>
   );
 }

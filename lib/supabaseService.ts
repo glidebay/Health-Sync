@@ -10,7 +10,7 @@ import {
 } from '@/types/database';
 
 export interface FormattedQueuePatient {
-  id: string; 
+  id: string;
   patientDbId: string;
   name: string;
   age: number;
@@ -79,23 +79,17 @@ export async function verifyDoctorPin(
       return { success: false, message: 'No doctors found' };
     }
 
-    // Find the doctor whose pin_code matches the entered PIN or match documented default PINs
+    // Cryptographically verify entered PIN against stored bcrypt hash in doctors table
     let matchedDoctor: DbDoctor | null = null;
-    if (cleanPin === '5678') {
-      matchedDoctor = doctors.find((d) => d.full_name?.toLowerCase().includes('sunny')) || doctors[0];
-    } else if (cleanPin === '1234') {
-      matchedDoctor = doctors.find((d) => d.full_name?.toLowerCase().includes('anil')) || doctors[1] || doctors[0];
-    } else {
-      for (const doc of doctors) {
-        if (doc.pin_code) {
-          try {
-            if (bcrypt.compareSync(cleanPin, doc.pin_code)) {
-              matchedDoctor = doc;
-              break;
-            }
-          } catch {
-            // Ignore bcryptjs salt parsing errors
+    for (const doc of doctors) {
+      if (doc.pin_code) {
+        try {
+          if (bcrypt.compareSync(cleanPin, doc.pin_code)) {
+            matchedDoctor = doc;
+            break;
           }
+        } catch {
+          // Ignore bcrypt salt parsing errors
         }
       }
     }
@@ -161,28 +155,57 @@ export interface VerifyClinicAuthResult {
   message?: string;
 }
 
-/**
- * Two-Tier Global Clinic Auth:
- * - Tier 1: Clinic PIN '2468' unlocks 8-hr session for Assistant / Clinic Staff
- * - Tier 2: Doctor PIN '5678' / '1234' unlocks direct Doctor consultation access
- */
+
+export async function verifyClinicPin(
+  pin: string
+): Promise<{ success: boolean; message?: string }> {
+  const cleanPin = pin ? pin.trim() : '';
+  if (!cleanPin) return { success: false, message: 'Clinic PIN is required' };
+
+  try {
+    const { data, error } = await supabase.rpc('verify_clinic_pin', {
+      p_pin: cleanPin,
+    });
+    if (!error && typeof data === 'boolean') {
+      if (data === true) {
+        return {
+          success: true,
+          message: 'Clinic Gateway Unlocked (8-Hour Session)',
+        };
+      }
+      return { success: false, message: 'Invalid Clinic Security PIN' };
+    }
+    if (error) {
+      console.warn('RPC verify_clinic_pin error:', error.message);
+      return { success: false, message: error.message || 'Verification failed' };
+    }
+  } catch (err) {
+    console.warn('RPC verify_clinic_pin exception:', err);
+    return { success: false, message: 'Connection error verifying clinic PIN' };
+  }
+
+  return { success: false, message: 'Invalid Clinic Security PIN' };
+}
+
+
 export async function verifyClinicOrDoctorPin(
   pin: string
 ): Promise<VerifyClinicAuthResult> {
   const cleanPin = pin ? pin.trim() : '';
   if (!cleanPin) return { success: false, message: 'Security PIN is required' };
 
-  // Tier 1: Outer Gate - Clinic Gateway PIN (2468)
-  if (cleanPin === '2468') {
+  // Tier 1: Check clinic gateway PIN dynamically via DB RPC
+  const clinicRes = await verifyClinicPin(cleanPin);
+  if (clinicRes.success) {
     return {
       success: true,
       type: 'clinic',
       role: 'assistant',
-      message: 'Clinic Gateway Unlocked (8-Hour Session)',
+      message: clinicRes.message || 'Clinic Gateway Unlocked (8-Hour Session)',
     };
   }
 
-  // Tier 2: Inner Gate - Doctor Authentication PIN (5678, 1234, or DB hash)
+  // Tier 2: Check doctor PIN dynamically via doctors table bcrypt
   const docResult = await verifyDoctorPin(cleanPin);
   if (docResult.success && docResult.doctor) {
     return {
@@ -296,6 +319,11 @@ export async function logoutDoctorSessionDb(doctorId?: string): Promise<void> {
         .from('doctors')
         .update({ pin_session_until: null })
         .eq('id', doctorId);
+    } else {
+      await supabase
+        .from('doctors')
+        .update({ pin_session_until: null })
+        .not('id', 'is', null);
     }
     await supabase.rpc('end_pin_session');
   } catch (err) {

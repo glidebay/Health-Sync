@@ -4,6 +4,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Users, Phone } from 'lucide-react';
 import { Patient } from '@/types';
+import { NumberedPagination } from '@/components/ui/pagination';
 
 interface AssistantViewProps {
   queue: Patient[];
@@ -11,16 +12,33 @@ interface AssistantViewProps {
   onReallocate: (id: string) => void;
 }
 
+const ITEMS_PER_PAGE = 10;
+
 export function AssistantView({
   queue,
   onRegisterWalkin,
   onReallocate,
 }: AssistantViewProps) {
+  const [currentPage, setCurrentPage] = React.useState(1);
+
   const sortedQueue = React.useMemo(() => {
     const notCompleted = queue.filter((p) => p.status !== 'Completed');
     const completed = queue.filter((p) => p.status === 'Completed');
     return [...notCompleted, ...completed];
   }, [queue]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedQueue.length / ITEMS_PER_PAGE));
+
+  React.useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const paginatedQueue = React.useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return sortedQueue.slice(start, start + ITEMS_PER_PAGE);
+  }, [sortedQueue, currentPage]);
 
   return (
     <motion.section
@@ -59,7 +77,7 @@ export function AssistantView({
             </p>
           </div>
         ) : (
-          sortedQueue.map((p) => (
+          paginatedQueue.map((p) => (
             <motion.div
               key={p.id}
               whileHover={{ y: -2 }}
@@ -112,6 +130,15 @@ export function AssistantView({
           ))
         )}
       </div>
+
+      <NumberedPagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+        totalItems={sortedQueue.length}
+        itemsPerPage={ITEMS_PER_PAGE}
+        itemName="patients"
+      />
     </motion.section>
   );
 }

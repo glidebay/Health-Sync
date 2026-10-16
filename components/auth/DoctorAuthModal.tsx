@@ -23,9 +23,9 @@ export function DoctorAuthModal({
   setPinInput,
   pinError,
   onPinSubmit,
-  title = 'Clinic & Doctor Authentication',
-  subtitle = 'Enter Clinic PIN (2468) or Doctor PIN (5678)',
-  buttonText = 'Unlock Access',
+  title = 'Security Verification',
+  subtitle = 'Enter your security PIN',
+  buttonText = 'Verify PIN',
 }: DoctorAuthModalProps) {
   return (
     <AnimatePresence>

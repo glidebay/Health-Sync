@@ -12,6 +12,7 @@ import {
   BarChart3,
   Search,
   SlidersHorizontal,
+  Lock,
 } from 'lucide-react';
 
 import { ClinicProvider, useClinic } from '@/context/ClinicContext';
@@ -26,6 +27,7 @@ import {
   addInventoryItemDb,
   restockInventoryItemDb,
   verifyDoctorPin,
+  verifyClinicPin,
   verifyClinicOrDoctorPin,
   getDoctors,
   subscribeToClinicUpdates,
@@ -78,7 +80,7 @@ export const sortQueueWithCompletedAtEnd = (patients: Patient[]): Patient[] => {
 };
 
 function DashboardContent() {
-  const { isLoading, config } = useClinic();
+  const { isLoading, config, logoutDoctor } = useClinic();
   const isMobile = useIsMobile();
   const [portalMode, setPortalMode] = useState<PortalMode>(() => {
     if (typeof window !== 'undefined') {
@@ -131,11 +133,19 @@ function DashboardContent() {
           title: docSession.title,
         });
       } else if (clinicSession) {
+        setIsLoggedIn(false);
         setDoctorProfile({
           name: clinicSession.name || 'Clinic Assistant',
           title: 'Reception & Triage',
         });
       }
+    } else {
+      setIsLoggedIn(false);
+      setDoctorProfile({
+        name: 'Clinic Assistant',
+        title: 'Reception & Triage',
+      });
+      setPortalMode('gateway');
     }
   }, []);
 
@@ -279,7 +289,7 @@ function DashboardContent() {
     { id: 'consult', label: 'Consultation', icon: Stethoscope, reqAuth: true },
     { id: 'inventory', label: 'Pharmacy Stock', icon: Boxes, reqAuth: true },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, reqAuth: true },
-    { id: 'settings', label: 'Settings', icon: SlidersHorizontal, reqAuth: false },
+    { id: 'settings', label: 'Settings', icon: SlidersHorizontal, reqAuth: true },
   ];
 
   const handleNavClick = (section: NavSection, reqAuth: boolean) => {
@@ -298,43 +308,58 @@ function DashboardContent() {
       return;
     }
 
-    const res = await verifyClinicOrDoctorPin(clean);
-    if (res.success) {
-      // 1. Grant 8-Hour Clinic Session (Tier 1 Outer Gate)
-      saveClinicSessionLocal({
-        role: 'assistant',
-        name: 'Clinic Assistant',
-        expiresAt: Date.now() + 8 * 60 * 60 * 1000,
-      });
 
-      // 2. If Doctor PIN was entered, unlock Doctor Session (Tier 2 Inner Gate)
-      if (res.doctor) {
-        saveDoctorSessionLocal({
-          doctorId: res.doctor.id,
-          name: res.doctor.full_name,
-          title: res.doctor.specialization || 'General Medicine',
+    if (portalMode === 'gateway') {
+      const clinicRes = await verifyClinicPin(clean);
+      if (clinicRes.success) {
+        saveClinicSessionLocal({
+          role: 'assistant',
+          name: 'Clinic Assistant',
           expiresAt: Date.now() + 8 * 60 * 60 * 1000,
         });
 
-        setIsLoggedIn(true);
-        setDoctorProfile({
-          name: res.doctor.full_name,
-          title: res.doctor.specialization || 'General Medicine',
-        });
-      } else {
+        // Doctor session remains strictly locked
+        clearDoctorSessionLocal();
         setIsLoggedIn(false);
         setDoctorProfile({
           name: 'Clinic Assistant',
           title: 'Reception & Triage',
         });
+
+        setShowPinModal(false);
+        setPinError(false);
+        setPinInput('');
+        setPortalMode('dashboard');
+        setActiveSection(intendedSection || 'dashboard');
+        setIntendedSection(null);
+      } else {
+        setPinError(true);
+        setTimeout(() => setPinError(false), 2200);
       }
+      return;
+    }
+
+
+    const docRes = await verifyDoctorPin(clean);
+    if (docRes.success && docRes.doctor) {
+      saveDoctorSessionLocal({
+        doctorId: docRes.doctor.id,
+        name: docRes.doctor.full_name,
+        title: docRes.doctor.specialization || 'General Medicine',
+        expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+      });
+
+      setIsLoggedIn(true);
+      setDoctorProfile({
+        name: docRes.doctor.full_name,
+        title: docRes.doctor.specialization || 'General Medicine',
+      });
 
       setShowPinModal(false);
       setPinError(false);
       setPinInput('');
-      setPortalMode('dashboard');
 
-      if (pendingConsultPatient && res.doctor) {
+      if (pendingConsultPatient) {
         const p = pendingConsultPatient;
         setPendingConsultPatient(null);
         setTimeout(() => {
@@ -359,12 +384,17 @@ function DashboardContent() {
       name: 'Clinic Assistant',
       title: 'Reception & Triage',
     });
+    try {
+      logoutDoctor();
+    } catch { }
     // If currently on a doctor-restricted section, lock and return to dashboard
-    if (['queue', 'consult', 'inventory', 'analytics'].includes(activeSection)) {
+    if (['queue', 'consult', 'inventory', 'analytics', 'settings'].includes(activeSection)) {
       setActiveSection('dashboard');
     }
     if (savedDoc?.doctorId) {
       await logoutDoctorSessionDb(savedDoc.doctorId);
+    } else {
+      await logoutDoctorSessionDb();
     }
   };
 
@@ -373,10 +403,19 @@ function DashboardContent() {
     clearClinicSessionLocal();
     clearDoctorSessionLocal();
     setIsLoggedIn(false);
+    setDoctorProfile({
+      name: 'Clinic Assistant',
+      title: 'Reception & Triage',
+    });
     setPortalMode('gateway');
     setActiveSection('dashboard');
+    try {
+      logoutDoctor();
+    } catch { }
     if (savedDoc?.doctorId) {
       await logoutDoctorSessionDb(savedDoc.doctorId);
+    } else {
+      await logoutDoctorSessionDb();
     }
   };
 
@@ -828,9 +867,8 @@ function DashboardContent() {
             />
 
             <main
-              className={`flex-1 overflow-y-auto no-print ${
-                isMobile ? 'px-3.5 sm:px-6 pt-3 pb-28' : 'px-4 sm:px-6 lg:px-8 xl:px-10 pt-4 sm:pt-6 pb-12'
-              }`}
+              className={`flex-1 overflow-y-auto no-print ${isMobile ? 'px-3.5 sm:px-6 pt-3 pb-28' : 'px-4 sm:px-6 lg:px-8 xl:px-10 pt-4 sm:pt-6 pb-12'
+                }`}
             >
               <motion.section
                 initial={{ opacity: 0, y: 16 }}
@@ -841,9 +879,8 @@ function DashboardContent() {
                 <motion.div
                   whileHover={{ scale: 1.08 }}
                   transition={{ type: 'spring', damping: 15 }}
-                  className={`rounded-full overflow-hidden bg-gray-200 border-2 border-white shadow-sm flex-shrink-0 cursor-pointer ${
-                    isMobile ? 'w-11 h-11' : 'w-14 h-14'
-                  }`}
+                  className={`rounded-full overflow-hidden bg-gray-200 border-2 border-white shadow-sm flex-shrink-0 cursor-pointer ${isMobile ? 'w-11 h-11' : 'w-14 h-14'
+                    }`}
                 >
                   <Image
                     src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAlmuC30xuMIZpBDfxi6DcXHu_Ks41P52MELsRuS7q4xgQhHJsRyIAU26SoUhZQ_v01dlHDlWrAAkh3wSZl04MBQqPlT6ErIF8M2Z-BxbP_LDZJwq1ggudaa_bfRN8YDWwtyWd28KCfQfIF40q_rF1P8xus-qeymY-ar5CmL4wz4tzlH8FI1FP7WZ-0sJDAW-0YLEq8Icg9Yn18bC_VJLV-Tv4XaPLEQViv7w4vOCY"
@@ -923,7 +960,7 @@ function DashboardContent() {
                     onGoToConsulting={() => setActiveSection('queue')}
                     isStandalone={false}
                   />
-                )} 
+                )}
 
                 {activeSection === 'dashboard' && (
                   <DashboardView
@@ -1005,7 +1042,33 @@ function DashboardContent() {
                 )}
 
                 {activeSection === 'settings' && (
-                  <SettingsView isMobile={isMobile} onLogout={handleFullLogout} />
+                  isDoctorUnlocked ? (
+                    <SettingsView isMobile={isMobile} onLogout={handleFullLogout} />
+                  ) : (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center"
+                    >
+                      <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mb-4 shadow-xs">
+                        <Lock className="w-8 h-8 stroke-[2]" />
+                      </div>
+                      <h3 className="text-lg font-bold text-[#16191E] mb-1">Doctor Verification Required</h3>
+                      <p className="text-xs text-[#8A909D] max-w-sm mb-6 leading-relaxed">
+                        System configuration, daily doctor quotas, WhatsApp automation, and pharmacy safeguards require Doctor Authentication.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setIntendedSection('settings');
+                          setShowPinModal(true);
+                        }}
+                        className="px-5 py-2.5 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition cursor-pointer flex items-center space-x-2"
+                      >
+                        <Lock className="w-4 h-4" />
+                        <span>Unlock with Doctor PIN</span>
+                      </button>
+                    </motion.div>
+                  )
                 )}
               </AnimatePresence>
             </main>
@@ -1062,8 +1125,8 @@ function DashboardContent() {
         title={portalMode === 'gateway' ? 'Clinic Gateway Security' : 'Doctor Security Verification'}
         subtitle={
           portalMode === 'gateway'
-            ? 'Enter your 4-digit clinic security PIN'
-            : 'Enter your 4-digit doctor security PIN'
+            ? 'Enter clinic security PIN to access dashboard'
+            : 'Enter doctor security PIN to unlock access'
         }
         buttonText={portalMode === 'gateway' ? 'Unlock Dashboard' : 'Verify & Access'}
       />

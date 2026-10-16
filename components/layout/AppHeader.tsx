@@ -163,8 +163,9 @@ export function AppHeader({
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.96 }}
                     onClick={onLogout}
-                    className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group ${isMobile ? 'h-9 text-[11px] px-2.5 space-x-1' : 'h-10 text-xs px-3.5 space-x-1.5'
-                      }`}
+                    className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
+                      isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
+                    }`}
                     title="Lock Doctor Session"
                   >
                     <Lock className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
@@ -174,13 +175,14 @@ export function AppHeader({
               </div>
             ) : (
               <motion.button
-                whileHover={{ scale: 1.04, y: -1 }}
+                whileHover={{ scale: 1.04 }}
                 whileTap={{ scale: 0.96 }}
                 onClick={onOpenPinModal}
-                className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 shadow-sm cursor-pointer whitespace-nowrap flex-shrink-0 ${isMobile ? 'h-9 text-[11px] px-2.5 space-x-1' : 'h-10 text-xs px-4 space-x-2'
-                  }`}
+                className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
+                  isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
+                }`}
               >
-                <LogIn className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-200 stroke-[2] flex-shrink-0" />
+                <LogIn className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
                 <span className="whitespace-nowrap">Sign In</span>
               </motion.button>
             )}
