@@ -79,7 +79,7 @@ export async function verifyDoctorPin(
       return { success: false, message: 'No doctors found' };
     }
 
-    // Cryptographically verify entered PIN against stored bcrypt hash in doctors table
+    // Cryptographically verify entered PIN against stored bcrypt hash in doctor table
     let matchedDoctor: DbDoctor | null = null;
     for (const doc of doctors) {
       if (doc.pin_code) {
