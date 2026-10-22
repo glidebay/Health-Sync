@@ -188,13 +188,12 @@ export function InventoryView({
                     <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                       <span className="font-bold text-sm text-[#16191E] truncate">{item.brand}</span>
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
-                          isHigh
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${isHigh
                             ? 'bg-emerald-100 text-emerald-800'
                             : isLow
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
                       >
                         {item.stock} Units
                       </span>
