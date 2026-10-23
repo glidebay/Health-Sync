@@ -31,6 +31,7 @@ import { AVAILABLE_SLOTS, QUICK_SYMPTOMS } from '@/lib/constants';
 import { validateMobileNumber } from '@/lib/phoneValidation';
 import {
   getDoctorSlotsForDate,
+  generateDailySlots,
   SlotItem,
   subscribeToClinicUpdates,
 } from '@/lib/supabaseService';
@@ -556,12 +557,8 @@ export function SlotBookingView({
 
   const currentSlots = useMemo(() => {
     if (slots.length > 0) return slots;
-    return AVAILABLE_SLOTS.map((s) => ({
-      time: s.time,
-      period: s.period,
-      isBooked: false,
-    }));
-  }, [slots]);
+    return generateDailySlots(slotsSummary.dailyQuota || 10, 15, activeDate);
+  }, [slots, slotsSummary.dailyQuota, activeDate]);
 
   const filteredSlots = useMemo(() => {
     if (selectedPeriod === 'All') return currentSlots;
@@ -905,6 +902,19 @@ export function SlotBookingView({
                     <span>Select Time Slot</span>
                   </label>
 
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-[#2563EB] border border-blue-100">
+                    <span>Daily Quota:</span>
+                    <span className="font-bold">{slotsSummary.dailyQuota} Slots</span>
+                    <span className="text-blue-300">•</span>
+                    <span className="text-emerald-700 font-bold">{slotsSummary.availableCount} Open</span>
+                    {slotsSummary.bookedCount > 0 && (
+                      <>
+                        <span className="text-blue-300">•</span>
+                        <span className="text-gray-500">{slotsSummary.bookedCount} Booked</span>
+                      </>
+                    )}
+                  </div>
+
                   {isLoadingSlots && (
                     <span className="text-[10px] text-blue-500 animate-pulse font-medium">Checking live slots...</span>
                   )}
@@ -912,36 +922,47 @@ export function SlotBookingView({
 
                 {/* Horizontal scrollable period filter buttons */}
                 <div className="flex items-center space-x-1 bg-[#F8F9FB] p-1 rounded-xl border border-[#ECEEF2] overflow-x-auto max-w-full scrollbar-none self-start sm:self-auto">
-                  {(['All', 'Morning', 'Afternoon', 'Evening'] as const).map((period) => {
-                    const count = periodCounts[period];
-                    const isActive = selectedPeriod === period;
-                    return (
-                      <button
-                        key={period}
-                        type="button"
-                        onClick={() => setSelectedPeriod(period)}
-                        className={`relative text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1 sm:gap-1.5 z-10 whitespace-nowrap flex-shrink-0 ${isActive ? 'text-[#2563EB]' : 'text-[#8A909D] hover:text-[#16191E]'
-                          }`}
-                      >
-                        {isActive && (
-                          <motion.div
-                            layoutId="activePeriodPill"
-                            className="absolute inset-0 bg-white rounded-lg shadow-2xs -z-10"
-                            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-                          />
-                        )}
-                        <span>{period}</span>
-                        <span
-                          className={`text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-full font-bold ${isActive ? 'bg-blue-50 text-[#2563EB]' : 'bg-gray-200/60 text-gray-500'
+                  {(['All', 'Morning', 'Afternoon', 'Evening'] as const)
+                    .filter((period) => period === 'All' || periodCounts[period] > 0)
+                    .map((period) => {
+                      const count = periodCounts[period];
+                      const isActive = selectedPeriod === period;
+                      return (
+                        <button
+                          key={period}
+                          type="button"
+                          onClick={() => setSelectedPeriod(period)}
+                          className={`relative text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1 sm:gap-1.5 z-10 whitespace-nowrap flex-shrink-0 ${isActive ? 'text-[#2563EB]' : 'text-[#8A909D] hover:text-[#16191E]'
                             }`}
                         >
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
+                          {isActive && (
+                            <motion.div
+                              layoutId="activePeriodPill"
+                              className="absolute inset-0 bg-white rounded-lg shadow-2xs -z-10"
+                              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                            />
+                          )}
+                          <span>{period}</span>
+                          <span
+                            className={`text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-full font-bold ${isActive ? 'bg-blue-50 text-[#2563EB]' : 'bg-gray-200/60 text-gray-500'
+                              }`}
+                          >
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
                 </div>
               </div>
+
+              {slotsSummary.availableCount === 0 && !isLoadingSlots && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  <span>
+                    <strong>Daily Quota Reached:</strong> All {slotsSummary.dailyQuota} consultation slots are booked for this date. Emergency patients can switch to <strong>Urgent Priority</strong> below to bypass quota limits.
+                  </span>
+                </div>
+              )}
 
               {/* Grid of Slots: Fully visible without inner scrolling; Booked slots grey & disabled; Open slots active & clickable */}
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 sm:gap-2.5 p-2.5 sm:p-3.5 bg-[#F8F9FB] rounded-xl sm:rounded-2xl border border-[#ECEEF2]">

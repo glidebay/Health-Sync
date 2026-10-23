@@ -1283,41 +1283,92 @@ export function formatSlotToIso(dateStr: string, slotTime: string): string {
   return `${dateStr}T${padH}:${padM}:00+00:00`;
 }
 
+export function generateDailySlots(
+  quota: number,
+  durationMins: number = 15,
+  dateStr: string = ''
+): SlotItem[] {
+  const result: SlotItem[] = [];
+  const safeQuota = Math.max(1, quota || 10);
+  const safeDuration = Math.max(5, durationMins || 15);
+  let currentMin = 9 * 60; // 09:00 AM
+
+  for (let i = 0; i < safeQuota; i++) {
+    // If morning reaches or exceeds 01:00 PM (780 mins) and we still have slots, shift to afternoon 02:00 PM (840 mins)
+    if (currentMin >= 13 * 60 && currentMin < 14 * 60) {
+      currentMin = 14 * 60; // 02:00 PM
+    }
+
+    const h = Math.floor(currentMin / 60);
+    const m = currentMin % 60;
+    const modifier = h >= 12 ? 'PM' : 'AM';
+    let displayH = h % 12;
+    if (displayH === 0) displayH = 12;
+    const timeLabel = `${String(displayH).padStart(2, '0')}:${String(m).padStart(2, '0')} ${modifier}`;
+    const period = getSlotPeriod(timeLabel);
+
+    result.push({
+      time: timeLabel,
+      period,
+      scheduledTime: dateStr ? formatSlotToIso(dateStr, timeLabel) : undefined,
+      isBooked: false,
+    });
+
+    currentMin += safeDuration;
+  }
+  return result;
+}
+
 export async function getDoctorSlotsForDate(
   doctorId: string,
   dateStr: string
 ): Promise<DoctorSlotsResult> {
   try {
     if (!doctorId || !dateStr) {
-      const fallback = AVAILABLE_SLOTS.map((s) => ({
-        time: s.time,
-        period: s.period,
-        isBooked: false,
-      }));
+      const fallback = generateDailySlots(10, 15, dateStr);
       return {
         slots: fallback,
         availableCount: fallback.length,
         bookedCount: 0,
         lockedAndHiddenCount: 0,
-        dailyQuota: 30,
+        dailyQuota: 10,
         date: dateStr,
       };
     }
 
-    // 1. Fetch booked appointments for this doctor on this date from Supabase
-    const { data: bookedAppointments } = await supabase
-      .from('appointments')
-      .select('scheduled_time, status')
-      .eq('doctor_id', doctorId)
-      .neq('status', 'Cancelled')
-      .neq('status', 'Reallocated');
+    // 1. Fetch doctor's daily quota and clinic slot duration from Supabase
+    let doctorQuota = 10;
+    let slotDurationMins = 15;
 
+    const [docRes, cfgRes, bookedApptsRes] = await Promise.all([
+      supabase.from('doctors').select('daily_quota').eq('id', doctorId).maybeSingle(),
+      supabase.from('app_config').select('key, value').in('key', ['daily_quota', 'slot_duration_mins']),
+      supabase
+        .from('appointments')
+        .select('scheduled_time, status')
+        .eq('doctor_id', doctorId)
+        .neq('status', 'Cancelled')
+        .neq('status', 'Reallocated'),
+    ]);
+
+    if (docRes.data?.daily_quota) {
+      doctorQuota = Number(docRes.data.daily_quota);
+    } else if (cfgRes.data) {
+      const quotaCfg = cfgRes.data.find((c) => c.key === 'daily_quota');
+      if (quotaCfg?.value) doctorQuota = Number(quotaCfg.value);
+    }
+
+    const durCfg = cfgRes.data?.find((c) => c.key === 'slot_duration_mins');
+    if (durCfg?.value) slotDurationMins = Number(durCfg.value);
+
+    // 2. Fetch booked appointment times on target date
     const bookedTimeLabels = new Set<string>();
+    const bookedAppointments = bookedApptsRes.data;
+
     if (bookedAppointments && bookedAppointments.length > 0) {
       for (const appt of bookedAppointments) {
         if (!appt.scheduled_time) continue;
 
-        // Check if appointment falls on target dateStr (supports UTC or local)
         const d = new Date(appt.scheduled_time);
         const ymdUtc = d.toISOString().slice(0, 10);
         const ymdLocal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1353,109 +1404,75 @@ export async function getDoctorSlotsForDate(
       }
     }
 
-    // 2. Fetch available slots using Supabase get_available_slots RPC
+    // 3. Fetch RPC available slots from Supabase
     const { data: rpcData } = await supabase.rpc('get_available_slots', {
       p_doctor_id: doctorId,
       p_date: dateStr,
     });
 
-    const rpcAvailableList = (rpcData?.available_slots as any[]) || [];
+    if (rpcData?.daily_quota_from_settings) {
+      doctorQuota = Number(rpcData.daily_quota_from_settings);
+    } else if (rpcData?.total_slots) {
+      doctorQuota = Number(rpcData.total_slots);
+    }
 
-    // 3. Build unified slots map
-    const slotMap = new Map<
-      string,
-      { time: string; period: 'Morning' | 'Afternoon' | 'Evening'; scheduledTime?: string; isBooked: boolean }
-    >();
+    const rpcSlotsList =
+      (Array.isArray(rpcData?.slots)
+        ? rpcData.slots
+        : (rpcData?.available_slots as any[])) || [];
 
-    // Add RPC doctor schedule slots
-    if (rpcAvailableList.length > 0) {
-      for (const s of rpcAvailableList) {
-        const timeLabel = s.time_label || s.slot_time || s.time;
-        if (!timeLabel) continue;
-        const period = getSlotPeriod(timeLabel);
-        slotMap.set(timeLabel, {
+    // 4. Construct EXACTLY doctorQuota slots as retrieved from Supabase
+    let finalSlots: SlotItem[] = [];
+
+    if (rpcSlotsList.length >= doctorQuota) {
+      finalSlots = rpcSlotsList.slice(0, doctorQuota).map((s: any) => {
+        const timeLabel = s.slot_time || s.time_label || s.time;
+        return {
           time: timeLabel,
-          period,
-          scheduledTime: s.scheduled_time || s.timestamp,
-          isBooked: false,
-        });
-      }
+          period: getSlotPeriod(timeLabel),
+          scheduledTime: s.scheduled_time || s.timestamp || formatSlotToIso(dateStr, timeLabel),
+          isBooked: Boolean(s.is_booked),
+        };
+      });
+    } else {
+      finalSlots = generateDailySlots(doctorQuota, slotDurationMins, dateStr);
     }
 
-    // Merge standard clinic slots so Afternoon / Evening are always accessible
-    for (const s of AVAILABLE_SLOTS) {
-      if (!slotMap.has(s.time)) {
-        slotMap.set(s.time, {
-          time: s.time,
-          period: s.period,
-          scheduledTime: formatSlotToIso(dateStr, s.time),
-          isBooked: false,
-        });
-      }
-    }
-
-    // Mark any slot that has an active booking as isBooked: true
-    for (const bt of bookedTimeLabels) {
-      if (slotMap.has(bt)) {
-        slotMap.get(bt)!.isBooked = true;
+    // Mark any slot that matches a booked appointment as isBooked: true
+    for (const slot of finalSlots) {
+      if (bookedTimeLabels.has(slot.time)) {
+        slot.isBooked = true;
       } else {
-        // If booked time label was formatted slightly differently (e.g. 9:00 AM vs 09:00 AM)
-        let foundKey: string | null = null;
-        for (const [key] of slotMap.entries()) {
-          if (parseTimeToMinutes(key) === parseTimeToMinutes(bt)) {
-            foundKey = key;
+        const slotMins = parseTimeToMinutes(slot.time);
+        for (const bt of bookedTimeLabels) {
+          if (parseTimeToMinutes(bt) === slotMins) {
+            slot.isBooked = true;
             break;
           }
         }
-        if (foundKey) {
-          slotMap.get(foundKey)!.isBooked = true;
-        } else {
-          slotMap.set(bt, {
-            time: bt,
-            period: getSlotPeriod(bt),
-            scheduledTime: formatSlotToIso(dateStr, bt),
-            isBooked: true,
-          });
-        }
       }
     }
 
-    const allSlots = Array.from(slotMap.values()).sort(
-      (a, b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time)
-    );
-
-    let availableCount = 0;
-    let bookedCount = 0;
-
-    for (const slot of allSlots) {
-      if (slot.isBooked) {
-        bookedCount++;
-      } else {
-        availableCount++;
-      }
-    }
+    const bookedCount = finalSlots.filter((s) => s.isBooked).length;
+    const availableCount = Math.max(0, finalSlots.length - bookedCount);
 
     return {
-      slots: allSlots,
+      slots: finalSlots,
       availableCount,
       bookedCount,
-      lockedAndHiddenCount: rpcData?.locked_and_hidden_slots || bookedCount,
-      dailyQuota: rpcData?.daily_quota || 30,
+      lockedAndHiddenCount: bookedCount,
+      dailyQuota: doctorQuota,
       date: dateStr,
     };
   } catch (err) {
     console.error('getDoctorSlotsForDate error:', err);
-    const fallback = AVAILABLE_SLOTS.map((s) => ({
-      time: s.time,
-      period: s.period,
-      isBooked: false,
-    }));
+    const fallback = generateDailySlots(10, 15, dateStr);
     return {
       slots: fallback,
       availableCount: fallback.length,
       bookedCount: 0,
       lockedAndHiddenCount: 0,
-      dailyQuota: 30,
+      dailyQuota: 10,
       date: dateStr,
     };
   }
@@ -1494,6 +1511,32 @@ export async function bookAppointmentSlotDb(
 
     const scheduledTime = formatSlotToIso(params.date, params.slotTime);
 
+    // 1. Enforce max number of slot bookings (daily quota) from Supabase
+    const { count: currentBookedCount } = await supabase
+      .from('appointments')
+      .select('*', { count: 'exact', head: true })
+      .eq('doctor_id', params.doctorId)
+      .neq('status', 'Cancelled')
+      .gte('scheduled_time', `${params.date}T00:00:00`)
+      .lte('scheduled_time', `${params.date}T23:59:59`);
+
+    const { data: docData } = await supabase
+      .from('doctors')
+      .select('daily_quota')
+      .eq('id', params.doctorId)
+      .maybeSingle();
+
+    const maxSlotQuota = Number(docData?.daily_quota || 30);
+    const isQuotaFull = (currentBookedCount || 0) >= maxSlotQuota;
+
+    if (isQuotaFull && params.priority !== 'Urgent') {
+      return {
+        success: false,
+        error: 'DAILY_QUOTA_REACHED',
+        message: `Doctor daily consultation quota reached (${maxSlotQuota} maximum slots booked). Switch to Urgent priority for emergency triage or select another date.`,
+      };
+    }
+
     // Call unified backend RPC: register_walk_in_patient
     const { data: rpcData, error: rpcError } = await supabase.rpc(
       'register_walk_in_patient',
@@ -1519,14 +1562,14 @@ export async function bookAppointmentSlotDb(
         };
       }
 
-      const fifoNo = rpcData.fifo_token_no || 1;
+      const fifoNo = rpcData.queue_token_no || rpcData.fifo_token_no || 1;
       const tokenNumber = `P${String(fifoNo).padStart(3, '0')}`;
 
       return {
         success: true,
         tokenNumber,
-        appointmentId: rpcData.unique_appointment_id,
-        patientId: rpcData.unique_patient_id,
+        appointmentId: rpcData.appointment_id || rpcData.unique_appointment_id,
+        patientId: rpcData.patient_id || rpcData.unique_patient_id,
         message: rpcData.message || 'Slot confirmed successfully!',
       };
     }
@@ -1559,8 +1602,8 @@ export async function bookAppointmentSlotDb(
     console.error('bookAppointmentSlotDb exception:', err);
     return {
       success: false,
-      error: 'EXCEPTION',
-      message: err.message || 'An unexpected error occurred while booking the slot',
+      error: 'UNEXPECTED_ERROR',
+      message: err.message || 'An unexpected error occurred while booking.',
     };
   }
 }
