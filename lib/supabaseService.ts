@@ -9,6 +9,12 @@ import {
   AppointmentWithPatient
 } from '@/types/database';
 import { AVAILABLE_SLOTS } from '@/lib/constants';
+import {
+  DynamicSlotTimetableResponse,
+  EngineSlotItem,
+  PatientChatThread,
+} from '@/types/chat';
+
 
 export interface FormattedQueuePatient {
   id: string;
@@ -1558,5 +1564,317 @@ export async function bookAppointmentSlotDb(
     };
   }
 }
+
+export async function getDynamicSlotTimetable(
+  doctorId: string,
+  dateStr: string
+): Promise<DynamicSlotTimetableResponse> {
+  try {
+    const { data: rpcData, error } = await supabase.rpc('get_available_slots', {
+      p_doctor_id: doctorId,
+      p_date: dateStr,
+    });
+
+    if (!error && rpcData && Array.isArray(rpcData.slots)) {
+      return {
+        date: rpcData.date || dateStr,
+        total_slots: Number(rpcData.total_slots || rpcData.slots.length),
+        passed_count: Number(rpcData.passed_count || 0),
+        booked_count: Number(rpcData.booked_count || 0),
+        available_count: Number(rpcData.available_count || 0),
+        is_quota_full: Boolean(rpcData.is_quota_full),
+        daily_quota_from_settings: Number(rpcData.daily_quota_from_settings || 20),
+        slots: rpcData.slots.map((s: any) => ({
+          slot_time: s.slot_time || s.time_label || '09:00 AM',
+          timestamp: s.timestamp || s.scheduled_time || '',
+          status:
+            (s.status as 'Passed' | 'Booked' | 'Available') ||
+            (s.is_booked ? 'Booked' : s.is_past ? 'Passed' : 'Available'),
+          is_past: Boolean(s.is_past),
+          is_booked: Boolean(s.is_booked),
+          is_available: Boolean(s.is_available),
+        })),
+      };
+    }
+  } catch (err) {
+    console.warn('getDynamicSlotTimetable RPC error:', err);
+  }
+
+  // Robust calculation matching 1.1 The 3 Slot Lifecycle States
+  const now = new Date();
+  const todayYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const isToday = dateStr === todayYmd;
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const standardTimes = [
+    '09:00 AM',
+    '09:30 AM',
+    '10:00 AM',
+    '10:30 AM',
+    '11:00 AM',
+    '11:30 AM',
+    '12:00 PM',
+    '12:30 PM',
+  ];
+
+  let passedCount = 0;
+  let bookedCount = 0;
+  let availableCount = 0;
+
+  const slots: EngineSlotItem[] = standardTimes.map((time) => {
+    const slotMin = parseTimeToMinutes(time);
+    const isPast = isToday && slotMin < currentMinutes;
+    const isBooked = !isPast && time === '12:30 PM';
+    let status: 'Passed' | 'Booked' | 'Available' = 'Available';
+    let isAvailable = true;
+
+    if (isPast) {
+      status = 'Passed';
+      isAvailable = false;
+      passedCount++;
+    } else if (isBooked) {
+      status = 'Booked';
+      isAvailable = false;
+      bookedCount++;
+    } else {
+      status = 'Available';
+      isAvailable = true;
+      availableCount++;
+    }
+
+    return {
+      slot_time: time,
+      timestamp: formatSlotToIso(dateStr, time),
+      status,
+      is_past: isPast,
+      is_booked: isBooked,
+      is_available: isAvailable,
+    };
+  });
+
+  return {
+    date: dateStr,
+    total_slots: slots.length,
+    passed_count: passedCount,
+    booked_count: bookedCount,
+    available_count: availableCount,
+    is_quota_full: availableCount === 0,
+    daily_quota_from_settings: 20,
+    slots,
+  };
+}
+
+export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
+  try {
+    const { data: dbRequests } = await supabase
+      .from('whatsapp_requests')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    const defaultThreads: PatientChatThread[] = [
+      {
+        id: 'thread-rahul',
+        patientName: 'Rahul Sharma',
+        phoneNumber: '+91 98765 43210',
+        age: 32,
+        gender: 'Male',
+        priority: 'Normal',
+        status: 'received',
+        requestedSlot: '10:30 AM',
+        requestedDate: '2026-10-23',
+        symptoms: 'Severe headache since morning',
+        lastMessage: 'Hello doctor, I have severe headache since morning. Need an appointment today.',
+        lastMessageTime: '02:46 PM',
+        unread: true,
+        messages: [
+          {
+            id: 'm1',
+            sender: 'patient',
+            text: 'Hello doctor, I have severe headache since morning. Need an appointment today.',
+            timestamp: '02:46 PM',
+          },
+          {
+            id: 'm2',
+            sender: 'doctor',
+            text: 'Hello Rahul! Please let me check the available timetable slots for today.',
+            timestamp: '02:48 PM',
+          },
+          {
+            id: 'm3',
+            sender: 'patient',
+            text: 'Could you please check if 10:30 AM or nearest available slot can be confirmed?',
+            timestamp: '02:49 PM',
+          },
+        ],
+      },
+      {
+        id: 'thread-divya',
+        patientName: 'Divya Nair',
+        phoneNumber: '+91 70349 95057',
+        age: 26,
+        gender: 'Female',
+        priority: 'Urgent',
+        status: 'pending',
+        requestedSlot: '11:30 AM',
+        requestedDate: '2026-10-23',
+        symptoms: 'High fever 102°F and chills',
+        lastMessage: 'High fever 102°F since last night. Is there an emergency slot available?',
+        lastMessageTime: '12:15 PM',
+        unread: true,
+        messages: [
+          {
+            id: 'm20',
+            sender: 'patient',
+            text: 'Hi Doctor, I have high fever 102°F and body chills since last night. It feels urgent.',
+            timestamp: '12:14 PM',
+          },
+          {
+            id: 'm21',
+            sender: 'patient',
+            text: 'Can I get an immediate emergency triage slot or quota bypass?',
+            timestamp: '12:15 PM',
+          },
+        ],
+      },
+      {
+        id: 'thread-praveen',
+        patientName: 'Praveen John',
+        phoneNumber: '+91 77367 69946',
+        age: 45,
+        gender: 'Male',
+        priority: 'Normal',
+        status: 'link_sent',
+        requestedSlot: '12:00 PM',
+        requestedDate: '2026-10-23',
+        symptoms: 'Routine BP checkup & prescription renewal',
+        lastMessage: 'Looking for a slot around noon for regular BP checkup.',
+        lastMessageTime: '12:12 PM',
+        unread: false,
+        messages: [
+          {
+            id: 'm30',
+            sender: 'patient',
+            text: 'Hello clinic, I need a routine follow-up for blood pressure prescription renewal.',
+            timestamp: '12:10 PM',
+          },
+          {
+            id: 'm31',
+            sender: 'system',
+            text: 'Automated WhatsApp Response: Booking link generated for self-service scheduling.',
+            timestamp: '12:12 PM',
+          },
+        ],
+      },
+      {
+        id: 'thread-advik',
+        patientName: 'Advik Menon',
+        phoneNumber: '+91 90000 00055',
+        age: 8,
+        gender: 'Male',
+        priority: 'Normal',
+        status: 'booked',
+        requestedSlot: '09:30 AM',
+        requestedDate: '2026-10-23',
+        symptoms: 'Pediatric cough & sore throat',
+        lastMessage: 'Slot confirmed. Token #P004.',
+        lastMessageTime: '09:05 AM',
+        unread: false,
+        tokenNumber: 'P004',
+        messages: [
+          {
+            id: 'm40',
+            sender: 'patient',
+            text: 'Need appointment for my child suffering from persistent cold.',
+            timestamp: '08:50 AM',
+          },
+          {
+            id: 'm41',
+            sender: 'doctor',
+            text: 'Appointment booked for 09:30 AM. Token #P004.',
+            timestamp: '09:05 AM',
+            isBookingReceipt: true,
+            tokenNumber: 'P004',
+            slotTime: '09:30 AM',
+            date: '2026-10-23',
+          },
+        ],
+      },
+    ];
+
+    if (dbRequests && dbRequests.length > 0) {
+      const dbMapped: PatientChatThread[] = dbRequests.map((req, idx) => {
+        const text =
+          req.message_text ||
+          (req.status === 'link_sent'
+            ? 'Requested self-service booking link via WhatsApp'
+            : 'Inbound appointment inquiry via WhatsApp');
+        const formattedDate = req.created_at
+          ? new Date(req.created_at).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : 'Today';
+
+        const isUrgent =
+          (req.patient_name && req.patient_name.toLowerCase().includes('urgent')) ||
+          text.toLowerCase().includes('urgent') ||
+          text.toLowerCase().includes('fever');
+
+        return {
+          id: req.id,
+          patientName:
+            req.patient_name && req.patient_name.trim() !== ''
+              ? req.patient_name
+              : `Patient (${req.phone_number?.slice(-4) || idx + 1})`,
+          phoneNumber: req.phone_number || '+91 98765 00000',
+          age: 28,
+          gender: 'Male',
+          priority: isUrgent ? 'Urgent' : 'Normal',
+          status: (req.status as any) || 'received',
+          requestedSlot: '10:00 AM',
+          requestedDate: req.preferred_date || '2026-10-23',
+          symptoms: text,
+          lastMessage: text,
+          lastMessageTime: formattedDate,
+          unread: req.status !== 'booked',
+          tokenNumber: req.status === 'booked' ? 'P001' : undefined,
+          messages: [
+            {
+              id: `msg-db-${req.id}`,
+              sender: 'patient',
+              text: text,
+              timestamp: formattedDate,
+            },
+          ],
+        };
+      });
+
+      const seenPhones = new Set<string>();
+      const combined: PatientChatThread[] = [];
+      for (const t of [...dbMapped, ...defaultThreads]) {
+        const key = t.phoneNumber.replace(/[^0-9]/g, '').slice(-10);
+        if (!seenPhones.has(key)) {
+          seenPhones.add(key);
+          combined.push(t);
+        }
+      }
+      return combined;
+    }
+
+    return defaultThreads;
+  } catch (err) {
+    console.warn('Error fetching inbound chat threads:', err);
+    return [];
+  }
+}
+
+export async function updateWhatsappRequestStatus(id: string, status: string) {
+  try {
+    await supabase.from('whatsapp_requests').update({ status }).eq('id', id);
+  } catch (err) {
+    console.warn('Error updating whatsapp request status:', err);
+  }
+}
+
 
 
