@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Eye,
@@ -20,6 +20,8 @@ import { Patient } from '@/types';
 import { AnimatedCounter } from '@/components/common/AnimatedCounter';
 import { AnimatedProgress } from '@/components/common/AnimatedProgress';
 import { staggerContainer, fadeScale } from '@/lib/constants';
+import { RescheduleModal, ReallocateStrategy } from '@/components/reception/RescheduleModal';
+import { CancelModal } from '@/components/reception/CancelModal';
 
 interface DashboardViewProps {
   totalPatientsCount: number;
@@ -33,7 +35,18 @@ interface DashboardViewProps {
   isLoggedIn: boolean;
   onRegisterWalkin: () => void;
   onViewAllQueue: () => void;
-  onReallocate: (id: string) => void;
+  onReallocate?: (id: string) => void;
+  onCancelAppointment?: (patientId: string, reason: string) => Promise<void> | void;
+  onReschedulePatient?: (params: {
+    patientId: string;
+    strategy: ReallocateStrategy;
+    newSlotTime: string;
+    reason: string;
+    swapWithPatientId?: string;
+    delayMinutes?: number;
+    cascadeAll?: boolean;
+    setUrgentPriority?: boolean;
+  }) => Promise<void> | void;
   onStartConsultation: (id: string) => void;
   onRequireLogin: () => void;
 }
@@ -51,9 +64,13 @@ export function DashboardView({
   onRegisterWalkin,
   onViewAllQueue,
   onReallocate,
+  onCancelAppointment,
+  onReschedulePatient,
   onStartConsultation,
   onRequireLogin,
 }: DashboardViewProps) {
+  const [selectedPatientForReschedule, setSelectedPatientForReschedule] = useState<Patient | null>(null);
+  const [selectedPatientForCancel, setSelectedPatientForCancel] = useState<Patient | null>(null);
   return (
     <motion.div
       key="dashboard"
@@ -281,71 +298,92 @@ export function DashboardView({
                 <p className="text-xs text-gray-400 mt-1">Register walk-in patients from Assistant Desk to populate live queue.</p>
               </div>
             ) : (
-              filteredQueue.slice(0, 3).map((p) => (
-                <motion.div
-                  key={p.id}
-                  whileHover={{
-                    y: -3,
-                    boxShadow: '0 10px 24px -6px rgba(0,0,0,0.07)',
-                  }}
-                  className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex items-center space-x-3 sm:space-x-4 cursor-default min-w-0"
-                >
+              filteredQueue.slice(0, 3).map((p) => {
+                const isWaiting = p.status === 'Waiting';
+                const tokenDisplay =
+                  p.displayId || (p.tokenNumber ? `P${String(p.tokenNumber).padStart(3, '0')}` : 'P001');
+
+                return (
                   <motion.div
-                    whileHover={{ rotate: 10 }}
-                    className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0 text-[#2563EB]"
+                    key={p.id}
+                    whileHover={{
+                      y: -2,
+                      boxShadow: '0 10px 24px -6px rgba(0,0,0,0.07)',
+                    }}
+                    className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0"
                   >
-                    <User className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2]" />
-                  </motion.div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-                      <div className="flex items-center space-x-1.5 min-w-0">
-                        <h3 className="text-sm font-bold text-[#16191E] truncate">{p.name}</h3>
-                        <span className="text-xs text-[#8A909D] font-medium flex-shrink-0">
-                          ({p.displayId || (p.tokenNumber ? `P${String(p.tokenNumber).padStart(3, '0')}` : 'P001')})
-                        </span>
-                      </div>
-                      <span
-                        className={`text-[10px] sm:text-xs font-bold px-2 sm:px-2.5 py-0.5 rounded-full flex-shrink-0 ml-2 ${
-                          p.status === 'Completed'
-                            ? 'bg-gray-100 text-gray-600'
-                            : p.status === 'In Progress'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-blue-50 text-blue-700'
-                        }`}
+                    <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
+                      <motion.div
+                        whileHover={{ rotate: 10 }}
+                        className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0 text-[#2563EB]"
                       >
-                        {p.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center flex-wrap gap-x-3.5 gap-y-1.5 text-xs text-[#5E6470] font-medium">
-                      <div className="flex items-center space-x-1.5 flex-shrink-0">
-                        <Clock className="w-3.5 h-3.5 text-[#2563EB] stroke-[2]" />
-                        <span>{p.time}</span>
-                      </div>
-                      <div className="flex items-center space-x-1.5 flex-shrink-0">
-                        <span>
-                          {p.age} Yrs • {p.gender}
-                        </span>
-                      </div>
-                      {p.phone && (
-                        <div className="flex items-center space-x-1 text-gray-500 flex-shrink-0">
-                          <Phone className="w-3 h-3 text-[#2563EB]" />
-                          <span>{p.phone}</span>
+                        <User className="w-5 h-5 stroke-[2]" />
+                      </motion.div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <h3 className="text-sm font-bold text-[#16191E] truncate">{p.name}</h3>
+                          <span className="text-xs text-[#8A909D] font-medium flex-shrink-0">
+                            ({tokenDisplay})
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
+                              p.status === 'Completed'
+                                ? 'bg-gray-100 text-gray-600'
+                                : p.status === 'In Progress'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : p.status === 'Cancelled'
+                                ? 'bg-rose-50 text-rose-700'
+                                : 'bg-blue-50 text-blue-700'
+                            }`}
+                          >
+                            {p.status}
+                          </span>
                         </div>
-                      )}
-                      {p.status === 'Waiting' && (
+                        <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 text-xs text-[#5E6470] font-medium">
+                          <span>
+                            {p.age} Yrs • {p.gender}
+                          </span>
+                          {p.phone && (
+                            <>
+                              <span className="text-gray-300">•</span>
+                              <span className="inline-flex items-center gap-1 text-[#5E6470]">
+                                <Phone className="w-3 h-3 text-[#2563EB]" />
+                                {p.phone}
+                              </span>
+                            </>
+                          )}
+                          <span className="text-gray-300">•</span>
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-[#2563EB] stroke-[2]" />
+                            Slot: {p.time}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {isWaiting && (
+                      <div className="flex items-center space-x-2 flex-shrink-0 self-end sm:self-center">
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          onClick={() => onReallocate(p.id)}
-                          className="text-[#2563EB] hover:underline font-semibold cursor-pointer flex-shrink-0"
+                          onClick={() => setSelectedPatientForCancel(p)}
+                          className="text-xs font-semibold px-3 py-1.5 border border-rose-200 text-rose-600 rounded-xl hover:bg-rose-50 transition cursor-pointer"
                         >
-                          Reallocate
+                          Cancel
                         </motion.button>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              ))
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => setSelectedPatientForReschedule(p)}
+                          className="text-xs font-semibold px-3 py-1.5 border border-blue-200 text-[#2563EB] rounded-xl hover:bg-blue-50 transition cursor-pointer"
+                        >
+                          Reschedule
+                        </motion.button>
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })
             )}
           </div>
         </div>
@@ -388,6 +426,23 @@ export function DashboardView({
           </div>
         </div>
       </section>
+
+      {/* Cancellation Modal */}
+      <CancelModal
+        isOpen={!!selectedPatientForCancel}
+        patient={selectedPatientForCancel}
+        onClose={() => setSelectedPatientForCancel(null)}
+        onConfirmCancel={onCancelAppointment || (async () => {})}
+      />
+
+      {/* Reschedule Modal */}
+      <RescheduleModal
+        isOpen={!!selectedPatientForReschedule}
+        patient={selectedPatientForReschedule}
+        queue={queue}
+        onClose={() => setSelectedPatientForReschedule(null)}
+        onReschedulePatient={onReschedulePatient || (async () => {})}
+      />
     </motion.div>
   );
 }

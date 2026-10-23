@@ -1188,6 +1188,8 @@ function DashboardContent() {
                     onRegisterWalkin={() => setShowWalkinModal(true)}
                     onViewAllQueue={() => setActiveSection('assistant')}
                     onReallocate={handleReallocate}
+                    onCancelAppointment={handleCancelAppointment}
+                    onReschedulePatient={handleReschedulePatient}
                     onStartConsultation={startConsultation}
                     onRequireLogin={() => {
                       if (config.require_doctor_pin) {
