@@ -23,6 +23,10 @@ import {
   registerWalkinPatientDb,
   bookAppointmentSlotDb,
   reallocateSlotDb,
+  cancelAppointmentDb,
+  rescheduleAppointmentDb,
+  swapPatientSlotsDb,
+  cascadeDoctorDelayDb,
   updateAppointmentStatusDb,
   completeConsultationDb,
   addInventoryItemDb,
@@ -42,6 +46,7 @@ import {
 } from '@/lib/supabaseService';
 import {
   Patient,
+  PatientStatus,
   InventoryItem,
   PrescriptionItem,
   NavSection,
@@ -67,6 +72,7 @@ import { GatewayScreen } from '@/components/views/GatewayScreen';
 import { SlotBookingView } from '@/components/views/SlotBookingView';
 import { DashboardView } from '@/components/views/DashboardView';
 import { AssistantView } from '@/components/views/AssistantView';
+import { ReallocateStrategy } from '@/components/reception/RescheduleModal';
 import { QueueView } from '@/components/views/QueueView';
 import { ConsultationView } from '@/components/views/ConsultationView';
 import { InventoryView } from '@/components/views/InventoryView';
@@ -571,6 +577,135 @@ function DashboardContent() {
     }
   };
 
+  const calculateShiftedTimeStr = (baseTimeStr: string, minutes: number) => {
+    try {
+      const now = new Date();
+      const match = baseTimeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (match) {
+        let hour = parseInt(match[1], 10);
+        const min = parseInt(match[2], 10);
+        const meridiem = match[3].toUpperCase();
+        if (meridiem === 'PM' && hour < 12) hour += 12;
+        if (meridiem === 'AM' && hour === 12) hour = 0;
+        now.setHours(hour, min, 0, 0);
+      }
+      const shifted = new Date(now.getTime() + minutes * 60000);
+      return shifted.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch {
+      return baseTimeStr;
+    }
+  };
+
+  const handleCancelAppointment = async (patientId: string, reason: string) => {
+    await cancelAppointmentDb(patientId, reason);
+    setQueue((prev) =>
+      prev.map((p) => {
+        if (p.id === patientId) {
+          return { ...p, status: 'Cancelled' as PatientStatus };
+        }
+        return p;
+      })
+    );
+  };
+
+  const handleReschedulePatient = async (params: {
+    patientId: string;
+    strategy: ReallocateStrategy;
+    newSlotTime: string;
+    reason: string;
+    swapWithPatientId?: string;
+    delayMinutes?: number;
+    cascadeAll?: boolean;
+    setUrgentPriority?: boolean;
+  }) => {
+    const {
+      patientId,
+      strategy,
+      newSlotTime,
+      reason,
+      swapWithPatientId,
+      delayMinutes = 20,
+      cascadeAll,
+      setUrgentPriority,
+    } = params;
+
+    if (strategy === 'patient_late' && swapWithPatientId) {
+      const patientA = queue.find((p) => p.id === patientId);
+      const patientB = queue.find((p) => p.id === swapWithPatientId);
+
+      if (patientA && patientB) {
+        // Patient B moves up to Patient A's slot to consult doctor immediately
+        // Patient A moves to new delayed slot
+        // Patient B's old slot is freed!
+        await swapPatientSlotsDb({
+          patientAId: patientA.id,
+          patientBId: patientB.id,
+          slotAOriginalIso: new Date().toISOString(),
+          slotBOriginalIso: new Date().toISOString(),
+          reason,
+        });
+
+        setQueue((prev) =>
+          prev.map((p) => {
+            if (p.id === patientB.id) {
+              return { ...p, time: patientA.time };
+            }
+            if (p.id === patientA.id) {
+              return { ...p, time: newSlotTime };
+            }
+            return p;
+          })
+        );
+        return;
+      }
+    }
+
+    if (strategy === 'doctor_delay' && cascadeAll) {
+      const waitingApptIds = queue
+        .filter((p) => p.status === 'Waiting')
+        .map((p) => p.id);
+
+      await cascadeDoctorDelayDb(waitingApptIds, delayMinutes, reason);
+
+      setQueue((prev) =>
+        prev.map((p) => {
+          if (p.status === 'Waiting') {
+            return {
+              ...p,
+              time: calculateShiftedTimeStr(p.time, delayMinutes),
+            };
+          }
+          return p;
+        })
+      );
+      return;
+    }
+
+    // Direct / Emergency reschedule
+    await rescheduleAppointmentDb({
+      appointmentId: patientId,
+      newTimeIso: new Date().toISOString(),
+      reason,
+    });
+
+    setQueue((prev) =>
+      prev.map((p) => {
+        if (p.id === patientId) {
+          return {
+            ...p,
+            time: newSlotTime,
+            priority: setUrgentPriority ? 'Urgent' : p.priority,
+          };
+        }
+        return p;
+      })
+    );
+  };
+
   const handleReallocate = async (id: string) => {
     const newTime = await reallocateSlotDb(id);
     setQueue((prev) =>
@@ -1065,6 +1200,9 @@ function DashboardContent() {
                     queue={queue}
                     onRegisterWalkin={() => setShowWalkinModal(true)}
                     onReallocate={handleReallocate}
+                    onCancelAppointment={handleCancelAppointment}
+                    onReschedulePatient={handleReschedulePatient}
+                    onStartConsultation={startConsultation}
                   />
                 )}
 

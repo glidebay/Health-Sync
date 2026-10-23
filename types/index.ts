@@ -1,6 +1,6 @@
 export type Role = 'assistant' | 'doctor';
 
-export type PatientStatus = 'Waiting' | 'In Progress' | 'Completed';
+export type PatientStatus = 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled';
 
 export interface Patient {
   id: string;

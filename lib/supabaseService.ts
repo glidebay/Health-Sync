@@ -17,7 +17,7 @@ export interface FormattedQueuePatient {
   age: number;
   gender: 'Male' | 'Female' | 'Other';
   phone?: string;
-  status: 'Waiting' | 'In Progress' | 'Completed';
+  status: 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled';
   time: string;
   tokenNumber: number;
   patientNumber?: number;
@@ -80,7 +80,7 @@ export async function verifyDoctorPin(
       return { success: false, message: 'No doctors found' };
     }
 
-    // Cryptographically verify entered PIN against stored bcrypt hash in doctors table
+    // Cryptographically verify entered PIN against stored bcrypt hash in doctor table
     let matchedDoctor: DbDoctor | null = null;
     for (const doc of doctors) {
       if (doc.pin_code) {
@@ -583,7 +583,7 @@ export async function reallocateSlotDb(appointmentId: string): Promise<string | 
 
 export async function updateAppointmentStatusDb(
   appointmentId: string,
-  status: 'Waiting' | 'In Progress' | 'Completed'
+  status: 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled'
 ): Promise<boolean> {
   try {
     const { error } = await supabase
@@ -601,6 +601,185 @@ export async function updateAppointmentStatusDb(
     return true;
   } catch (err) {
     console.warn('Status update exception:', err);
+    return false;
+  }
+}
+
+export async function cancelAppointmentDb(
+  appointmentId: string,
+  reason: string = 'Patient Requested Cancellation'
+): Promise<boolean> {
+  try {
+    const { data: currentAppt } = await supabase
+      .from('appointments')
+      .select('scheduled_time')
+      .eq('id', appointmentId)
+      .single();
+
+    const oldTime = currentAppt?.scheduled_time || new Date().toISOString();
+
+    const { error } = await supabase
+      .from('appointments')
+      .update({
+        status: 'Cancelled',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', appointmentId);
+
+    if (error) {
+      console.warn('Error cancelling appointment:', error);
+      return false;
+    }
+
+    await supabase.from('appointment_logs').insert([
+      {
+        appointment_id: appointmentId,
+        old_time: oldTime,
+        new_time: null,
+        reason: `Cancelled: ${reason}`,
+      },
+    ]);
+
+    return true;
+  } catch (err) {
+    console.warn('Cancel exception:', err);
+    return false;
+  }
+}
+
+export async function rescheduleAppointmentDb(params: {
+  appointmentId: string;
+  newTimeIso: string;
+  reason: string;
+}): Promise<boolean> {
+  try {
+    const { data: currentAppt } = await supabase
+      .from('appointments')
+      .select('scheduled_time')
+      .eq('id', params.appointmentId)
+      .single();
+
+    const oldTime = currentAppt?.scheduled_time || new Date().toISOString();
+
+    const { error } = await supabase
+      .from('appointments')
+      .update({
+        scheduled_time: params.newTimeIso,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', params.appointmentId);
+
+    if (error) {
+      console.warn('Error rescheduling appointment:', error);
+      return false;
+    }
+
+    await supabase.from('appointment_logs').insert([
+      {
+        appointment_id: params.appointmentId,
+        old_time: oldTime,
+        new_time: params.newTimeIso,
+        reason: params.reason || 'Staff rescheduled appointment',
+      },
+    ]);
+
+    return true;
+  } catch (err) {
+    console.warn('Reschedule exception:', err);
+    return false;
+  }
+}
+
+export async function swapPatientSlotsDb(params: {
+  patientAId: string;
+  patientBId: string;
+  slotAOriginalIso: string;
+  slotBOriginalIso: string;
+  reason: string;
+}): Promise<boolean> {
+  try {
+    const { error: errB } = await supabase
+      .from('appointments')
+      .update({
+        scheduled_time: params.slotAOriginalIso,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', params.patientBId);
+
+    const { error: errA } = await supabase
+      .from('appointments')
+      .update({
+        scheduled_time: params.slotBOriginalIso,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', params.patientAId);
+
+    if (errA || errB) {
+      console.warn('Error swapping slots in DB:', errA || errB);
+      return false;
+    }
+
+    await supabase.from('appointment_logs').insert([
+      {
+        appointment_id: params.patientAId,
+        old_time: params.slotAOriginalIso,
+        new_time: params.slotBOriginalIso,
+        reason: `${params.reason} (Shifted to allow ready patient consult)`,
+      },
+      {
+        appointment_id: params.patientBId,
+        old_time: params.slotBOriginalIso,
+        new_time: params.slotAOriginalIso,
+        reason: `Fast-tracked to consult earlier slot (${params.reason})`,
+      },
+    ]);
+
+    return true;
+  } catch (err) {
+    console.warn('Swap exception:', err);
+    return false;
+  }
+}
+
+export async function cascadeDoctorDelayDb(
+  waitingAppointmentIds: string[],
+  delayMinutes: number,
+  reason: string = 'Doctor Delay'
+): Promise<boolean> {
+  try {
+    for (const apptId of waitingAppointmentIds) {
+      const { data: appt } = await supabase
+        .from('appointments')
+        .select('scheduled_time')
+        .eq('id', apptId)
+        .single();
+
+      if (appt && appt.scheduled_time) {
+        const currentDate = new Date(appt.scheduled_time);
+        const newDate = new Date(currentDate.getTime() + delayMinutes * 60000);
+        const newIso = newDate.toISOString();
+
+        await supabase
+          .from('appointments')
+          .update({
+            scheduled_time: newIso,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', apptId);
+
+        await supabase.from('appointment_logs').insert([
+          {
+            appointment_id: apptId,
+            old_time: appt.scheduled_time,
+            new_time: newIso,
+            reason: `Doctor Delay (+${delayMinutes}m): ${reason}`,
+          },
+        ]);
+      }
+    }
+    return true;
+  } catch (err) {
+    console.warn('Cascade delay exception:', err);
     return false;
   }
 }

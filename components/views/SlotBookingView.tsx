@@ -23,6 +23,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarDays,
+  LayoutGrid,
 } from 'lucide-react';
 import { Patient, ConfirmedToken } from '@/types';
 import { DbDoctor } from '@/types/database';
@@ -33,6 +34,7 @@ import {
   SlotItem,
   subscribeToClinicUpdates,
 } from '@/lib/supabaseService';
+import { useClinic } from '@/context/ClinicContext';
 
 interface DoctorSearchComboboxProps {
   doctors: DbDoctor[];
@@ -427,6 +429,28 @@ export function SlotBookingView({
   onBackToGateway,
   isStandalone = false,
 }: SlotBookingViewProps) {
+  const { config } = useClinic();
+  const [pickerMode, setPickerMode] = useState<'grid' | 'standard'>('grid');
+  const [standardDate, setStandardDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [standardTime, setStandardTime] = useState('09:30');
+
+  useEffect(() => {
+    if (config?.use_standard_date_picker !== undefined) {
+      setPickerMode(config.use_standard_date_picker ? 'standard' : 'grid');
+    }
+  }, [config?.use_standard_date_picker]);
+
+  const convertTo12Hour = (time24: string) => {
+    if (!time24) return '';
+    const [hStr, mStr] = time24.split(':');
+    let hour = parseInt(hStr, 10);
+    const minute = mStr || '00';
+    const meridiem = hour >= 12 ? 'PM' : 'AM';
+    if (hour === 0) hour = 12;
+    else if (hour > 12) hour -= 12;
+    return `${String(hour).padStart(2, '0')}:${minute} ${meridiem}`;
+  };
+
   const [selectedPeriod, setSelectedPeriod] = useState<'All' | 'Morning' | 'Afternoon' | 'Evening'>('All');
   const dateScrollRef = useRef<HTMLDivElement>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);

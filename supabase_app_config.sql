@@ -39,6 +39,7 @@ INSERT INTO public.app_config (key, value, category, description) VALUES
   ('late_grace_period_mins', '15', 'Queue & Patient Logistics', 'Window of time a late patient retains their queue position before being flagged for slot reallocation.'),
   ('auto_move_unattended', 'false', 'Queue & Patient Logistics', 'Automatically shifts no-show or late patients to the end of the daily queue after grace period expires.'),
   ('max_advance_booking_days', '7', 'Queue & Patient Logistics', 'Maximum number of days in advance a patient can book an appointment slot via WhatsApp link.'),
+  ('use_standard_date_picker', 'false', 'Queue & Patient Logistics', 'Toggle between standard calendar date picker and interactive time block grid for slot selection.'),
 
   -- 4. WhatsApp & Communication Automation
   ('enable_whatsapp_autoresponder', 'true', 'WhatsApp & Communication Automation', 'Enables auto-replying with a self-service booking web link when a patient texts the clinic phone number.'),
