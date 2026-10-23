@@ -65,6 +65,8 @@ import { DoctorAuthModal } from '@/components/auth/DoctorAuthModal';
 import { WalkinRegisterModal } from '@/components/modals/WalkinRegisterModal';
 import { PrescriptionPrintModal } from '@/components/modals/PrescriptionPrintModal';
 import { NotificationModal, NotificationState } from '@/components/modals/NotificationModal';
+import { FloatingChatButton } from '@/components/chat/FloatingChatButton';
+import { DoctorChatModal } from '@/components/chat/DoctorChatModal';
 import { validateMobileNumber } from '@/lib/phoneValidation';
 
 // Screen Views
@@ -305,6 +307,9 @@ function DashboardContent() {
     diagnostics: string;
     items: PrescriptionItem[];
   } | null>(null);
+
+  // Doctor Chat & Dynamic Slot Booking modal state
+  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
 
   const navItems: NavItemConfig[] = [
     { id: 'dashboard', label: 'Dashboard', icon: Home, reqAuth: false },
@@ -1346,6 +1351,30 @@ function DashboardContent() {
         notification={notification}
         onClose={() => setNotification(null)}
       />
+
+      {/* Floating Doctor Chat Component & Dynamic Slot Timetable Desk */}
+      {!isLoading && portalMode === 'dashboard' && (
+        <>
+          <FloatingChatButton
+            isOpen={isChatModalOpen}
+            unreadCount={2}
+            onToggle={() => setIsChatModalOpen((prev) => !prev)}
+          />
+          <DoctorChatModal
+            isOpen={isChatModalOpen}
+            onClose={() => setIsChatModalOpen(false)}
+            availableDoctors={availableDoctors}
+            currentDoctorName={effectiveDoctorProfile.name}
+            onBookingSuccess={() => {
+              fetchQueueFromDb().then((dbQueue) => {
+                if (dbQueue) {
+                  setQueue(sortQueueWithCompletedAtEnd(dbQueue));
+                }
+              });
+            }}
+          />
+        </>
+      )}
     </>
   );
 }
