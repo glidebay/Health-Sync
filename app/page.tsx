@@ -21,6 +21,7 @@ import {
   fetchQueueFromDb,
   fetchInventoryFromDb,
   registerWalkinPatientDb,
+  bookAppointmentSlotDb,
   reallocateSlotDb,
   updateAppointmentStatusDb,
   completeConsultationDb,
@@ -58,6 +59,8 @@ import { NavigationDock } from '@/components/layout/NavigationDock';
 import { DoctorAuthModal } from '@/components/auth/DoctorAuthModal';
 import { WalkinRegisterModal } from '@/components/modals/WalkinRegisterModal';
 import { PrescriptionPrintModal } from '@/components/modals/PrescriptionPrintModal';
+import { NotificationModal, NotificationState } from '@/components/modals/NotificationModal';
+import { validateMobileNumber } from '@/lib/phoneValidation';
 
 // Screen Views
 import { GatewayScreen } from '@/components/views/GatewayScreen';
@@ -101,10 +104,18 @@ function DashboardContent() {
   const [bookGender, setBookGender] = useState<'Male' | 'Female' | 'Other'>('Male');
   const [bookPriority, setBookPriority] = useState<'Normal' | 'Urgent'>('Normal');
   const [bookDoctorId, setBookDoctorId] = useState('');
+  const [bookDate, setBookDate] = useState<string>('');
   const [bookSlotTime, setBookSlotTime] = useState('09:30 AM');
   const [bookReason, setBookReason] = useState('General Consultation');
   const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
   const [confirmedToken, setConfirmedToken] = useState<ConfirmedToken | null>(null);
+
+  // Initialize date client-side to prevent Next.js prerender timing evaluation issues
+  useEffect(() => {
+    const today = new Date();
+    const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    setBookDate(ymd);
+  }, []);
 
   // Auto-close sidebar on mobile
   useEffect(() => {
@@ -253,6 +264,13 @@ function DashboardContent() {
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Clean Custom Notification Modal state
+  const [notification, setNotification] = useState<NotificationState | null>(null);
+
+  const showNotification = (notif: Omit<NotificationState, 'isOpen'>) => {
+    setNotification({ ...notif, isOpen: true });
+  };
 
   // Walk-in modal state
   const [showWalkinModal, setShowWalkinModal] = useState(false);
@@ -423,12 +441,22 @@ function DashboardContent() {
     e.preventDefault();
     if (!walkinName.trim() || !walkinAge) return;
 
+    const phoneValidation = validateMobileNumber(walkinPhone);
+    if (!phoneValidation.isValid) {
+      showNotification({
+        type: 'warning',
+        title: 'Mobile Number Required',
+        message: phoneValidation.errorMessage || 'A valid mobile number is mandatory to register a walk-in patient.',
+      });
+      return;
+    }
+
     const ageNum = parseInt(walkinAge, 10);
     const dbPat = await registerWalkinPatientDb({
       name: walkinName.trim(),
       age: ageNum,
       gender: walkinGender,
-      phone: walkinPhone.trim() || undefined,
+      phone: walkinPhone.trim(),
       priority: 'Normal',
     });
 
@@ -450,51 +478,83 @@ function DashboardContent() {
     e.preventDefault();
     if (!bookName.trim()) return;
 
+    const phoneValidation = validateMobileNumber(bookPhone);
+    if (!phoneValidation.isValid) {
+      showNotification({
+        type: 'warning',
+        title: 'Mobile Number Required',
+        message: phoneValidation.errorMessage || 'A valid mobile number is mandatory to book an appointment slot.',
+      });
+      return;
+    }
+
     setIsBookingSubmitting(true);
     try {
-      const selectedDoc = availableDoctors.find((d) => d.id === bookDoctorId);
+      const selectedDoc =
+        availableDoctors.find((d) => d.id === bookDoctorId) || availableDoctors[0];
+      const docId = selectedDoc?.id || bookDoctorId;
       const docName = selectedDoc?.full_name || doctorProfile.name || 'Dr. Sunny';
 
-      const dbPat = await registerWalkinPatientDb({
+      const finalBookingDate =
+        bookDate ||
+        (() => {
+          const today = new Date();
+          return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        })();
+
+      // Call unified backend Supabase booking
+      const bookingRes = await bookAppointmentSlotDb({
+        name: bookName.trim(),
+        phone: bookPhone.trim(),
+        age: parseInt(bookAge, 10) || 28,
+        gender: bookGender,
+        priority: bookPriority,
+        doctorId: docId,
+        date: finalBookingDate,
+        slotTime: bookSlotTime,
+        reason: bookReason,
+      });
+
+      if (!bookingRes.success) {
+        const msg = bookingRes.message || 'The selected slot could not be booked. Please choose another available slot.';
+        const isQuotaReached = msg.toLowerCase().includes('quota');
+        const canSwitchUrgent = msg.toLowerCase().includes('urgent');
+
+        showNotification({
+          type: 'warning',
+          title: isQuotaReached ? 'Doctor Daily Quota Reached' : 'Slot Booking Notice',
+          message: msg,
+          actionLabel: canSwitchUrgent ? 'Urgent Priority' : undefined,
+          onAction: canSwitchUrgent ? () => setBookPriority('Urgent') : undefined,
+        });
+        setIsBookingSubmitting(false);
+        return;
+      }
+
+      const newTokNum = String(
+        bookingRes.tokenNumber || `P${String(queue.length + 1).padStart(3, '0')}`
+      );
+
+      const newPatient: Patient = {
+        id: bookingRes.appointmentId || `P-${String(Date.now()).slice(-4)}`,
         name: bookName.trim(),
         age: parseInt(bookAge, 10) || 28,
         gender: bookGender,
-        phone: bookPhone.trim() || undefined,
+        phone: bookPhone.trim(),
+        status: 'Waiting',
+        time: bookSlotTime || 'Now',
+        appointmentDate: finalBookingDate,
+        tokenNumber: newTokNum,
         priority: bookPriority,
-      });
+      };
 
-      const newTokNum =
-        dbPat?.displayId ||
-        (dbPat?.tokenNumber
-          ? `P${String(dbPat.tokenNumber).padStart(3, '0')}`
-          : `P${String(queue.length + 1).padStart(3, '0')}`);
-
-      if (dbPat) {
-        setQueue((prev) => [
-          {
-            ...dbPat,
-            time: bookSlotTime || dbPat.time,
-          },
-          ...prev,
-        ]);
-      } else {
-        const fallbackId = `P-${String(Date.now()).slice(-4)}`;
-        const fallbackPatient: Patient = {
-          id: fallbackId,
-          name: bookName.trim(),
-          age: parseInt(bookAge, 10) || 28,
-          gender: bookGender,
-          phone: bookPhone.trim(),
-          status: 'Waiting',
-          time: bookSlotTime || 'Now',
-        };
-        setQueue((prev) => [fallbackPatient, ...prev]);
-      }
+      setQueue((prev) => [newPatient, ...prev]);
 
       setConfirmedToken({
         tokenNumber: newTokNum,
         name: bookName.trim(),
         time: bookSlotTime,
+        date: finalBookingDate,
         phone: bookPhone.trim(),
         doctorName: docName,
         priority: bookPriority,
@@ -592,14 +652,22 @@ function DashboardContent() {
     if (!med) return;
 
     if (qtyNum > med.stock) {
-      alert(`Only ${med.stock} units available in pharmacy.`);
+      showNotification({
+        type: 'warning',
+        title: 'Pharmacy Stock Notice',
+        message: `Only ${med.stock} units available in pharmacy for ${med.brand || med.generic || 'this medicine'}.`,
+      });
       return;
     }
 
     const existing = currentPrescription.find((p) => String(p.med.id) === String(med.id));
     if (existing) {
       if (existing.qty + qtyNum > med.stock) {
-        alert(`Combined total exceeds available stock of ${med.stock}.`);
+        showNotification({
+          type: 'warning',
+          title: 'Stock Exceeded',
+          message: `Combined prescription total exceeds available stock of ${med.stock} units.`,
+        });
         return;
       }
       setCurrentPrescription((prev) =>
@@ -768,6 +836,8 @@ function DashboardContent() {
           setBookPriority={setBookPriority}
           bookDoctorId={bookDoctorId}
           setBookDoctorId={setBookDoctorId}
+          bookDate={bookDate}
+          setBookDate={setBookDate}
           bookSlotTime={bookSlotTime}
           setBookSlotTime={setBookSlotTime}
           bookReason={bookReason}
@@ -948,6 +1018,8 @@ function DashboardContent() {
                     setBookPriority={setBookPriority}
                     bookDoctorId={bookDoctorId}
                     setBookDoctorId={setBookDoctorId}
+                    bookDate={bookDate}
+                    setBookDate={setBookDate}
                     bookSlotTime={bookSlotTime}
                     setBookSlotTime={setBookSlotTime}
                     bookReason={bookReason}
@@ -1129,6 +1201,12 @@ function DashboardContent() {
             : 'Enter doctor security PIN to unlock access'
         }
         buttonText={portalMode === 'gateway' ? 'Unlock Dashboard' : 'Verify & Access'}
+      />
+
+      {/* Clean Custom Notification Popup */}
+      <NotificationModal
+        notification={notification}
+        onClose={() => setNotification(null)}
       />
     </>
   );

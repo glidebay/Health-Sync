@@ -8,6 +8,7 @@ import {
   DbPrescribedMedication,
   AppointmentWithPatient
 } from '@/types/database';
+import { AVAILABLE_SLOTS } from '@/lib/constants';
 
 export interface FormattedQueuePatient {
   id: string;
@@ -1047,4 +1048,336 @@ export async function searchPatientsDb(query: string): Promise<DbPatient[]> {
     return [];
   }
 }
+
+export interface SlotItem {
+  time: string;
+  period: 'Morning' | 'Afternoon' | 'Evening';
+  isBooked: boolean;
+  scheduledTime?: string;
+}
+
+export interface DoctorSlotsResult {
+  slots: SlotItem[];
+  availableCount: number;
+  bookedCount: number;
+  lockedAndHiddenCount: number;
+  dailyQuota: number;
+  date: string;
+}
+
+export function parseTimeToMinutes(timeStr: string): number {
+  const parts = timeStr.trim().split(' ');
+  const time = parts[0];
+  const modifier = parts[1] ? parts[1].toUpperCase() : 'AM';
+  let [hours, minutes] = time.split(':').map((v) => parseInt(v, 10));
+  if (isNaN(hours)) hours = 0;
+  if (isNaN(minutes)) minutes = 0;
+  if (modifier === 'PM' && hours < 12) hours += 12;
+  if (modifier === 'AM' && hours === 12) hours = 0;
+  return hours * 60 + minutes;
+}
+
+export function getSlotPeriod(timeStr: string): 'Morning' | 'Afternoon' | 'Evening' {
+  const mins = parseTimeToMinutes(timeStr);
+  if (mins < 12 * 60) return 'Morning';
+  if (mins < 17 * 60) return 'Afternoon';
+  return 'Evening';
+}
+
+export function formatSlotToIso(dateStr: string, slotTime: string): string {
+  const parts = slotTime.trim().split(' ');
+  const time = parts[0];
+  const modifier = parts[1] ? parts[1].toUpperCase() : 'AM';
+  let [hours, minutes] = time.split(':').map((v) => parseInt(v, 10));
+  if (isNaN(hours)) hours = 9;
+  if (isNaN(minutes)) minutes = 0;
+  if (modifier === 'PM' && hours < 12) hours += 12;
+  if (modifier === 'AM' && hours === 12) hours = 0;
+  const padH = String(hours).padStart(2, '0');
+  const padM = String(minutes).padStart(2, '0');
+  return `${dateStr}T${padH}:${padM}:00+00:00`;
+}
+
+export async function getDoctorSlotsForDate(
+  doctorId: string,
+  dateStr: string
+): Promise<DoctorSlotsResult> {
+  try {
+    if (!doctorId || !dateStr) {
+      const fallback = AVAILABLE_SLOTS.map((s) => ({
+        time: s.time,
+        period: s.period,
+        isBooked: false,
+      }));
+      return {
+        slots: fallback,
+        availableCount: fallback.length,
+        bookedCount: 0,
+        lockedAndHiddenCount: 0,
+        dailyQuota: 30,
+        date: dateStr,
+      };
+    }
+
+    // 1. Fetch booked appointments for this doctor on this date from Supabase
+    const { data: bookedAppointments } = await supabase
+      .from('appointments')
+      .select('scheduled_time, status')
+      .eq('doctor_id', doctorId)
+      .neq('status', 'Cancelled')
+      .neq('status', 'Reallocated');
+
+    const bookedTimeLabels = new Set<string>();
+    if (bookedAppointments && bookedAppointments.length > 0) {
+      for (const appt of bookedAppointments) {
+        if (!appt.scheduled_time) continue;
+
+        // Check if appointment falls on target dateStr (supports UTC or local)
+        const d = new Date(appt.scheduled_time);
+        const ymdUtc = d.toISOString().slice(0, 10);
+        const ymdLocal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const rawStarts = appt.scheduled_time.startsWith(dateStr);
+
+        if (ymdUtc === dateStr || ymdLocal === dateStr || rawStarts) {
+          const match = appt.scheduled_time.match(/T(\d{2}):(\d{2})/);
+          if (match) {
+            let h = parseInt(match[1], 10);
+            const m = match[2];
+            const mod = h >= 12 ? 'PM' : 'AM';
+            if (h > 12) h -= 12;
+            if (h === 0) h = 12;
+            bookedTimeLabels.add(`${String(h).padStart(2, '0')}:${m} ${mod}`);
+            bookedTimeLabels.add(`${h}:${m} ${mod}`);
+          }
+
+          const timeUtc = d.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+            timeZone: 'UTC',
+          });
+          bookedTimeLabels.add(timeUtc);
+
+          const timeLocal = d.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          });
+          bookedTimeLabels.add(timeLocal);
+        }
+      }
+    }
+
+    // 2. Fetch available slots using Supabase get_available_slots RPC
+    const { data: rpcData } = await supabase.rpc('get_available_slots', {
+      p_doctor_id: doctorId,
+      p_date: dateStr,
+    });
+
+    const rpcAvailableList = (rpcData?.available_slots as any[]) || [];
+
+    // 3. Build unified slots map
+    const slotMap = new Map<
+      string,
+      { time: string; period: 'Morning' | 'Afternoon' | 'Evening'; scheduledTime?: string; isBooked: boolean }
+    >();
+
+    // Add RPC doctor schedule slots
+    if (rpcAvailableList.length > 0) {
+      for (const s of rpcAvailableList) {
+        const timeLabel = s.time_label || s.slot_time || s.time;
+        if (!timeLabel) continue;
+        const period = getSlotPeriod(timeLabel);
+        slotMap.set(timeLabel, {
+          time: timeLabel,
+          period,
+          scheduledTime: s.scheduled_time || s.timestamp,
+          isBooked: false,
+        });
+      }
+    }
+
+    // Merge standard clinic slots so Afternoon / Evening are always accessible
+    for (const s of AVAILABLE_SLOTS) {
+      if (!slotMap.has(s.time)) {
+        slotMap.set(s.time, {
+          time: s.time,
+          period: s.period,
+          scheduledTime: formatSlotToIso(dateStr, s.time),
+          isBooked: false,
+        });
+      }
+    }
+
+    // Mark any slot that has an active booking as isBooked: true
+    for (const bt of bookedTimeLabels) {
+      if (slotMap.has(bt)) {
+        slotMap.get(bt)!.isBooked = true;
+      } else {
+        // If booked time label was formatted slightly differently (e.g. 9:00 AM vs 09:00 AM)
+        let foundKey: string | null = null;
+        for (const [key] of slotMap.entries()) {
+          if (parseTimeToMinutes(key) === parseTimeToMinutes(bt)) {
+            foundKey = key;
+            break;
+          }
+        }
+        if (foundKey) {
+          slotMap.get(foundKey)!.isBooked = true;
+        } else {
+          slotMap.set(bt, {
+            time: bt,
+            period: getSlotPeriod(bt),
+            scheduledTime: formatSlotToIso(dateStr, bt),
+            isBooked: true,
+          });
+        }
+      }
+    }
+
+    const allSlots = Array.from(slotMap.values()).sort(
+      (a, b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time)
+    );
+
+    let availableCount = 0;
+    let bookedCount = 0;
+
+    for (const slot of allSlots) {
+      if (slot.isBooked) {
+        bookedCount++;
+      } else {
+        availableCount++;
+      }
+    }
+
+    return {
+      slots: allSlots,
+      availableCount,
+      bookedCount,
+      lockedAndHiddenCount: rpcData?.locked_and_hidden_slots || bookedCount,
+      dailyQuota: rpcData?.daily_quota || 30,
+      date: dateStr,
+    };
+  } catch (err) {
+    console.error('getDoctorSlotsForDate error:', err);
+    const fallback = AVAILABLE_SLOTS.map((s) => ({
+      time: s.time,
+      period: s.period,
+      isBooked: false,
+    }));
+    return {
+      slots: fallback,
+      availableCount: fallback.length,
+      bookedCount: 0,
+      lockedAndHiddenCount: 0,
+      dailyQuota: 30,
+      date: dateStr,
+    };
+  }
+}
+
+export interface BookAppointmentSlotParams {
+  name: string;
+  phone?: string;
+  age: number;
+  gender: 'Male' | 'Female' | 'Other';
+  priority: 'Normal' | 'Urgent';
+  doctorId: string;
+  date: string;
+  slotTime: string;
+  reason?: string;
+}
+
+export interface BookAppointmentSlotResult {
+  success: boolean;
+  appointmentId?: string;
+  patientId?: string;
+  tokenNumber?: string | number;
+  message?: string;
+  error?: string;
+}
+
+export async function bookAppointmentSlotDb(
+  params: BookAppointmentSlotParams
+): Promise<BookAppointmentSlotResult> {
+  try {
+    const rawPhone = params.phone ? params.phone.trim() : '';
+    const cleanPhone =
+      rawPhone.replace(/[^0-9]/g, '').length >= 10
+        ? rawPhone
+        : `98460${String(Date.now()).slice(-5)}`;
+
+    const scheduledTime = formatSlotToIso(params.date, params.slotTime);
+
+    // Call unified backend RPC: register_walk_in_patient
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      'register_walk_in_patient',
+      {
+        p_full_name: params.name.trim(),
+        p_phone_number: cleanPhone,
+        p_doctor_id: params.doctorId,
+        p_scheduled_time: scheduledTime,
+        p_age: params.age || 28,
+        p_gender: params.gender || 'Male',
+        p_priority: params.priority || 'Normal',
+      }
+    );
+
+    if (rpcError) {
+      console.warn('register_walk_in_patient RPC error:', rpcError.message);
+    } else if (rpcData) {
+      if (rpcData.success === false) {
+        return {
+          success: false,
+          error: rpcData.error_code || 'SLOT_TAKEN',
+          message: rpcData.error_message || 'Target slot is already booked and locked.',
+        };
+      }
+
+      const fifoNo = rpcData.fifo_token_no || 1;
+      const tokenNumber = `P${String(fifoNo).padStart(3, '0')}`;
+
+      return {
+        success: true,
+        tokenNumber,
+        appointmentId: rpcData.unique_appointment_id,
+        patientId: rpcData.unique_patient_id,
+        message: rpcData.message || 'Slot confirmed successfully!',
+      };
+    }
+
+    // Fallback direct insertion if RPC had network issue
+    const regPatient = await registerWalkinPatientDb({
+      name: params.name,
+      age: params.age,
+      gender: params.gender,
+      phone: params.phone,
+      priority: params.priority,
+    });
+
+    if (regPatient) {
+      return {
+        success: true,
+        tokenNumber: regPatient.displayId || regPatient.tokenNumber,
+        appointmentId: regPatient.id,
+        patientId: regPatient.patientDbId,
+        message: 'Appointment booked successfully',
+      };
+    }
+
+    return {
+      success: false,
+      error: 'BOOKING_FAILED',
+      message: 'Failed to record booking in database',
+    };
+  } catch (err: any) {
+    console.error('bookAppointmentSlotDb exception:', err);
+    return {
+      success: false,
+      error: 'EXCEPTION',
+      message: err.message || 'An unexpected error occurred while booking the slot',
+    };
+  }
+}
+
 

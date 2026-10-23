@@ -10,6 +10,7 @@ export interface Patient {
   phone?: string;
   status: PatientStatus;
   time: string;
+  appointmentDate?: string;
   tokenNumber?: number | string;
   patientNumber?: number;
   displayId?: string;
@@ -61,6 +62,7 @@ export interface ConfirmedToken {
   tokenNumber: number | string;
   name: string;
   time: string;
+  date?: string;
   phone?: string;
   doctorName: string;
   priority: string;

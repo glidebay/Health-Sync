@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   HeartPulse,
@@ -8,6 +8,7 @@ import {
   Clock,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   User,
   Check,
   PlusCircle,
@@ -18,10 +19,20 @@ import {
   Phone,
   ChevronDown,
   X,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
 } from 'lucide-react';
 import { Patient, ConfirmedToken } from '@/types';
 import { DbDoctor } from '@/types/database';
 import { AVAILABLE_SLOTS, QUICK_SYMPTOMS } from '@/lib/constants';
+import { validateMobileNumber } from '@/lib/phoneValidation';
+import {
+  getDoctorSlotsForDate,
+  SlotItem,
+  subscribeToClinicUpdates,
+} from '@/lib/supabaseService';
 
 interface DoctorSearchComboboxProps {
   doctors: DbDoctor[];
@@ -134,8 +145,8 @@ function DoctorSearchCombobox({
           inputRef.current?.focus();
         }}
         className={`w-full flex items-center gap-2.5 px-3 sm:px-3.5 h-11 sm:h-12 bg-[#F8F9FB] border rounded-xl text-xs sm:text-sm cursor-text transition-all duration-150 ${isOpen
-            ? 'border-[#2563EB] ring-2 ring-blue-500/10 bg-white shadow-xs'
-            : 'border-[#ECEEF2] hover:border-gray-300'
+          ? 'border-[#2563EB] ring-2 ring-blue-500/10 bg-white shadow-xs'
+          : 'border-[#ECEEF2] hover:border-gray-300'
           }`}
       >
         <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB] flex-shrink-0">
@@ -218,10 +229,10 @@ function DoctorSearchCombobox({
                       onClick={() => handleSelect(doc)}
                       onMouseEnter={() => setHighlightedIndex(idx)}
                       className={`px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-lg flex items-center justify-between gap-2.5 text-xs cursor-pointer transition-colors ${isSelected
-                          ? 'bg-blue-50 text-[#2563EB]'
-                          : isHighlighted
-                            ? 'bg-[#F4F5F7]'
-                            : 'hover:bg-[#F8F9FB]'
+                        ? 'bg-blue-50 text-[#2563EB]'
+                        : isHighlighted
+                          ? 'bg-[#F4F5F7]'
+                          : 'hover:bg-[#F8F9FB]'
                         }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -259,11 +270,110 @@ function DoctorSearchCombobox({
   );
 }
 
+export interface DateOption {
+  dateString: string;
+  dayOfWeek: string;
+  dayNumber: string;
+  monthName: string;
+  isToday: boolean;
+  isTomorrow: boolean;
+  isWeekend: boolean;
+  formattedLabel: string;
+  shortLabel: string;
+}
+
+export function formatYMDToDisplay(ymd?: string): string {
+  if (!ymd) return 'Today';
+  const parts = ymd.split('-');
+  if (parts.length !== 3) return ymd;
+  const monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  const mIndex = parseInt(parts[1], 10) - 1;
+  const monthStr = monthNames[mIndex] || parts[1];
+  return `${parseInt(parts[2], 10)} ${monthStr} ${parts[0]}`;
+}
+
+export function getBookingDates(selectedDateStr?: string, baseDate?: Date): DateOption[] {
+  const dates: DateOption[] = [];
+  const today = baseDate ? new Date(baseDate) : new Date();
+
+  const formatYMD = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  const monthNames = [
+    'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+    'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
+  ];
+
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+    const dateString = formatYMD(d);
+    const dayIndex = d.getDay();
+    const dayOfWeek = dayNames[dayIndex];
+    const dayNumber = String(d.getDate()).padStart(2, '0');
+    const monthName = monthNames[d.getMonth()];
+    const isToday = i === 0;
+    const isTomorrow = i === 1;
+    const isWeekend = dayIndex === 0 || dayIndex === 6;
+
+    const formattedLabel = `${dayOfWeek}, ${d.getDate()} ${monthName} ${d.getFullYear()}`;
+
+    const shortLabel = isToday
+      ? `Today, ${d.getDate()} ${monthName}`
+      : isTomorrow
+        ? `Tomorrow, ${d.getDate()} ${monthName}`
+        : `${dayOfWeek}, ${d.getDate()} ${monthName}`;
+
+    dates.push({
+      dateString,
+      dayOfWeek,
+      dayNumber,
+      monthName,
+      isToday,
+      isTomorrow,
+      isWeekend,
+      formattedLabel,
+      shortLabel,
+    });
+  }
+
+  if (selectedDateStr && !dates.some((d) => d.dateString === selectedDateStr)) {
+    const [y, m, d] = selectedDateStr.split('-').map(Number);
+    if (y && m && d) {
+      const customD = new Date(y, m - 1, d);
+      const dayIndex = customD.getDay();
+      const monthName = monthNames[customD.getMonth()] || '';
+      dates.push({
+        dateString: selectedDateStr,
+        dayOfWeek: dayNames[dayIndex] || 'DAY',
+        dayNumber: String(customD.getDate()).padStart(2, '0'),
+        monthName,
+        isToday: false,
+        isTomorrow: false,
+        isWeekend: dayIndex === 0 || dayIndex === 6,
+        formattedLabel: `${dayNames[dayIndex]}, ${customD.getDate()} ${monthName} ${customD.getFullYear()}`,
+        shortLabel: `${dayNames[dayIndex]}, ${customD.getDate()} ${monthName}`,
+      });
+    }
+  }
+
+  return dates;
+}
+
 interface SlotBookingViewProps {
   queue: Patient[];
   waitingPatientsCount?: number;
   doctorProfile?: { name: string; title: string };
   availableDoctors: DbDoctor[];
+  bookDate?: string;
+  setBookDate?: (v: string) => void;
   bookName: string;
   setBookName: (v: string) => void;
   bookPhone: string;
@@ -292,6 +402,8 @@ interface SlotBookingViewProps {
 export function SlotBookingView({
   queue,
   availableDoctors,
+  bookDate,
+  setBookDate,
   bookName,
   setBookName,
   bookPhone,
@@ -316,10 +428,168 @@ export function SlotBookingView({
   isStandalone = false,
 }: SlotBookingViewProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<'All' | 'Morning' | 'Afternoon' | 'Evening'>('All');
+  const dateScrollRef = useRef<HTMLDivElement>(null);
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const phoneInputRef = useRef<HTMLInputElement>(null);
+  const ageInputRef = useRef<HTMLInputElement>(null);
 
-  const filteredSlots = AVAILABLE_SLOTS.filter(
-    (slot) => selectedPeriod === 'All' || slot.period === selectedPeriod
+  const [internalDate, setInternalDate] = useState<string>('');
+  const [todayMinDate, setTodayMinDate] = useState<string>('');
+  const [dateOptions, setDateOptions] = useState<DateOption[]>([]);
+
+  const activeDate = bookDate || internalDate;
+
+  // Defer date calculation to useEffect to eliminate any new Date() evaluation during Next.js prerender
+  useEffect(() => {
+    const now = new Date();
+    const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    setTodayMinDate(ymd);
+
+    const targetDate = bookDate || internalDate || ymd;
+    if (!bookDate && !internalDate) {
+      setInternalDate(ymd);
+    }
+    setDateOptions(getBookingDates(targetDate, now));
+  }, [bookDate, internalDate]);
+
+  const handleDateChange = (dateStr: string) => {
+    if (setBookDate) {
+      setBookDate(dateStr);
+    } else {
+      setInternalDate(dateStr);
+    }
+    const now = new Date();
+    setDateOptions(getBookingDates(dateStr, now));
+  };
+
+  const currentDateOption = useMemo(
+    () => (activeDate ? dateOptions.find((d) => d.dateString === activeDate) : null) || dateOptions[0] || null,
+    [dateOptions, activeDate]
   );
+
+  const scrollDates = (direction: 'left' | 'right') => {
+    if (dateScrollRef.current) {
+      const offset = direction === 'left' ? -240 : 240;
+      dateScrollRef.current.scrollBy({ left: offset, behavior: 'smooth' });
+    }
+  };
+
+  const [slots, setSlots] = useState<SlotItem[]>([]);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [slotsSummary, setSlotsSummary] = useState<{
+    availableCount: number;
+    bookedCount: number;
+    dailyQuota: number;
+  }>({ availableCount: 0, bookedCount: 0, dailyQuota: 30 });
+
+  const effectiveDoctorId = bookDoctorId || (availableDoctors[0]?.id ?? '');
+
+  const loadDoctorSlots = useCallback(async () => {
+    if (!effectiveDoctorId || !activeDate) return;
+    setIsLoadingSlots(true);
+    try {
+      const res = await getDoctorSlotsForDate(effectiveDoctorId, activeDate);
+      setSlots(res.slots);
+      setSlotsSummary({
+        availableCount: res.availableCount,
+        bookedCount: res.bookedCount,
+        dailyQuota: res.dailyQuota,
+      });
+
+      // If the currently selected bookSlotTime is already booked on this doctor/date, switch to first open slot
+      const currentSelected = res.slots.find((s) => s.time === bookSlotTime);
+      if (currentSelected?.isBooked) {
+        const firstAvailable = res.slots.find((s) => !s.isBooked);
+        if (firstAvailable) {
+          setBookSlotTime(firstAvailable.time);
+        }
+      }
+    } catch (err) {
+      console.warn('Error fetching slots for doctor/date:', err);
+    } finally {
+      setIsLoadingSlots(false);
+    }
+  }, [effectiveDoctorId, activeDate, bookSlotTime, setBookSlotTime]);
+
+  useEffect(() => {
+    loadDoctorSlots();
+  }, [loadDoctorSlots]);
+
+  // Real-time synchronization whenever appointments change in Supabase
+  useEffect(() => {
+    const unsub = subscribeToClinicUpdates(() => {
+      loadDoctorSlots();
+    });
+    return () => unsub();
+  }, [loadDoctorSlots]);
+
+  // Refresh slots when an appointment is booked and token is confirmed
+  useEffect(() => {
+    if (confirmedToken) {
+      loadDoctorSlots();
+    }
+  }, [confirmedToken, loadDoctorSlots]);
+
+  const currentSlots = useMemo(() => {
+    if (slots.length > 0) return slots;
+    return AVAILABLE_SLOTS.map((s) => ({
+      time: s.time,
+      period: s.period,
+      isBooked: false,
+    }));
+  }, [slots]);
+
+  const filteredSlots = useMemo(() => {
+    if (selectedPeriod === 'All') return currentSlots;
+    return currentSlots.filter((slot) => slot.period === selectedPeriod);
+  }, [currentSlots, selectedPeriod]);
+
+  const periodCounts = useMemo(() => {
+    return {
+      All: currentSlots.length,
+      Morning: currentSlots.filter((s) => s.period === 'Morning').length,
+      Afternoon: currentSlots.filter((s) => s.period === 'Afternoon').length,
+      Evening: currentSlots.filter((s) => s.period === 'Evening').length,
+    };
+  }, [currentSlots]);
+
+  const handleBookingFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // 1. Mobile number validation using browser native validity popover
+    if (phoneInputRef.current) {
+      if (!bookPhone.trim()) {
+        phoneInputRef.current.setCustomValidity('Please fill out this field.');
+        phoneInputRef.current.reportValidity();
+        return;
+      }
+      const res = validateMobileNumber(bookPhone);
+      if (!res.isValid) {
+        phoneInputRef.current.setCustomValidity(res.errorMessage || 'Please enter a valid 10-digit mobile number.');
+        phoneInputRef.current.reportValidity();
+        return;
+      }
+      phoneInputRef.current.setCustomValidity('');
+    }
+
+    // 2. Age validation using browser native validity popover
+    if (ageInputRef.current) {
+      if (!bookAge.trim()) {
+        ageInputRef.current.setCustomValidity('Please fill out this field.');
+        ageInputRef.current.reportValidity();
+        return;
+      }
+      const parsedAge = parseInt(bookAge, 10);
+      if (isNaN(parsedAge) || parsedAge < 1 || parsedAge > 120) {
+        ageInputRef.current.setCustomValidity('Please enter a valid age between 1 and 120.');
+        ageInputRef.current.reportValidity();
+        return;
+      }
+      ageInputRef.current.setCustomValidity('');
+    }
+
+    handleBookSlotSubmit(e);
+  };
 
   const content = (
     <div className="w-full">
@@ -359,8 +629,8 @@ export function SlotBookingView({
                 </div>
                 <span
                   className={`px-2.5 sm:px-3 py-1 rounded-full text-xs font-bold ${confirmedToken.priority === 'Urgent'
-                      ? 'bg-red-50 text-red-600 border border-red-200'
-                      : 'bg-blue-50 text-[#2563EB] border border-blue-100'
+                    ? 'bg-red-50 text-red-600 border border-red-200'
+                    : 'bg-blue-50 text-[#2563EB] border border-blue-100'
                     }`}
                 >
                   {confirmedToken.priority} Visit
@@ -373,6 +643,14 @@ export function SlotBookingView({
                   <span className="font-bold text-[#16191E]">{confirmedToken.name}</span>
                 </div>
                 <div>
+                  <span className="text-[#8A909D] font-medium block text-[11px] sm:text-xs">Consultation Date</span>
+                  <span className="font-bold text-[#16191E]">
+                    {confirmedToken.date
+                      ? formatYMDToDisplay(confirmedToken.date)
+                      : currentDateOption?.shortLabel || 'Today'}
+                  </span>
+                </div>
+                <div>
                   <span className="text-[#8A909D] font-medium block text-[11px] sm:text-xs">Scheduled Time</span>
                   <span className="font-bold text-[#16191E]">{confirmedToken.time}</span>
                 </div>
@@ -383,6 +661,10 @@ export function SlotBookingView({
                 <div>
                   <span className="text-[#8A909D] font-medium block text-[11px] sm:text-xs">Phone / Contact</span>
                   <span className="font-bold text-[#16191E]">{confirmedToken.phone || 'Walk-in Desk'}</span>
+                </div>
+                <div>
+                  <span className="text-[#8A909D] font-medium block text-[11px] sm:text-xs">Visit Priority</span>
+                  <span className="font-bold text-[#16191E]">{confirmedToken.priority} Visit</span>
                 </div>
               </div>
             </div>
@@ -418,7 +700,7 @@ export function SlotBookingView({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.3 }}
-            onSubmit={handleBookSlotSubmit}
+            onSubmit={handleBookingFormSubmit}
             className="bg-white rounded-2xl sm:rounded-3xl border border-[#ECEEF2] p-4 sm:p-7 lg:p-8 shadow-sm space-y-4 sm:space-y-6"
           >
             {/* Header */}
@@ -426,7 +708,7 @@ export function SlotBookingView({
               <div>
                 <h2 className="text-base sm:text-xl font-bold text-[#16191E]">Book a Consultation Slot</h2>
                 <p className="text-xs sm:text-sm text-[#8A909D] mt-0.5">
-                  Select your preferred consultation time & register patient details
+                  Select consultation date, time slot & register patient details
                 </p>
               </div>
               <motion.div
@@ -438,30 +720,176 @@ export function SlotBookingView({
               </motion.div>
             </div>
 
-            {/* 1. Time Slot Selection */}
+            {/* 1. Date Selection (BookMyShow Style) */}
             <div className="space-y-2.5 sm:space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-1.5 sm:gap-2">
-                  <Clock className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
-                  <span>1. Select Time Slot</span>
-                  {bookSlotTime && (
-                    <motion.span
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      className="ml-1 text-[11px] sm:text-xs font-bold text-[#2563EB] bg-blue-50 px-2 sm:px-2.5 py-0.5 rounded-lg border border-blue-100 flex items-center gap-1"
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] animate-pulse" />
-                      <span>{bookSlotTime}</span>
-                    </motion.span>
-                  )}
+                  <Calendar className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
+                  <span>Select Date</span>
+
                 </label>
+
+                {/* Date Controls: Left/Right Chevrons & Calendar Picker Button */}
+                <div className="flex items-center space-x-1.5 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => scrollDates('left')}
+                    title="Previous dates"
+                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white border border-[#ECEEF2] hover:border-gray-300 hover:bg-gray-50 flex items-center justify-center text-gray-500 hover:text-[#16191E] transition cursor-pointer shadow-2xs"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollDates('right')}
+                    title="Next dates"
+                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white border border-[#ECEEF2] hover:border-gray-300 hover:bg-gray-50 flex items-center justify-center text-gray-500 hover:text-[#16191E] transition cursor-pointer shadow-2xs"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+
+                  <div className="relative">
+                    <input
+                      ref={dateInputRef}
+                      type="date"
+                      min={todayMinDate}
+                      value={activeDate}
+                      onChange={(e) => {
+                        if (e.target.value) handleDateChange(e.target.value);
+                      }}
+                      className="sr-only"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          dateInputRef.current?.showPicker();
+                        } catch {
+                          dateInputRef.current?.focus();
+                        }
+                      }}
+                      className="h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg bg-white border border-[#ECEEF2] hover:border-[#2563EB]/40 hover:bg-blue-50/50 flex items-center space-x-1 sm:space-x-1.5 text-[11px] sm:text-xs font-bold text-[#5E6470] hover:text-[#2563EB] transition cursor-pointer shadow-2xs"
+                      title="Choose specific date from calendar"
+                    >
+                      <CalendarDays className="w-3.5 h-3.5 text-[#2563EB]" />
+                      <span className="hidden xs:inline">Calendar</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* BookMyShow Horizontal Date Strip */}
+              <div
+                ref={dateScrollRef}
+                className="flex items-center gap-2 sm:gap-2.5 p-2 sm:p-2.5 bg-[#F8F9FB] rounded-xl sm:rounded-2xl border border-[#ECEEF2] overflow-x-auto scroll-smooth scrollbar-none min-h-[82px]"
+              >
+                {dateOptions.length === 0 ? (
+                  <div className="flex items-center gap-2 py-1 w-full overflow-hidden">
+                    {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+                      <div
+                        key={i}
+                        className="min-w-[64px] sm:min-w-[74px] h-[74px] sm:h-[78px] rounded-xl bg-gray-100/70 border border-[#ECEEF2] animate-pulse flex-shrink-0"
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  dateOptions.map((item) => {
+                    const isSelected = activeDate === item.dateString;
+                    return (
+                      <motion.button
+                        key={item.dateString}
+                        type="button"
+                        whileHover={{ y: -2, scale: 1.02 }}
+                        whileTap={{ scale: 0.96 }}
+                        transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                        onClick={() => handleDateChange(item.dateString)}
+                        className={`relative min-w-[64px] sm:min-w-[74px] flex-1 py-2 sm:py-2.5 px-1.5 rounded-xl text-center cursor-pointer flex flex-col items-center justify-between transition-all select-none border flex-shrink-0 ${isSelected
+                          ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-md shadow-blue-500/25 ring-2 ring-[#2563EB] ring-offset-1'
+                          : 'bg-white hover:bg-blue-50/50 text-[#16191E] border-[#ECEEF2] hover:border-blue-200 shadow-2xs'
+                          }`}
+                      >
+                        {/* Day of Week or Badge */}
+                        <div className="flex items-center justify-center h-4 w-full">
+                          {item.isToday ? (
+                            <span
+                              className={`text-[8px] sm:text-[9px] font-black tracking-wider uppercase px-1.5 py-0.2 rounded-full ${isSelected
+                                ? 'bg-white/20 text-white'
+                                : 'bg-blue-50 text-[#2563EB] border border-blue-100'
+                                }`}
+                            >
+                              TODAY
+                            </span>
+                          ) : item.isTomorrow ? (
+                            <span
+                              className={`text-[8px] sm:text-[9px] font-black tracking-wider uppercase px-1.5 py-0.2 rounded-full ${isSelected
+                                ? 'bg-white/20 text-white'
+                                : 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                                }`}
+                            >
+                              TOM
+                            </span>
+                          ) : (
+                            <span
+                              className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wider ${isSelected
+                                ? 'text-blue-100'
+                                : item.isWeekend
+                                  ? 'text-amber-600 font-extrabold'
+                                  : 'text-[#8A909D]'
+                                }`}
+                            >
+                              {item.dayOfWeek}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Date Number */}
+                        <span
+                          className={`text-lg sm:text-2xl font-black leading-none my-1 tracking-tight ${isSelected ? 'text-white' : 'text-[#16191E]'
+                            }`}
+                        >
+                          {item.dayNumber}
+                        </span>
+
+                        {/* Month */}
+                        <span
+                          className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wide ${isSelected ? 'text-blue-100' : 'text-[#8A909D]'
+                            }`}
+                        >
+                          {item.monthName}
+                        </span>
+                      </motion.button>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Informative Status Strip */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] sm:text-xs text-[#8A909D] px-1 gap-1">
+
+                <span className="text-[10px] text-gray-400 font-medium hidden sm:inline">
+                  Book up to 14 days in advance
+                </span>
+              </div>
+            </div>
+
+            {/* 2. Time Slot Selection */}
+            <div className="space-y-2.5 sm:space-y-3 pt-1 border-t border-[#ECEEF2]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-1.5 sm:gap-2">
+                    <Clock className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
+                    <span>Select Time Slot</span>
+                  </label>
+
+                  {isLoadingSlots && (
+                    <span className="text-[10px] text-blue-500 animate-pulse font-medium">Checking live slots...</span>
+                  )}
+                </div>
+
                 {/* Horizontal scrollable period filter buttons */}
                 <div className="flex items-center space-x-1 bg-[#F8F9FB] p-1 rounded-xl border border-[#ECEEF2] overflow-x-auto max-w-full scrollbar-none self-start sm:self-auto">
                   {(['All', 'Morning', 'Afternoon', 'Evening'] as const).map((period) => {
-                    const count =
-                      period === 'All'
-                        ? AVAILABLE_SLOTS.length
-                        : AVAILABLE_SLOTS.filter((s) => s.period === period).length;
+                    const count = periodCounts[period];
                     const isActive = selectedPeriod === period;
                     return (
                       <button
@@ -491,10 +919,27 @@ export function SlotBookingView({
                 </div>
               </div>
 
-              {/* Grid of Slots with clean max-height so mobile users aren't overwhelmed */}
+              {/* Grid of Slots: Booked slots grey & disabled; Open slots active & clickable */}
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1.5 sm:gap-2.5 p-2 sm:p-3 bg-[#F8F9FB] rounded-xl sm:rounded-2xl border border-[#ECEEF2] max-h-48 sm:max-h-60 overflow-y-auto">
                 {filteredSlots.map((slot) => {
-                  const isSelected = bookSlotTime === slot.time;
+                  const isSelected = bookSlotTime === slot.time && !slot.isBooked;
+                  const isBooked = Boolean(slot.isBooked);
+
+                  if (isBooked) {
+                    return (
+                      <div
+                        key={slot.time}
+                        title={`Slot ${slot.time} is already booked`}
+                        className="relative py-2 sm:py-2.5 px-1 sm:px-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-semibold transition-all text-center select-none bg-[#ECEEF2] text-[#8C93A0] border border-[#DCE0E6] cursor-not-allowed flex flex-col items-center justify-center gap-0.5 opacity-75 shadow-none"
+                      >
+                        <span className="tracking-tight text-[11px] sm:text-xs md:text-sm font-medium">
+                          {slot.time}
+                        </span>
+
+                      </div>
+                    );
+                  }
+
                   return (
                     <motion.button
                       key={slot.time}
@@ -504,26 +949,24 @@ export function SlotBookingView({
                       transition={{ type: 'spring', damping: 20, stiffness: 300 }}
                       onClick={() => setBookSlotTime(slot.time)}
                       className={`relative py-2 sm:py-2.5 px-1 sm:px-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold transition-all text-center cursor-pointer flex flex-col items-center justify-center gap-0.5 overflow-hidden ${isSelected
-                          ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/20 ring-2 ring-[#2563EB] ring-offset-1'
-                          : 'bg-white hover:bg-blue-50/60 text-[#16191E] border border-[#ECEEF2] hover:border-blue-200'
+                        ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/20 ring-2 ring-[#2563EB] ring-offset-1'
+                        : 'bg-white hover:bg-blue-50/60 text-[#16191E] border border-[#ECEEF2] hover:border-blue-200'
                         }`}
                     >
                       <span className="tracking-tight text-[11px] sm:text-xs md:text-sm">{slot.time}</span>
-                      <span className={`text-[8px] sm:text-[9px] md:text-[10px] font-medium ${isSelected ? 'text-blue-100' : 'text-[#8A909D]'}`}>
-                        {slot.period}
-                      </span>
+
                     </motion.button>
                   );
                 })}
               </div>
             </div>
 
-            {/* 2. Consulting Physician */}
+            {/* 3. Consulting Physician */}
             {availableDoctors.length > 0 && (
               <div className="space-y-1.5 sm:space-y-2 pt-1 border-t border-[#ECEEF2]">
                 <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-2">
                   <Stethoscope className="w-4 h-4 text-[#2563EB]" />
-                  <span>2. Consulting Physician</span>
+                  <span>Consulting Physician</span>
                 </label>
                 <DoctorSearchCombobox
                   doctors={availableDoctors}
@@ -533,11 +976,11 @@ export function SlotBookingView({
               </div>
             )}
 
-            {/* 3. Patient Information */}
+            {/* 4. Patient Information */}
             <div className="space-y-3 sm:space-y-4 pt-1 border-t border-[#ECEEF2]">
               <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-2">
                 <User className="w-4 h-4 text-[#2563EB]" />
-                <span>3. Patient Information</span>
+                <span>Patient Information</span>
               </label>
 
               {/* Row 1: Name & Phone */}
@@ -555,16 +998,23 @@ export function SlotBookingView({
                 </div>
 
                 <div>
-                  <span className="text-xs font-semibold text-[#8A909D] block mb-1">Phone / Mobile</span>
+                  <span className="text-xs font-semibold text-[#8A909D] block mb-1">
+                    Mobile Number <span className="text-red-500">*</span>
+                  </span>
                   <div className="relative">
                     <input
+                      ref={phoneInputRef}
                       type="tel"
-                      placeholder="e.g. 98460 12345"
+                      required
+                      placeholder="e.g. 98460 12345 or +91 98460 12345"
                       value={bookPhone}
-                      onChange={(e) => setBookPhone(e.target.value)}
+                      onChange={(e) => {
+                        e.target.setCustomValidity('');
+                        setBookPhone(e.target.value);
+                      }}
                       className="w-full h-11 sm:h-12 pl-9 pr-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm text-[#16191E] outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-blue-500/10 focus:bg-white transition-all duration-150"
                     />
-                    <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-3.5 pointer-events-none" />
+                    <Phone className="w-4 h-4 absolute left-3 top-3.5 pointer-events-none text-gray-400" />
                   </div>
                 </div>
               </div>
@@ -574,12 +1024,21 @@ export function SlotBookingView({
                 {/* Age & Gender combined row on mobile */}
                 <div className="grid grid-cols-12 gap-2.5 sm:gap-3 sm:col-span-7 md:col-span-7">
                   <div className="col-span-5 sm:col-span-5 md:col-span-5">
-                    <span className="text-xs font-semibold text-[#8A909D] block mb-1">Age</span>
+                    <span className="text-xs font-semibold text-[#8A909D] block mb-1">
+                      Age <span className="text-red-500">*</span>
+                    </span>
                     <input
+                      ref={ageInputRef}
                       type="number"
+                      required
+                      min="1"
+                      max="120"
                       placeholder="e.g. 35"
                       value={bookAge}
-                      onChange={(e) => setBookAge(e.target.value)}
+                      onChange={(e) => {
+                        e.target.setCustomValidity('');
+                        setBookAge(e.target.value);
+                      }}
                       className="w-full h-11 sm:h-12 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm text-[#16191E] outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-blue-500/10 focus:bg-white transition-all duration-150"
                     />
                   </div>
@@ -622,8 +1081,8 @@ export function SlotBookingView({
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setBookPriority('Normal')}
                       className={`flex-1 px-2.5 sm:px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center space-x-1 sm:space-x-1.5 ${bookPriority === 'Normal'
-                          ? 'bg-blue-50 border-[#2563EB] text-[#2563EB] ring-1 ring-[#2563EB]/20 shadow-xs'
-                          : 'bg-white border-[#ECEEF2] text-[#8A909D] hover:border-gray-300'
+                        ? 'bg-blue-50 border-[#2563EB] text-[#2563EB] ring-1 ring-[#2563EB]/20 shadow-xs'
+                        : 'bg-white border-[#ECEEF2] text-[#8A909D] hover:border-gray-300'
                         }`}
                     >
                       <Check
@@ -639,8 +1098,8 @@ export function SlotBookingView({
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setBookPriority('Urgent')}
                       className={`flex-1 px-2.5 sm:px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center space-x-1 sm:space-x-1.5 ${bookPriority === 'Urgent'
-                          ? 'bg-red-50 border-red-500 text-red-600 ring-1 ring-red-500/20 shadow-xs'
-                          : 'bg-white border-[#ECEEF2] text-[#8A909D] hover:border-gray-300'
+                        ? 'bg-red-50 border-red-500 text-red-600 ring-1 ring-red-500/20 shadow-xs'
+                        : 'bg-white border-[#ECEEF2] text-[#8A909D] hover:border-gray-300'
                         }`}
                     >
                       <AlertTriangle className={`w-3.5 h-3.5 ${bookPriority === 'Urgent' ? 'animate-pulse' : ''}`} />
@@ -664,8 +1123,8 @@ export function SlotBookingView({
                         whileTap={{ scale: 0.96 }}
                         onClick={() => setBookReason(isSelected ? '' : sym)}
                         className={`text-[11px] sm:text-xs font-semibold px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 ${isSelected
-                            ? 'bg-blue-50 border-[#2563EB] text-[#2563EB] shadow-2xs font-bold'
-                            : 'bg-white border-[#ECEEF2] text-[#5E6470] hover:border-blue-200'
+                          ? 'bg-blue-50 border-[#2563EB] text-[#2563EB] shadow-2xs font-bold'
+                          : 'bg-white border-[#ECEEF2] text-[#5E6470] hover:border-blue-200'
                           }`}
                       >
                         {isSelected && <Check className="w-3 h-3 text-[#2563EB]" />}
@@ -697,7 +1156,7 @@ export function SlotBookingView({
                 <span className="truncate">
                   {isBookingSubmitting
                     ? 'Allocating Slot...'
-                    : `Confirm & Book Slot • Token P${String(queue.length + 1).padStart(3, '0')}`}
+                    : `Confirm & Book Slot (${currentDateOption?.shortLabel || 'Today'}) • Token P${String(queue.length + 1).padStart(3, '0')}`}
                 </span>
               </motion.button>
             </div>

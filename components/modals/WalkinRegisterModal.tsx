@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Phone } from 'lucide-react';
+import { validateMobileNumber } from '@/lib/phoneValidation';
 
 interface WalkinRegisterModalProps {
   isOpen: boolean;
@@ -31,6 +32,29 @@ export function WalkinRegisterModal({
   setWalkinGender,
   onSubmit,
 }: WalkinRegisterModalProps) {
+  const phoneInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (phoneInputRef.current) {
+      if (!walkinPhone.trim()) {
+        phoneInputRef.current.setCustomValidity('Please fill out this field.');
+        phoneInputRef.current.reportValidity();
+        return;
+      }
+      const res = validateMobileNumber(walkinPhone);
+      if (!res.isValid) {
+        phoneInputRef.current.setCustomValidity(res.errorMessage || 'Please enter a valid 10-digit mobile number.');
+        phoneInputRef.current.reportValidity();
+        return;
+      }
+      phoneInputRef.current.setCustomValidity('');
+    }
+
+    onSubmit(e);
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -52,9 +76,11 @@ export function WalkinRegisterModal({
               </button>
             </div>
 
-            <form onSubmit={onSubmit} className="space-y-4">
+            <form onSubmit={handleFormSubmit} className="space-y-4" noValidate={false}>
               <div>
-                <label className="text-xs font-semibold text-[#8A909D] block mb-1">Patient Name</label>
+                <label className="text-xs font-semibold text-[#8A909D] block mb-1">
+                  Patient Name <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
@@ -66,22 +92,31 @@ export function WalkinRegisterModal({
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-[#8A909D] block mb-1">Phone Number</label>
+                <label className="text-xs font-semibold text-[#8A909D] block mb-1">
+                  Mobile Number <span className="text-red-500">*</span>
+                </label>
                 <div className="relative">
                   <input
+                    ref={phoneInputRef}
                     type="tel"
-                    placeholder="e.g. +91 98460 12345"
+                    required
+                    placeholder="e.g. 98460 12345 or +91 98460 12345"
                     value={walkinPhone}
-                    onChange={(e) => setWalkinPhone(e.target.value)}
+                    onChange={(e) => {
+                      e.target.setCustomValidity('');
+                      setWalkinPhone(e.target.value);
+                    }}
                     className="w-full p-2.5 pl-9 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-sm outline-none focus:ring-1 focus:ring-gray-300"
                   />
-                  <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-3 pointer-events-none" />
+                  <Phone className="w-4 h-4 absolute left-3 top-3 pointer-events-none text-gray-400" />
                 </div>
               </div>
 
               <div className="flex gap-3">
                 <div className="w-1/3">
-                  <label className="text-xs font-semibold text-[#8A909D] block mb-1">Age</label>
+                  <label className="text-xs font-semibold text-[#8A909D] block mb-1">
+                    Age <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="number"
                     required
