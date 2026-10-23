@@ -502,11 +502,7 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                           onChange={(e) => handleFieldChange(meta.key, e.target.value)}
                           className="w-full px-3.5 py-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs font-medium text-[#16191E] focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
                         />
-                        {meta.key === 'whatsapp_welcome_template' && (
-                          <p className="text-[11px] text-[#2563EB] font-medium">
-                            Supported variable: <span className="font-mono bg-blue-50 px-1 py-0.5 rounded">{`{booking_link}`}</span>
-                          </p>
-                        )}
+
                       </div>
                     )}
 

@@ -18,10 +18,13 @@ import {
   Phone,
   ChevronDown,
   X,
+  Calendar,
+  LayoutGrid,
 } from 'lucide-react';
 import { Patient, ConfirmedToken } from '@/types';
 import { DbDoctor } from '@/types/database';
 import { AVAILABLE_SLOTS, QUICK_SYMPTOMS } from '@/lib/constants';
+import { useClinic } from '@/context/ClinicContext';
 
 interface DoctorSearchComboboxProps {
   doctors: DbDoctor[];
@@ -315,6 +318,28 @@ export function SlotBookingView({
   onBackToGateway,
   isStandalone = false,
 }: SlotBookingViewProps) {
+  const { config } = useClinic();
+  const [pickerMode, setPickerMode] = useState<'grid' | 'standard'>('grid');
+  const [standardDate, setStandardDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [standardTime, setStandardTime] = useState('09:30');
+
+  useEffect(() => {
+    if (config?.use_standard_date_picker !== undefined) {
+      setPickerMode(config.use_standard_date_picker ? 'standard' : 'grid');
+    }
+  }, [config?.use_standard_date_picker]);
+
+  const convertTo12Hour = (time24: string) => {
+    if (!time24) return '';
+    const [hStr, mStr] = time24.split(':');
+    let hour = parseInt(hStr, 10);
+    const minute = mStr || '00';
+    const meridiem = hour >= 12 ? 'PM' : 'AM';
+    if (hour === 0) hour = 12;
+    else if (hour > 12) hour -= 12;
+    return `${String(hour).padStart(2, '0')}:${minute} ${meridiem}`;
+  };
+
   const [selectedPeriod, setSelectedPeriod] = useState<'All' | 'Morning' | 'Afternoon' | 'Evening'>('All');
 
   const filteredSlots = AVAILABLE_SLOTS.filter(
@@ -455,67 +480,166 @@ export function SlotBookingView({
                     </motion.span>
                   )}
                 </label>
-                {/* Horizontal scrollable period filter buttons */}
-                <div className="flex items-center space-x-1 bg-[#F8F9FB] p-1 rounded-xl border border-[#ECEEF2] overflow-x-auto max-w-full scrollbar-none self-start sm:self-auto">
-                  {(['All', 'Morning', 'Afternoon', 'Evening'] as const).map((period) => {
-                    const count =
-                      period === 'All'
-                        ? AVAILABLE_SLOTS.length
-                        : AVAILABLE_SLOTS.filter((s) => s.period === period).length;
-                    const isActive = selectedPeriod === period;
-                    return (
-                      <button
-                        key={period}
-                        type="button"
-                        onClick={() => setSelectedPeriod(period)}
-                        className={`relative text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1 sm:gap-1.5 z-10 whitespace-nowrap flex-shrink-0 ${isActive ? 'text-[#2563EB]' : 'text-[#8A909D] hover:text-[#16191E]'
-                          }`}
-                      >
-                        {isActive && (
-                          <motion.div
-                            layoutId="activePeriodPill"
-                            className="absolute inset-0 bg-white rounded-lg shadow-2xs -z-10"
-                            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-                          />
-                        )}
-                        <span>{period}</span>
-                        <span
-                          className={`text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-full font-bold ${isActive ? 'bg-blue-50 text-[#2563EB]' : 'bg-gray-200/60 text-gray-500'
-                            }`}
-                        >
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
+
+                {/* Switch between Time Block Grid & Standard Date Picker */}
+                <div className="flex items-center space-x-1 bg-[#F8F9FB] p-1 rounded-xl border border-[#ECEEF2] self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setPickerMode('grid')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center space-x-1 ${
+                      pickerMode === 'grid'
+                        ? 'bg-white text-[#2563EB] shadow-2xs'
+                        : 'text-[#8A909D] hover:text-[#16191E]'
+                    }`}
+                  >
+                    <LayoutGrid className="w-3 h-3" />
+                    <span>Time Block Grid</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPickerMode('standard')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center space-x-1 ${
+                      pickerMode === 'standard'
+                        ? 'bg-white text-[#2563EB] shadow-2xs'
+                        : 'text-[#8A909D] hover:text-[#16191E]'
+                    }`}
+                  >
+                    <Calendar className="w-3 h-3" />
+                    <span>Standard Date Picker</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Grid of Slots with clean max-height so mobile users aren't overwhelmed */}
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1.5 sm:gap-2.5 p-2 sm:p-3 bg-[#F8F9FB] rounded-xl sm:rounded-2xl border border-[#ECEEF2] max-h-48 sm:max-h-60 overflow-y-auto">
-                {filteredSlots.map((slot) => {
-                  const isSelected = bookSlotTime === slot.time;
-                  return (
-                    <motion.button
-                      key={slot.time}
-                      type="button"
-                      whileHover={{ y: -2, scale: 1.03 }}
-                      whileTap={{ scale: 0.96 }}
-                      transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                      onClick={() => setBookSlotTime(slot.time)}
-                      className={`relative py-2 sm:py-2.5 px-1 sm:px-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold transition-all text-center cursor-pointer flex flex-col items-center justify-center gap-0.5 overflow-hidden ${isSelected
-                          ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/20 ring-2 ring-[#2563EB] ring-offset-1'
-                          : 'bg-white hover:bg-blue-50/60 text-[#16191E] border border-[#ECEEF2] hover:border-blue-200'
-                        }`}
-                    >
-                      <span className="tracking-tight text-[11px] sm:text-xs md:text-sm">{slot.time}</span>
-                      <span className={`text-[8px] sm:text-[9px] md:text-[10px] font-medium ${isSelected ? 'text-blue-100' : 'text-[#8A909D]'}`}>
-                        {slot.period}
+              {pickerMode === 'standard' ? (
+                /* Standard Date Picker & Time Input */
+                <div className="bg-[#F8F9FB] rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-[#ECEEF2] space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-xs font-semibold text-[#8A909D] block mb-1">
+                        Consultation Date
                       </span>
-                    </motion.button>
-                  );
-                })}
-              </div>
+                      <input
+                        type="date"
+                        min={new Date().toISOString().split('T')[0]}
+                        value={standardDate}
+                        onChange={(e) => setStandardDate(e.target.value)}
+                        className="w-full h-11 px-3 bg-white border border-[#ECEEF2] rounded-xl text-xs sm:text-sm font-semibold text-[#16191E] outline-none focus:border-[#2563EB] transition"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-[#8A909D] block mb-1">
+                        Consultation Time
+                      </span>
+                      <input
+                        type="time"
+                        value={standardTime}
+                        onChange={(e) => {
+                          setStandardTime(e.target.value);
+                          setBookSlotTime(convertTo12Hour(e.target.value));
+                        }}
+                        className="w-full h-11 px-3 bg-white border border-[#ECEEF2] rounded-xl text-xs sm:text-sm font-semibold text-[#16191E] outline-none focus:border-[#2563EB] transition"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[#ECEEF2]/60">
+                    <span className="text-[11px] font-semibold text-[#8A909D] mr-1">Quick Slots:</span>
+                    {['09:00 AM', '10:00 AM', '11:30 AM', '02:00 PM', '03:30 PM', '05:00 PM'].map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => {
+                          setBookSlotTime(t);
+                          const match = t.match(/(\d+):(\d+)\s*(AM|PM)/i);
+                          if (match) {
+                            let h = parseInt(match[1], 10);
+                            const m = match[2];
+                            if (match[3].toUpperCase() === 'PM' && h < 12) h += 12;
+                            if (match[3].toUpperCase() === 'AM' && h === 12) h = 0;
+                            setStandardTime(`${String(h).padStart(2, '0')}:${m}`);
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition border cursor-pointer ${
+                          bookSlotTime === t
+                            ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-2xs'
+                            : 'bg-white text-[#5E6470] border-[#ECEEF2] hover:border-blue-200'
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                /* Time Block Grid with Period Filters */
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-1 overflow-x-auto pb-1 scrollbar-none">
+                    {(['All', 'Morning', 'Afternoon', 'Evening'] as const).map((period) => {
+                      const count =
+                        period === 'All'
+                          ? AVAILABLE_SLOTS.length
+                          : AVAILABLE_SLOTS.filter((s) => s.period === period).length;
+                      const isActive = selectedPeriod === period;
+                      return (
+                        <button
+                          key={period}
+                          type="button"
+                          onClick={() => setSelectedPeriod(period)}
+                          className={`relative text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1 sm:gap-1.5 z-10 whitespace-nowrap flex-shrink-0 ${
+                            isActive ? 'text-[#2563EB]' : 'text-[#8A909D] hover:text-[#16191E]'
+                          }`}
+                        >
+                          {isActive && (
+                            <motion.div
+                              layoutId="activePeriodPill"
+                              className="absolute inset-0 bg-[#F8F9FB] border border-[#ECEEF2] rounded-lg -z-10"
+                              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                            />
+                          )}
+                          <span>{period}</span>
+                          <span
+                            className={`text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                              isActive ? 'bg-blue-50 text-[#2563EB]' : 'bg-gray-200/60 text-gray-500'
+                            }`}
+                          >
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1.5 sm:gap-2.5 p-2 sm:p-3 bg-[#F8F9FB] rounded-xl sm:rounded-2xl border border-[#ECEEF2] max-h-48 sm:max-h-60 overflow-y-auto">
+                    {filteredSlots.map((slot) => {
+                      const isSelected = bookSlotTime === slot.time;
+                      return (
+                        <motion.button
+                          key={slot.time}
+                          type="button"
+                          whileHover={{ y: -2, scale: 1.03 }}
+                          whileTap={{ scale: 0.96 }}
+                          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                          onClick={() => setBookSlotTime(slot.time)}
+                          className={`relative py-2 sm:py-2.5 px-1 sm:px-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold transition-all text-center cursor-pointer flex flex-col items-center justify-center gap-0.5 overflow-hidden ${
+                            isSelected
+                              ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/20 ring-2 ring-[#2563EB] ring-offset-1'
+                              : 'bg-white hover:bg-blue-50/60 text-[#16191E] border border-[#ECEEF2] hover:border-blue-200'
+                          }`}
+                        >
+                          <span className="tracking-tight text-[11px] sm:text-xs md:text-sm">{slot.time}</span>
+                          <span
+                            className={`text-[8px] sm:text-[9px] md:text-[10px] font-medium ${
+                              isSelected ? 'text-blue-100' : 'text-[#8A909D]'
+                            }`}
+                          >
+                            {slot.period}
+                          </span>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 2. Consulting Physician */}

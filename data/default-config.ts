@@ -18,6 +18,7 @@ export interface AppConfig {
   late_grace_period_mins: number;
   auto_move_unattended: boolean;
   max_advance_booking_days: number;
+  use_standard_date_picker: boolean;
 
   // 4. WhatsApp & Communication Automation
   enable_whatsapp_autoresponder: boolean;
@@ -60,6 +61,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   late_grace_period_mins: 15,
   auto_move_unattended: false,
   max_advance_booking_days: 7,
+  use_standard_date_picker: false,
 
   // 4. WhatsApp & Communication Automation
   enable_whatsapp_autoresponder: true,
@@ -220,10 +222,10 @@ export const SETTINGS_METADATA: ParameterMetadata[] = [
   },
   {
     key: 'late_grace_period_mins',
-    name: 'Late Patient Grace Period',
+    name: 'Late Arrival Tolerance Period',
     category: 'Queue & Patient Logistics',
     paramType: 'Control Parameter',
-    description: 'Window of time a late patient retains their queue position before being flagged for slot reallocation.',
+    description: 'Set how long a late patient can retain their queue position before being flagged for slot reassignment.',
     uiWidget: 'select',
     options: [5, 10, 15, 30],
     target: 'app_config.late_grace_period_mins',
@@ -231,24 +233,34 @@ export const SETTINGS_METADATA: ParameterMetadata[] = [
   },
   {
     key: 'auto_move_unattended',
-    name: 'Auto-Move Unattended Patients',
+    name: 'Automatic Queue Reordering',
     category: 'Queue & Patient Logistics',
     paramType: 'Control Parameter',
-    description: 'Automatically shifts no-show or late patients to the end of the daily queue after grace period expires.',
+    description: 'Automatically moves patients who miss their appointment or exceed the grace period to the end of the daily queue.',
     uiWidget: 'toggle',
     target: 'app_config.auto_move_unattended',
     role: 'Admin',
   },
   {
     key: 'max_advance_booking_days',
-    name: 'Max Advance Booking Horizon',
+    name: 'Advance Booking Limit',
     category: 'Queue & Patient Logistics',
     paramType: 'Control Parameter',
-    description: 'Maximum number of days in advance a patient can book an appointment slot via WhatsApp link.',
+    description: 'Set the maximum number of days in advance that patients can book appointment slots through the WhatsApp booking link.',
     uiWidget: 'number',
     min: 1,
     max: 30,
     target: 'app_config.max_advance_booking_days',
+    role: 'Admin',
+  },
+  {
+    key: 'use_standard_date_picker',
+    name: 'Appointment Scheduling View',
+    category: 'Queue & Patient Logistics',
+    paramType: 'Control Parameter',
+    description: 'Toggle on to use a standard calendar date picker and time input for slot booking and rescheduling, or keep off for the interactive time block grid.',
+    uiWidget: 'toggle',
+    target: 'app_config.use_standard_date_picker',
     role: 'Admin',
   },
 
