@@ -943,8 +943,8 @@ export function SlotBookingView({
                 </div>
               </div>
 
-              {/* Grid of Slots: Booked slots grey & disabled; Open slots active & clickable */}
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1.5 sm:gap-2.5 p-2 sm:p-3 bg-[#F8F9FB] rounded-xl sm:rounded-2xl border border-[#ECEEF2] max-h-48 sm:max-h-60 overflow-y-auto">
+              {/* Grid of Slots: Fully visible without inner scrolling; Booked slots grey & disabled; Open slots active & clickable */}
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 sm:gap-2.5 p-2.5 sm:p-3.5 bg-[#F8F9FB] rounded-xl sm:rounded-2xl border border-[#ECEEF2]">
                 {filteredSlots.map((slot) => {
                   const isSelected = bookSlotTime === slot.time && !slot.isBooked;
                   const isBooked = Boolean(slot.isBooked);
