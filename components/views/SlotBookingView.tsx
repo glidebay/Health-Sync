@@ -917,8 +917,6 @@ export function SlotBookingView({
                     <span>Select Time Slot</span>
                   </label>
 
-
-
                   {isLoadingSlots && (
                     <span className="text-[10px] text-blue-500 animate-pulse font-medium">Checking live slots...</span>
                   )}
