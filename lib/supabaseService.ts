@@ -87,7 +87,6 @@ export async function verifyDoctorPin(
       return { success: false, message: 'No doctors found' };
     }
 
-    // Cryptographically verify entered PIN against stored bcrypt hash in doctor table
     let matchedDoctor: DbDoctor | null = null;
     for (const doc of doctors) {
       if (doc.pin_code) {
@@ -1658,8 +1657,8 @@ export async function bookAppointmentSlotDb(
           dispId = rawDisp
             ? (rawDisp.startsWith('P') ? rawDisp : `P${rawDisp}`)
             : patNumber
-            ? `P${String(patNumber).padStart(3, '0')}`
-            : undefined;
+              ? `P${String(patNumber).padStart(3, '0')}`
+              : undefined;
           if (dispId) {
             tokenNumber = dispId;
           }
@@ -1995,8 +1994,8 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
           patToken = rawDisp
             ? (rawDisp.startsWith('P') ? rawDisp : `P${rawDisp}`)
             : pNum
-            ? `P${String(pNum).padStart(3, '0')}`
-            : undefined;
+              ? `P${String(pNum).padStart(3, '0')}`
+              : undefined;
         }
 
         if (!patientName) {
@@ -2013,9 +2012,9 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
 
         const formattedLastTime = latest.created_at
           ? new Date(latest.created_at).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })
+            hour: '2-digit',
+            minute: '2-digit',
+          })
           : 'Today';
 
         const hasUrgent = sorted.some((r) => {
@@ -2032,9 +2031,9 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
         sorted.forEach((req) => {
           const msgTime = req.created_at
             ? new Date(req.created_at).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              })
+              hour: '2-digit',
+              minute: '2-digit',
+            })
             : formattedLastTime;
 
           const rawPayload = req.raw_payload as any;
