@@ -9,10 +9,19 @@ import {
   Search,
   RefreshCw,
   MessageSquare,
+  Send,
+  Link2,
+  AlertCircle,
+  Zap,
 } from 'lucide-react';
 import { PatientChatThread } from '@/types/chat';
 import { DbDoctor } from '@/types/database';
-import { fetchInboundChatThreads } from '@/lib/supabaseService';
+import {
+  fetchInboundChatThreads,
+  sendDoctorReplyToChat,
+  sendQuickBookingLink,
+  markThreadUrgentInDb,
+} from '@/lib/supabaseService';
 
 interface DoctorChatModalProps {
   isOpen: boolean;
@@ -34,6 +43,9 @@ export function DoctorChatModal({
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'booked'>('all');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const [replyInput, setReplyInput] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
   // Load patient threads
   const loadThreads = async () => {
@@ -77,6 +89,95 @@ export function DoctorChatModal({
       return true;
     });
   }, [threads, searchQuery, filterTab]);
+
+  const handleSendReply = async () => {
+    if (!replyInput.trim() || !activeThread || isSending) return;
+    const textToSend = replyInput.trim();
+    setReplyInput('');
+    setIsSending(true);
+    try {
+      const newMsg = await sendDoctorReplyToChat(
+        activeThread.phoneNumber,
+        activeThread.patientName,
+        textToSend
+      );
+      if (newMsg) {
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === activeThread.id
+              ? {
+                  ...t,
+                  lastMessage: textToSend,
+                  lastMessageTime: newMsg.timestamp,
+                  messages: [...t.messages, newMsg],
+                }
+              : t
+          )
+        );
+      }
+    } catch (err) {
+      console.warn('Failed to send reply:', err);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleSendBookingLink = async () => {
+    if (!activeThread || isSending) return;
+    setIsSending(true);
+    try {
+      const newMsg = await sendQuickBookingLink(
+        activeThread.phoneNumber,
+        activeThread.patientName
+      );
+      if (newMsg) {
+        const actionMsg = {
+          id: `act-${Date.now()}`,
+          sender: 'system' as const,
+          text: 'Autoresponder sent self-service appointment booking link on WhatsApp.',
+          timestamp: newMsg.timestamp,
+          messageType: 'action' as const,
+          actionType: 'link_sent',
+        };
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === activeThread.id
+              ? {
+                  ...t,
+                  status: 'link_sent',
+                  lastMessage: newMsg.text,
+                  lastMessageTime: newMsg.timestamp,
+                  messages: [...t.messages, newMsg, actionMsg],
+                }
+              : t
+          )
+        );
+      }
+    } catch (err) {
+      console.warn('Failed to send booking link:', err);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleMarkUrgent = async () => {
+    if (!activeThread || isSending) return;
+    setIsSending(true);
+    try {
+      await markThreadUrgentInDb(activeThread.phoneNumber);
+      setThreads((prev) =>
+        prev.map((t) =>
+          t.id === activeThread.id
+            ? { ...t, priority: 'Urgent' }
+            : t
+        )
+      );
+    } catch (err) {
+      console.warn('Failed to mark urgent:', err);
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -297,6 +398,45 @@ export function DoctorChatModal({
                     {activeThread.messages.map((msg) => {
                       const isDoctor = msg.sender === 'doctor';
 
+                      // 1. WhatsApp Interactive Option Selected
+                      if (msg.messageType === 'interactive' || msg.interactiveOption) {
+                        return (
+                          <div key={msg.id} className="flex justify-start">
+                            <div className="max-w-[85%] bg-gradient-to-br from-indigo-50/90 to-blue-50/90 border border-blue-200/80 p-3 rounded-2xl rounded-tl-xs shadow-2xs space-y-2">
+                              <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-700 uppercase tracking-wider">
+                                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                                WhatsApp Option Selected
+                              </div>
+                              <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-indigo-100 shadow-2xs text-xs font-semibold text-[#16191E]">
+                                <span className="w-5 h-5 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 text-[11px] font-bold">
+                                  ✓
+                                </span>
+                                <span>{msg.interactiveOption || msg.text}</span>
+                              </div>
+                              <span className="text-[9px] block text-right text-[#8A909D]">
+                                {msg.timestamp}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // 2. System / Bot Actions
+                      if (msg.sender === 'system' || msg.messageType === 'action') {
+                        return (
+                          <div key={msg.id} className="flex justify-center my-2">
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-[#ECEEF2] rounded-full text-[11px] text-[#64748B] shadow-2xs max-w-[90%]">
+                              <div className="w-4 h-4 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                                <Zap className="w-2.5 h-2.5" />
+                              </div>
+                              <span className="truncate">{msg.text}</span>
+                              <span className="text-[10px] text-[#94A3B8] shrink-0">• {msg.timestamp}</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // 3. Slot Booking Receipt
                       if (msg.isBookingReceipt) {
                         return (
                           <div key={msg.id} className="flex justify-end">
@@ -315,7 +455,6 @@ export function DoctorChatModal({
                                     #{msg.tokenNumber}
                                   </span>
                                 </div>
-
                               </div>
                               <p className="text-[11px] text-[#8A909D] pt-1">{msg.text}</p>
                             </div>
@@ -323,6 +462,7 @@ export function DoctorChatModal({
                         );
                       }
 
+                      // 4. Regular Text Messages
                       return (
                         <div
                           key={msg.id}
@@ -330,7 +470,7 @@ export function DoctorChatModal({
                         >
                           <div
                             className={`max-w-[75%] p-3.5 rounded-2xl text-xs leading-relaxed ${isDoctor
-                              ? 'bg-[#2563EB] text-white rounded-tr-xs'
+                              ? 'bg-[#2563EB] text-white rounded-tr-xs shadow-2xs'
                               : 'bg-white text-[#16191E] border border-[#ECEEF2] rounded-tl-xs shadow-2xs'
                               }`}
                           >
@@ -346,6 +486,59 @@ export function DoctorChatModal({
                       );
                     })}
                     <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* Actions & WhatsApp Reply Area */}
+                  <div className="p-3 bg-white border-t border-[#ECEEF2] space-y-2 flex-shrink-0">
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
+                      <span className="text-[10px] font-bold text-[#8A909D] uppercase tracking-wider mr-1">
+                        Actions:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleSendBookingLink}
+                        disabled={isSending}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-[#2563EB] hover:bg-blue-100 font-semibold border border-blue-200 transition text-[11px] cursor-pointer disabled:opacity-50"
+                      >
+                        <Link2 className="w-3 h-3" />
+                        Send Booking Link
+                      </button>
+                      {activeThread.priority !== 'Urgent' && (
+                        <button
+                          type="button"
+                          onClick={handleMarkUrgent}
+                          disabled={isSending}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 font-semibold border border-rose-200 transition text-[11px] cursor-pointer disabled:opacity-50"
+                        >
+                          <AlertCircle className="w-3 h-3" />
+                          Mark Urgent
+                        </button>
+                      )}
+                    </div>
+
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleSendReply();
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <input
+                        type="text"
+                        value={replyInput}
+                        onChange={(e) => setReplyInput(e.target.value)}
+                        placeholder={`Reply to ${activeThread.patientName} via WhatsApp...`}
+                        className="flex-1 px-3.5 py-2 bg-[#F8F9FB] rounded-xl border border-[#ECEEF2] text-xs text-[#16191E] placeholder-[#8A909D] focus:outline-none focus:border-[#2563EB] focus:bg-white transition"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!replyInput.trim() || isSending}
+                        className="px-3.5 py-2 bg-[#2563EB] text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Send</span>
+                      </button>
+                    </form>
                   </div>
                 </>
               ) : (

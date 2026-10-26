@@ -27,6 +27,9 @@ export interface ChatMessage {
   tokenNumber?: string;
   slotTime?: string;
   date?: string;
+  messageType?: 'text' | 'interactive' | 'action' | 'system';
+  interactiveOption?: string;
+  actionType?: string;
 }
 
 export interface PatientChatThread {

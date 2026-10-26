@@ -13,6 +13,7 @@ import {
   DynamicSlotTimetableResponse,
   EngineSlotItem,
   PatientChatThread,
+  ChatMessage,
 } from '@/types/chat';
 
 
@@ -1845,53 +1846,158 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
     ];
 
     if (dbRequests && dbRequests.length > 0) {
-      const dbMapped: PatientChatThread[] = dbRequests.map((req, idx) => {
-        const text =
-          req.message_text ||
-          (req.status === 'link_sent'
-            ? 'Requested self-service booking link via WhatsApp'
-            : 'Inbound appointment inquiry via WhatsApp');
-        const formattedDate = req.created_at
-          ? new Date(req.created_at).toLocaleTimeString([], {
+      // Group all Supabase requests by normalized phone number (last 10 digits)
+      const phoneGroups = new Map<string, typeof dbRequests>();
+      for (const req of dbRequests) {
+        const phone = req.phone_number || '';
+        const key = phone.replace(/[^0-9]/g, '').slice(-10) || phone;
+        if (!phoneGroups.has(key)) {
+          phoneGroups.set(key, []);
+        }
+        phoneGroups.get(key)!.push(req);
+      }
+
+      const dbMapped: PatientChatThread[] = [];
+
+      phoneGroups.forEach((requests, key) => {
+        // Sort chronologically (oldest first for message stream)
+        const sorted = [...requests].sort((a, b) => {
+          const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return tA - tB;
+        });
+
+        const latest = sorted[sorted.length - 1];
+
+        // Determine best patient name
+        let patientName = '';
+        for (const r of sorted) {
+          if (r.patient_name && r.patient_name.trim()) {
+            patientName = r.patient_name.replace(/[_]/g, ' ').trim();
+            break;
+          }
+        }
+        if (!patientName) {
+          patientName = `Patient (${key.slice(-4)})`;
+        }
+
+        const formattedLastTime = latest.created_at
+          ? new Date(latest.created_at).toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit',
             })
           : 'Today';
 
-        const isUrgent =
-          (req.patient_name && req.patient_name.toLowerCase().includes('urgent')) ||
-          text.toLowerCase().includes('urgent') ||
-          text.toLowerCase().includes('fever');
+        const hasUrgent = sorted.some((r) => {
+          const t = (r.message_text || '').toLowerCase();
+          const n = (r.patient_name || '').toLowerCase();
+          return n.includes('urgent') || t.includes('urgent') || t.includes('fever') || r.status === 'urgent';
+        });
 
-        return {
-          id: req.id,
-          patientName:
-            req.patient_name && req.patient_name.trim() !== ''
-              ? req.patient_name
-              : `Patient (${req.phone_number?.slice(-4) || idx + 1})`,
-          phoneNumber: req.phone_number || '+91 98765 00000',
+        const isBooked = sorted.some((r) => r.status === 'booked');
+
+        // Build messages stream showing full chat and actions
+        const messages: ChatMessage[] = [];
+
+        sorted.forEach((req) => {
+          const msgTime = req.created_at
+            ? new Date(req.created_at).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })
+            : formattedLastTime;
+
+          const rawPayload = req.raw_payload as any;
+          const incomingMsg = rawPayload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+          const isFromDoctor = rawPayload?.sender === 'doctor';
+
+          if (isFromDoctor) {
+            messages.push({
+              id: `msg-${req.id}`,
+              sender: 'doctor',
+              text: req.message_text || rawPayload?.text?.body || 'Doctor response sent.',
+              timestamp: msgTime,
+              messageType: 'text',
+            });
+          } else {
+            // Patient inbound message
+            let msgText = req.message_text || '';
+            let isInteractive = false;
+            let interactiveOption = '';
+
+            if (incomingMsg?.type === 'interactive' || rawPayload?.interactive) {
+              isInteractive = true;
+              const interactiveObj = incomingMsg?.interactive || rawPayload?.interactive;
+              interactiveOption =
+                interactiveObj?.button_reply?.title ||
+                interactiveObj?.list_reply?.title ||
+                'Book a Slot';
+              msgText = `Selected option: "${interactiveOption}"`;
+            } else if (incomingMsg?.text?.body) {
+              msgText = incomingMsg.text.body;
+            } else if (!msgText) {
+              msgText = req.status === 'link_sent'
+                ? 'Requested self-service booking link via WhatsApp'
+                : 'Inbound appointment inquiry via WhatsApp';
+            }
+
+            messages.push({
+              id: `msg-${req.id}`,
+              sender: 'patient',
+              text: msgText,
+              timestamp: msgTime,
+              messageType: isInteractive ? 'interactive' : 'text',
+              interactiveOption: isInteractive ? interactiveOption : undefined,
+            });
+          }
+
+          // System Action in response to this message
+          if (req.status === 'link_sent') {
+            messages.push({
+              id: `act-link-${req.id}`,
+              sender: 'system',
+              text: 'Autoresponder sent self-service appointment booking link on WhatsApp.',
+              timestamp: msgTime,
+              messageType: 'action',
+              actionType: 'link_sent',
+            });
+          } else if (req.status === 'booked') {
+            messages.push({
+              id: `act-booked-${req.id}`,
+              sender: 'doctor',
+              text: 'Appointment confirmed and scheduled in the live queue.',
+              timestamp: msgTime,
+              isBookingReceipt: true,
+              tokenNumber: 'P00' + (dbMapped.length + 1),
+              date: req.preferred_date || 'Today',
+              messageType: 'action',
+              actionType: 'slot_booked',
+            });
+          }
+        });
+
+        const lastMsg = messages[messages.length - 1];
+
+        dbMapped.push({
+          id: latest.id,
+          patientName,
+          phoneNumber: latest.phone_number || `+91 ${key}`,
           age: 28,
           gender: 'Male',
-          priority: isUrgent ? 'Urgent' : 'Normal',
-          status: (req.status as any) || 'received',
+          priority: hasUrgent ? 'Urgent' : 'Normal',
+          status: isBooked ? 'booked' : (latest.status as any) || 'received',
           requestedSlot: '10:00 AM',
-          requestedDate: req.preferred_date || '2026-10-23',
-          symptoms: text,
-          lastMessage: text,
-          lastMessageTime: formattedDate,
-          unread: req.status !== 'booked',
-          tokenNumber: req.status === 'booked' ? 'P001' : undefined,
-          messages: [
-            {
-              id: `msg-db-${req.id}`,
-              sender: 'patient',
-              text: text,
-              timestamp: formattedDate,
-            },
-          ],
-        };
+          requestedDate: latest.preferred_date || '2026-10-23',
+          symptoms: lastMsg?.text || 'WhatsApp inquiry',
+          lastMessage: lastMsg?.text || 'WhatsApp inquiry',
+          lastMessageTime: formattedLastTime,
+          unread: !isBooked,
+          tokenNumber: isBooked ? 'P00' + (dbMapped.length + 1) : undefined,
+          messages,
+        });
       });
 
+      // Merge with default mock threads if needed (deduplicating by phone)
       const seenPhones = new Set<string>();
       const combined: PatientChatThread[] = [];
       for (const t of [...dbMapped, ...defaultThreads]) {
@@ -1916,6 +2022,74 @@ export async function updateWhatsappRequestStatus(id: string, status: string) {
     await supabase.from('whatsapp_requests').update({ status }).eq('id', id);
   } catch (err) {
     console.warn('Error updating whatsapp request status:', err);
+  }
+}
+
+export async function sendDoctorReplyToChat(
+  phoneNumber: string,
+  patientName: string,
+  replyText: string,
+  action?: 'reply' | 'link_sent' | 'urgent'
+): Promise<ChatMessage | null> {
+  try {
+    const status = action === 'link_sent' ? 'link_sent' : 'replied';
+    const { data, error } = await supabase
+      .from('whatsapp_requests')
+      .insert({
+        phone_number: phoneNumber,
+        patient_name: patientName,
+        status: status,
+        message_text: replyText,
+        raw_payload: {
+          sender: 'doctor',
+          type: 'text',
+          action: action || 'reply',
+          text: { body: replyText },
+        },
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Error inserting doctor reply into whatsapp_requests:', error);
+      return null;
+    }
+
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return {
+      id: `doctor-${data.id}`,
+      sender: 'doctor',
+      text: replyText,
+      timestamp,
+      messageType: 'text',
+    };
+  } catch (err) {
+    console.warn('sendDoctorReplyToChat error:', err);
+    return null;
+  }
+}
+
+export async function sendQuickBookingLink(
+  phoneNumber: string,
+  patientName: string
+): Promise<ChatMessage | null> {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://health-sync.app';
+  const bookingLink = `${origin}/?phone=${encodeURIComponent(phoneNumber)}`;
+  const replyText = `Hello ${patientName}! You can choose your appointment slot directly here: ${bookingLink}`;
+  return sendDoctorReplyToChat(phoneNumber, patientName, replyText, 'link_sent');
+}
+
+export async function markThreadUrgentInDb(phoneNumber: string): Promise<boolean> {
+  try {
+    const key = phoneNumber.replace(/[^0-9]/g, '').slice(-10);
+    const { error } = await supabase
+      .from('whatsapp_requests')
+      .update({ status: 'urgent' })
+      .ilike('phone_number', `%${key}%`);
+    return !error;
+  } catch (err) {
+    console.warn('markThreadUrgentInDb error:', err);
+    return false;
   }
 }
 
