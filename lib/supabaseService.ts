@@ -641,14 +641,32 @@ export interface CancelResult {
   error?: string;
 }
 
+export interface RescheduleAdvancedParams {
+  appointmentId: string;
+  mode: 'Patient Late' | 'Doctor Delay' | 'Emergency' | 'New Slot' | 'patient_late' | 'doctor_delay' | 'emergency_shift' | 'custom_slot' | string;
+  delayMinutes?: number;
+  newTimeIso?: string | null;
+  fillPatientId?: string | null;
+  shiftAllRemaining?: boolean;
+  notes?: string;
+}
+
 export interface RescheduleResult {
   success: boolean;
   message?: string;
+  mode?: string;
   new_slot?: string;
+  new_time?: string;
   previous_slot?: string;
   patient_name?: string;
+  swapped_patient?: string | null;
+  delay_amount?: string;
+  delay_minutes?: number;
+  shifted_appointments_count?: number;
+  priority?: string;
+  queue_token_no?: number;
   error?: string;
-  errorCode?: 'QUOTA_FULL' | 'SLOT_TAKEN' | 'INVALID_PAST_TIME' | 'CANNOT_RESCHEDULE_COMPLETED' | string;
+  errorCode?: 'QUOTA_FULL' | 'SLOT_TAKEN' | 'INVALID_PAST_TIME' | 'CANNOT_RESCHEDULE_COMPLETED' | 'APPOINTMENT_NOT_FOUND' | 'MISSING_NEW_TIME' | string;
   dailyQuota?: number;
   bookedToday?: number;
 }
@@ -707,44 +725,37 @@ export async function cancelAppointmentDb(
   }
 }
 
-export async function rescheduleAppointmentDb(params: {
-  appointmentId: string;
-  newTimeIso: string;
-  newDoctorId?: string | null;
-  reason: string;
-}): Promise<RescheduleResult> {
+export async function rescheduleAppointmentAdvancedDb(
+  params: RescheduleAdvancedParams
+): Promise<RescheduleResult> {
   try {
-    const { data, error } = await supabase.rpc('reschedule_appointment', {
+    // Normalize mode to match backend SQL specification:
+    // 'Patient Late', 'Doctor Delay', 'Emergency', 'New Slot'
+    let dbMode = 'New Slot';
+    const lower = (params.mode || '').toLowerCase().trim();
+    if (lower === 'patient_late' || lower === 'patient late' || lower === 'late') {
+      dbMode = 'Patient Late';
+    } else if (lower === 'doctor_delay' || lower === 'doctor delay' || lower === 'delay') {
+      dbMode = 'Doctor Delay';
+    } else if (lower === 'emergency_shift' || lower === 'emergency' || lower === 'urgent') {
+      dbMode = 'Emergency';
+    } else {
+      dbMode = 'New Slot';
+    }
+
+    const { data, error } = await supabase.rpc('reschedule_appointment_advanced', {
       p_appointment_id: params.appointmentId,
-      p_new_time: params.newTimeIso,
-      p_new_doctor_id: params.newDoctorId || null,
-      p_reason: params.reason || 'Assistant rescheduled visit',
+      p_mode: dbMode,
+      p_delay_minutes: params.delayMinutes ?? null,
+      p_new_time: params.newTimeIso ?? null,
+      p_fill_patient_id: params.fillPatientId ?? null,
+      p_shift_all_remaining: params.shiftAllRemaining !== undefined ? params.shiftAllRemaining : true,
+      p_notes: params.notes || null,
     });
 
     if (error) {
-      console.warn('RPC reschedule_appointment failed, fallback to direct update:', error);
-      const { error: updateErr } = await supabase
-        .from('appointments')
-        .update({
-          scheduled_time: params.newTimeIso,
-          status: 'Waiting',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', params.appointmentId);
-
-      if (updateErr) return { success: false, error: updateErr.message };
-
-      await supabase.from('appointment_logs').insert([
-        {
-          appointment_id: params.appointmentId,
-          action: 'Rescheduled',
-          new_time: params.newTimeIso,
-          reason: params.reason || 'Assistant rescheduled visit',
-          performed_by: 'Assistant',
-        },
-      ]);
-
-      return { success: true, message: 'Appointment rescheduled successfully' };
+      console.warn('RPC reschedule_appointment_advanced error:', error);
+      return { success: false, error: error.message };
     }
 
     if (data && data.success === false) {
@@ -752,22 +763,42 @@ export async function rescheduleAppointmentDb(params: {
         success: false,
         errorCode: data.error || data.error_code,
         error: data.message || data.error_message || 'Reschedule failed',
-        dailyQuota: data.daily_quota,
-        bookedToday: data.booked_today,
       };
     }
 
     return {
       success: true,
       message: data?.message || 'Appointment rescheduled successfully!',
-      new_slot: data?.new_slot,
+      mode: data?.mode,
+      new_slot: data?.new_slot || data?.new_time,
+      new_time: data?.new_time,
       previous_slot: data?.previous_slot,
       patient_name: data?.patient_name,
+      swapped_patient: data?.swapped_patient,
+      delay_amount: data?.delay_amount,
+      delay_minutes: data?.delay_minutes,
+      shifted_appointments_count: data?.shifted_appointments_count,
+      priority: data?.priority,
+      queue_token_no: data?.queue_token_no,
     };
   } catch (err: any) {
     console.warn('Reschedule exception:', err);
     return { success: false, error: err?.message || 'Reschedule failed' };
   }
+}
+
+export async function rescheduleAppointmentDb(params: {
+  appointmentId: string;
+  newTimeIso: string;
+  newDoctorId?: string | null;
+  reason: string;
+}): Promise<RescheduleResult> {
+  return rescheduleAppointmentAdvancedDb({
+    appointmentId: params.appointmentId,
+    mode: 'New Slot',
+    newTimeIso: params.newTimeIso,
+    notes: params.reason,
+  });
 }
 
 export async function swapPatientSlotsDb(params: {

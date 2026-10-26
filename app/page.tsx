@@ -25,6 +25,7 @@ import {
   reallocateSlotDb,
   cancelAppointmentDb,
   rescheduleAppointmentDb,
+  rescheduleAppointmentAdvancedDb,
   swapPatientSlotsDb,
   cascadeDoctorDelayDb,
   updateAppointmentStatusDb,
@@ -727,111 +728,76 @@ function DashboardContent() {
       reason,
       swapWithPatientId,
       delayMinutes = 20,
-      cascadeAll,
+      cascadeAll = true,
       setUrgentPriority,
     } = params;
 
     const currentPatient = queue.find((p) => p.id === patientId);
 
-    if (strategy === 'patient_late' && swapWithPatientId) {
-      const patientA = queue.find((p) => p.id === patientId);
-      const patientB = queue.find((p) => p.id === swapWithPatientId);
-
-      if (patientA && patientB) {
-        // Patient B moves up to Patient A's slot to consult doctor immediately
-        // Patient A moves to new delayed slot
-        await swapPatientSlotsDb({
-          patientAId: patientA.id,
-          patientBId: patientB.id,
-          slotAOriginalIso: new Date().toISOString(),
-          slotBOriginalIso: new Date().toISOString(),
-          reason,
-        });
-
-        showToast(
-          'success',
-          'Slots Swapped Successfully',
-          `${patientB.name} moved up to ${patientA.time}. ${patientA.name} delayed to ${newSlotTime}.`
-        );
-
-        const dbQueue = await fetchQueueFromDb();
-        if (dbQueue) {
-          setQueue(sortQueueWithCompletedAtEnd(dbQueue));
-        }
-        return;
-      }
+    // Compute target ISO if custom_slot / new slot
+    let targetIso: string | null = null;
+    if (strategy === 'custom_slot' || (strategy as string) === 'new_slot') {
+      targetIso = convertSlotToFutureIso(newSlotTime, newDate, delayMinutes);
     }
 
-    if (strategy === 'doctor_delay' && cascadeAll) {
-      const waitingApptIds = queue
-        .filter((p) => p.status === 'Waiting')
-        .map((p) => p.id);
-
-      await cascadeDoctorDelayDb(waitingApptIds, delayMinutes, reason);
-
-      showToast(
-        'info',
-        'Doctor Delay Cascaded',
-        `All waiting patients shifted by +${delayMinutes} minutes.`
-      );
-
-      const dbQueue = await fetchQueueFromDb();
-      if (dbQueue) {
-        setQueue(sortQueueWithCompletedAtEnd(dbQueue));
-      }
-      return;
-    }
-
-    // Direct / Custom slot reschedule using the new Supabase RPC
-    const targetIso = convertSlotToFutureIso(newSlotTime, newDate, delayMinutes);
-
-    const result = await rescheduleAppointmentDb({
+    // Call master backend RPC reschedule_appointment_advanced
+    const result = await rescheduleAppointmentAdvancedDb({
       appointmentId: patientId,
+      mode: strategy,
+      delayMinutes,
       newTimeIso: targetIso,
-      newDoctorId: null,
-      reason,
+      fillPatientId: strategy === 'patient_late' ? (swapWithPatientId || null) : null,
+      shiftAllRemaining: cascadeAll !== false,
+      notes: reason,
     });
 
     if (result.success) {
+      let toastTitle = 'Appointment Rescheduled';
+      if (strategy === 'patient_late') {
+        toastTitle = result.swapped_patient ? 'Slot Reallocated & Delayed' : 'Patient Delayed';
+      } else if (strategy === 'doctor_delay') {
+        toastTitle = 'Doctor Delay Applied';
+      } else if (strategy === 'emergency_shift') {
+        toastTitle = 'Emergency Priority Activated';
+      }
+
       showToast(
         'success',
-        'Appointment Rescheduled',
-        result.new_slot
-          ? `${result.patient_name || currentPatient?.name || 'Patient'} moved to ${result.new_slot}`
-          : 'Appointment moved successfully!'
+        toastTitle,
+        result.message ||
+          (result.new_slot
+            ? `${result.patient_name || currentPatient?.name || 'Patient'} moved to ${result.new_slot}`
+            : 'Appointment moved successfully!')
       );
 
       const dbQueue = await fetchQueueFromDb();
-      if (dbQueue) {
+      if (dbQueue && dbQueue.length > 0) {
         setQueue(sortQueueWithCompletedAtEnd(dbQueue));
       } else {
         setQueue((prev) =>
-          prev.map((p) => {
-            if (p.id === patientId) {
-              return {
-                ...p,
-                time: newSlotTime,
-                priority: setUrgentPriority ? 'Urgent' : p.priority,
-              };
-            }
-            return p;
-          })
+          sortQueueWithCompletedAtEnd(
+            prev.map((p) => {
+              if (p.id === patientId) {
+                return {
+                  ...p,
+                  time: result.new_slot || newSlotTime,
+                  priority: setUrgentPriority ? 'Urgent' : p.priority,
+                };
+              }
+              return p;
+            })
+          )
         );
       }
     } else {
-      if (result.errorCode === 'QUOTA_FULL') {
-        showToast(
-          'warning',
-          'Doctor Daily Quota Reached',
-          result.error ||
-            `Doctor quota of ${result.dailyQuota || 30} visits reached for this date. Please select another date or doctor.`
-        );
-      } else if (result.errorCode === 'SLOT_TAKEN') {
+      if (result.errorCode === 'SLOT_TAKEN') {
         showToast(
           'error',
           'Slot Already Booked',
           result.error || 'The requested time slot is already taken. Please choose an open slot.'
         );
+      } else if (result.errorCode === 'APPOINTMENT_NOT_FOUND') {
+        showToast('error', 'Appointment Not Found', result.error || 'The appointment could not be found.');
       } else {
         showToast('error', 'Reschedule Failed', result.error || 'Could not reschedule appointment.');
       }
