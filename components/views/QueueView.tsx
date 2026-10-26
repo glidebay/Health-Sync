@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { Stethoscope, User, Phone } from 'lucide-react';
 import { Patient } from '@/types';
 import { NumberedPagination } from '@/components/ui/pagination';
+import { formatPatientToken } from '@/lib/utils';
 
 interface QueueViewProps {
   queue: Patient[];
@@ -88,7 +89,7 @@ export function QueueView({
                     <div className="flex items-center space-x-2">
                       <h3 className="text-sm font-bold text-[#16191E] truncate">{p.name}</h3>
                       <span className="text-xs text-[#8A909D] font-medium flex-shrink-0">
-                        ({p.displayId || (p.tokenNumber ? `P${String(p.tokenNumber).padStart(3, '0')}` : 'P001')})
+                        ({formatPatientToken(p)})
                       </span>
                     </div>
                     <p className="text-xs text-[#5E6470] mt-0.5 truncate flex items-center flex-wrap gap-1">

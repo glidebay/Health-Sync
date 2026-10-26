@@ -28,6 +28,7 @@ import {
 import { Patient, ConfirmedToken } from '@/types';
 import { DbDoctor } from '@/types/database';
 import { AVAILABLE_SLOTS, QUICK_SYMPTOMS } from '@/lib/constants';
+import { formatPatientToken } from '@/lib/utils';
 import { validateMobileNumber } from '@/lib/phoneValidation';
 import {
   getDoctorSlotsForDate,
@@ -657,9 +658,7 @@ export function SlotBookingView({
                 <div>
                   <span className="text-[10px] sm:text-[11px] font-bold text-[#8A909D] uppercase tracking-wider block">OPD Token Number</span>
                   <span className="text-2xl sm:text-3xl font-black text-[#2563EB]">
-                    {String(confirmedToken.tokenNumber).startsWith('P')
-                      ? confirmedToken.tokenNumber
-                      : `P${String(confirmedToken.tokenNumber).padStart(3, '0')}`}
+                    {formatPatientToken({ tokenNumber: confirmedToken.tokenNumber })}
                   </span>
                 </div>
                 <span

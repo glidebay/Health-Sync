@@ -591,7 +591,9 @@ function DashboardContent() {
       }
 
       const newTokNum = String(
-        bookingRes.tokenNumber || `P${String(queue.length + 1).padStart(3, '0')}`
+        bookingRes.displayId ||
+        bookingRes.tokenNumber ||
+        `P${String(queue.length + 1).padStart(3, '0')}`
       );
 
       const newPatient: Patient = {
@@ -604,10 +606,18 @@ function DashboardContent() {
         time: bookSlotTime || 'Now',
         appointmentDate: finalBookingDate,
         tokenNumber: newTokNum,
+        displayId: bookingRes.displayId || newTokNum,
+        patientNumber: bookingRes.patientNumber,
         priority: bookPriority,
       };
 
       setQueue((prev) => [newPatient, ...prev]);
+
+      fetchQueueFromDb().then((fresh) => {
+        if (fresh && fresh.length > 0) {
+          setQueue(sortQueueWithCompletedAtEnd(fresh));
+        }
+      });
 
       setConfirmedToken({
         tokenNumber: newTokNum,

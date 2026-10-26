@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { Stethoscope, Phone, Trash2, Printer } from 'lucide-react';
 import { Patient, InventoryItem, PrescriptionItem } from '@/types';
 import { MedicineSearchCombobox } from '@/components/common/MedicineSearchCombobox';
+import { formatPatientToken } from '@/lib/utils';
 
 interface ConsultationViewProps {
   activePatient: Patient | null;
@@ -71,7 +72,7 @@ export function ConsultationView({
               <div className="flex items-center space-x-2">
                 <h2 className="text-base sm:text-lg font-bold text-[#16191E]">{activePatient.name}</h2>
                 <span className="text-xs text-[#8A909D] font-semibold">
-                  ({activePatient.displayId || (activePatient.tokenNumber ? `P${String(activePatient.tokenNumber).padStart(3, '0')}` : 'P001')})
+                  ({formatPatientToken(activePatient)})
                 </span>
               </div>
               <p className="text-xs text-[#8A909D] font-medium mt-0.5 flex items-center flex-wrap gap-1.5">

@@ -6,6 +6,7 @@ import { X, Check, AlertTriangle } from 'lucide-react';
 import { Patient } from '@/types';
 import { AVAILABLE_SLOTS } from '@/lib/constants';
 import { useClinic } from '@/context/ClinicContext';
+import { formatPatientToken } from '@/lib/utils';
 
 export type ReallocateStrategy =
   | 'patient_late'
@@ -146,9 +147,7 @@ export function RescheduleModal({
     }
   };
 
-  const tokenDisplay =
-    patient.displayId ||
-    (patient.tokenNumber ? `P${String(patient.tokenNumber).padStart(3, '0')}` : 'P001');
+  const tokenDisplay = formatPatientToken(patient);
 
   return (
     <AnimatePresence>
@@ -270,7 +269,7 @@ export function RescheduleModal({
                   >
                     {otherWaitingPatients.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} ({p.displayId || p.tokenNumber}) — Scheduled {p.time}
+                        {p.name} ({formatPatientToken(p)}) — Scheduled {p.time}
                       </option>
                     ))}
                   </select>

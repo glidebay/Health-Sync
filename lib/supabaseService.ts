@@ -26,7 +26,7 @@ export interface FormattedQueuePatient {
   phone?: string;
   status: 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled';
   time: string;
-  tokenNumber: number;
+  tokenNumber: number | string;
   patientNumber?: number;
   displayId?: string;
   priority?: 'Normal' | 'Urgent';
@@ -396,7 +396,7 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
         phone: patient?.phone_number || undefined,
         status: (item.status as 'Waiting' | 'In Progress' | 'Completed') || 'Waiting',
         time: timeStr,
-        tokenNumber: patNum,
+        tokenNumber: displayId,
         patientNumber: patNum,
         displayId,
         priority: item.visit_type === 'Urgent' ? 'Urgent' : 'Normal',
@@ -1548,6 +1548,8 @@ export interface BookAppointmentSlotResult {
   appointmentId?: string;
   patientId?: string;
   tokenNumber?: string | number;
+  patientNumber?: number;
+  displayId?: string;
   message?: string;
   error?: string;
 }
@@ -1616,13 +1618,39 @@ export async function bookAppointmentSlotDb(
       }
 
       const fifoNo = rpcData.queue_token_no || rpcData.fifo_token_no || 1;
-      const tokenNumber = `P${String(fifoNo).padStart(3, '0')}`;
+      let tokenNumber = `P${String(fifoNo).padStart(3, '0')}`;
+      let patNumber: number | undefined = undefined;
+      let dispId: string | undefined = undefined;
+      const patDbId = rpcData.patient_id || rpcData.unique_patient_id;
+
+      if (patDbId) {
+        const { data: pRec } = await supabase
+          .from('patients')
+          .select('patient_number, display_id')
+          .eq('id', patDbId)
+          .maybeSingle();
+
+        if (pRec) {
+          patNumber = pRec.patient_number || undefined;
+          const rawDisp = pRec.display_id;
+          dispId = rawDisp
+            ? (rawDisp.startsWith('P') ? rawDisp : `P${rawDisp}`)
+            : patNumber
+            ? `P${String(patNumber).padStart(3, '0')}`
+            : undefined;
+          if (dispId) {
+            tokenNumber = dispId;
+          }
+        }
+      }
 
       return {
         success: true,
         tokenNumber,
+        patientNumber: patNumber,
+        displayId: dispId || tokenNumber,
         appointmentId: rpcData.appointment_id || rpcData.unique_appointment_id,
-        patientId: rpcData.patient_id || rpcData.unique_patient_id,
+        patientId: patDbId,
         message: rpcData.message || 'Slot confirmed successfully!',
       };
     }
@@ -1898,6 +1926,21 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
     ];
 
     if (dbRequests && dbRequests.length > 0) {
+      // Fetch patients to match WhatsApp requests by phone number
+      const { data: dbPatients } = await supabase
+        .from('patients')
+        .select('id, full_name, phone_number, patient_number, display_id');
+
+      const patientByPhone = new Map<string, any>();
+      if (dbPatients) {
+        for (const pat of dbPatients) {
+          if (pat.phone_number) {
+            const clean = String(pat.phone_number).replace(/[^0-9]/g, '').slice(-10);
+            if (clean) patientByPhone.set(clean, pat);
+          }
+        }
+      }
+
       // Group all Supabase requests by normalized phone number (last 10 digits)
       const phoneGroups = new Map<string, typeof dbRequests>();
       for (const req of dbRequests) {
@@ -1921,12 +1964,25 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
 
         const latest = sorted[sorted.length - 1];
 
-        // Determine best patient name
-        let patientName = '';
-        for (const r of sorted) {
-          if (r.patient_name && r.patient_name.trim()) {
-            patientName = r.patient_name.replace(/[_]/g, ' ').trim();
-            break;
+        const matchedPat = patientByPhone.get(key);
+        let patientName = matchedPat?.full_name ? matchedPat.full_name.trim() : '';
+        let patToken: string | undefined = undefined;
+        if (matchedPat) {
+          const rawDisp = matchedPat.display_id;
+          const pNum = matchedPat.patient_number;
+          patToken = rawDisp
+            ? (rawDisp.startsWith('P') ? rawDisp : `P${rawDisp}`)
+            : pNum
+            ? `P${String(pNum).padStart(3, '0')}`
+            : undefined;
+        }
+
+        if (!patientName) {
+          for (const r of sorted) {
+            if (r.patient_name && r.patient_name.trim()) {
+              patientName = r.patient_name.replace(/[_]/g, ' ').trim();
+              break;
+            }
           }
         }
         if (!patientName) {
@@ -2014,13 +2070,14 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
               actionType: 'link_sent',
             });
           } else if (req.status === 'booked') {
+            const threadToken = patToken || ('P00' + (dbMapped.length + 1));
             messages.push({
               id: `act-booked-${req.id}`,
               sender: 'doctor',
               text: 'Appointment confirmed and scheduled in the live queue.',
               timestamp: msgTime,
               isBookingReceipt: true,
-              tokenNumber: 'P00' + (dbMapped.length + 1),
+              tokenNumber: threadToken,
               date: req.preferred_date || 'Today',
               messageType: 'action',
               actionType: 'slot_booked',
@@ -2044,7 +2101,7 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
           lastMessage: lastMsg?.text || 'WhatsApp inquiry',
           lastMessageTime: formattedLastTime,
           unread: !isBooked,
-          tokenNumber: isBooked ? 'P00' + (dbMapped.length + 1) : undefined,
+          tokenNumber: isBooked ? (patToken || ('P00' + (dbMapped.length + 1))) : undefined,
           messages,
         });
       });

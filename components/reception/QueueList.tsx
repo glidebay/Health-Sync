@@ -7,6 +7,7 @@ import { Patient } from '@/types';
 import { NumberedPagination } from '@/components/ui/pagination';
 import { RescheduleModal, ReallocateStrategy } from './RescheduleModal';
 import { CancelModal } from './CancelModal';
+import { formatPatientToken } from '@/lib/utils';
 
 interface QueueListProps {
   queue: Patient[];
@@ -92,8 +93,7 @@ export function QueueList({
         ) : (
           paginatedQueue.map((p) => {
             const isWaiting = p.status === 'Waiting';
-            const tokenDisplay =
-              p.displayId || (p.tokenNumber ? `P${String(p.tokenNumber).padStart(3, '0')}` : 'P001');
+            const tokenDisplay = formatPatientToken(p);
 
             return (
               <motion.div

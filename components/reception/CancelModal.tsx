@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { Patient } from '@/types';
+import { formatPatientToken } from '@/lib/utils';
 
 export const CANCELLATION_REASONS = [
   'Patient Requested Cancellation',
@@ -48,9 +49,7 @@ export function CancelModal({
     }
   };
 
-  const tokenDisplay =
-    patient.displayId ||
-    (patient.tokenNumber ? `P${String(patient.tokenNumber).padStart(3, '0')}` : 'P001');
+  const tokenDisplay = formatPatientToken(patient);
 
   return (
     <AnimatePresence>

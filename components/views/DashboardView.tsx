@@ -22,6 +22,7 @@ import { AnimatedProgress } from '@/components/common/AnimatedProgress';
 import { staggerContainer, fadeScale } from '@/lib/constants';
 import { RescheduleModal, ReallocateStrategy } from '@/components/reception/RescheduleModal';
 import { CancelModal } from '@/components/reception/CancelModal';
+import { formatPatientToken } from '@/lib/utils';
 
 interface DashboardViewProps {
   totalPatientsCount: number;
@@ -300,8 +301,7 @@ export function DashboardView({
             ) : (
               filteredQueue.slice(0, 3).map((p) => {
                 const isWaiting = p.status === 'Waiting';
-                const tokenDisplay =
-                  p.displayId || (p.tokenNumber ? `P${String(p.tokenNumber).padStart(3, '0')}` : 'P001');
+                const tokenDisplay = formatPatientToken(p);
 
                 return (
                   <motion.div

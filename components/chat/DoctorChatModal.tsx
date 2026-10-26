@@ -13,6 +13,7 @@ import {
 import { PatientChatThread } from '@/types/chat';
 import { DbDoctor } from '@/types/database';
 import { fetchInboundChatThreads } from '@/lib/supabaseService';
+import { formatPatientToken } from '@/lib/utils';
 
 interface DoctorChatModalProps {
   isOpen: boolean;
@@ -277,7 +278,7 @@ export function DoctorChatModal({
                           )}
                           {activeThread.status === 'booked' && (
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                              Booked #{activeThread.tokenNumber || 'P001'}
+                              Booked #{formatPatientToken({ tokenNumber: activeThread.tokenNumber })}
                             </span>
                           )}
                         </div>
@@ -312,7 +313,7 @@ export function DoctorChatModal({
                                 <div>
                                   <span className="text-[10px] text-[#8A909D] block">Token</span>
                                   <span className="text-xl font-bold text-[#2563EB]">
-                                    #{msg.tokenNumber}
+                                    #{formatPatientToken({ tokenNumber: msg.tokenNumber })}
                                   </span>
                                 </div>
 
