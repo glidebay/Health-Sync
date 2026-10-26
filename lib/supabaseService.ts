@@ -612,88 +612,140 @@ export async function updateAppointmentStatusDb(
   }
 }
 
+export interface CancelResult {
+  success: boolean;
+  message?: string;
+  freed_slot?: string;
+  patient_name?: string;
+  error?: string;
+}
+
+export interface RescheduleResult {
+  success: boolean;
+  message?: string;
+  new_slot?: string;
+  previous_slot?: string;
+  patient_name?: string;
+  error?: string;
+  errorCode?: 'QUOTA_FULL' | 'SLOT_TAKEN' | 'INVALID_PAST_TIME' | 'CANNOT_RESCHEDULE_COMPLETED' | string;
+  dailyQuota?: number;
+  bookedToday?: number;
+}
+
 export async function cancelAppointmentDb(
   appointmentId: string,
-  reason: string = 'Patient Requested Cancellation'
-): Promise<boolean> {
+  reason: string = 'Patient requested cancellation'
+): Promise<CancelResult> {
   try {
-    const { data: currentAppt } = await supabase
-      .from('appointments')
-      .select('scheduled_time')
-      .eq('id', appointmentId)
-      .single();
-
-    const oldTime = currentAppt?.scheduled_time || new Date().toISOString();
-
-    const { error } = await supabase
-      .from('appointments')
-      .update({
-        status: 'Cancelled',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', appointmentId);
+    const { data, error } = await supabase.rpc('cancel_appointment', {
+      p_appointment_id: appointmentId,
+      p_reason: reason || 'Patient requested cancellation',
+    });
 
     if (error) {
-      console.warn('Error cancelling appointment:', error);
-      return false;
+      console.warn('RPC cancel_appointment failed, fallback to direct update:', error);
+      const { error: updateErr } = await supabase
+        .from('appointments')
+        .update({
+          status: 'Cancelled',
+          cancellation_reason: reason || 'Patient requested cancellation',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', appointmentId);
+
+      if (updateErr) return { success: false, error: updateErr.message };
+
+      await supabase.from('appointment_logs').insert([
+        {
+          appointment_id: appointmentId,
+          action: 'Cancelled',
+          reason: reason || 'Patient requested cancellation',
+          performed_by: 'Assistant',
+        },
+      ]);
+
+      return { success: true, message: 'Appointment cancelled successfully' };
     }
 
-    await supabase.from('appointment_logs').insert([
-      {
-        appointment_id: appointmentId,
-        old_time: oldTime,
-        new_time: null,
-        reason: `Cancelled: ${reason}`,
-      },
-    ]);
+    if (data && data.success === false) {
+      return {
+        success: false,
+        error: data.message || data.error_message || data.error || 'Cancellation failed',
+      };
+    }
 
-    return true;
-  } catch (err) {
+    return {
+      success: true,
+      message: data?.message || 'Appointment cancelled successfully. Time slot has been freed.',
+      freed_slot: data?.freed_slot,
+      patient_name: data?.patient_name,
+    };
+  } catch (err: any) {
     console.warn('Cancel exception:', err);
-    return false;
+    return { success: false, error: err?.message || 'Cancellation failed' };
   }
 }
 
 export async function rescheduleAppointmentDb(params: {
   appointmentId: string;
   newTimeIso: string;
+  newDoctorId?: string | null;
   reason: string;
-}): Promise<boolean> {
+}): Promise<RescheduleResult> {
   try {
-    const { data: currentAppt } = await supabase
-      .from('appointments')
-      .select('scheduled_time')
-      .eq('id', params.appointmentId)
-      .single();
-
-    const oldTime = currentAppt?.scheduled_time || new Date().toISOString();
-
-    const { error } = await supabase
-      .from('appointments')
-      .update({
-        scheduled_time: params.newTimeIso,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', params.appointmentId);
+    const { data, error } = await supabase.rpc('reschedule_appointment', {
+      p_appointment_id: params.appointmentId,
+      p_new_time: params.newTimeIso,
+      p_new_doctor_id: params.newDoctorId || null,
+      p_reason: params.reason || 'Assistant rescheduled visit',
+    });
 
     if (error) {
-      console.warn('Error rescheduling appointment:', error);
-      return false;
+      console.warn('RPC reschedule_appointment failed, fallback to direct update:', error);
+      const { error: updateErr } = await supabase
+        .from('appointments')
+        .update({
+          scheduled_time: params.newTimeIso,
+          status: 'Waiting',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', params.appointmentId);
+
+      if (updateErr) return { success: false, error: updateErr.message };
+
+      await supabase.from('appointment_logs').insert([
+        {
+          appointment_id: params.appointmentId,
+          action: 'Rescheduled',
+          new_time: params.newTimeIso,
+          reason: params.reason || 'Assistant rescheduled visit',
+          performed_by: 'Assistant',
+        },
+      ]);
+
+      return { success: true, message: 'Appointment rescheduled successfully' };
     }
 
-    await supabase.from('appointment_logs').insert([
-      {
-        appointment_id: params.appointmentId,
-        old_time: oldTime,
-        new_time: params.newTimeIso,
-        reason: params.reason || 'Staff rescheduled appointment',
-      },
-    ]);
+    if (data && data.success === false) {
+      return {
+        success: false,
+        errorCode: data.error || data.error_code,
+        error: data.message || data.error_message || 'Reschedule failed',
+        dailyQuota: data.daily_quota,
+        bookedToday: data.booked_today,
+      };
+    }
 
-    return true;
-  } catch (err) {
+    return {
+      success: true,
+      message: data?.message || 'Appointment rescheduled successfully!',
+      new_slot: data?.new_slot,
+      previous_slot: data?.previous_slot,
+      patient_name: data?.patient_name,
+    };
+  } catch (err: any) {
     console.warn('Reschedule exception:', err);
-    return false;
+    return { success: false, error: err?.message || 'Reschedule failed' };
   }
 }
 

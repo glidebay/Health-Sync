@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Check } from 'lucide-react';
+import { X, Check, AlertTriangle } from 'lucide-react';
 import { Patient } from '@/types';
 import { AVAILABLE_SLOTS } from '@/lib/constants';
 import { useClinic } from '@/context/ClinicContext';
@@ -22,6 +22,7 @@ interface RescheduleModalProps {
     patientId: string;
     strategy: ReallocateStrategy;
     newSlotTime: string;
+    newDate?: string;
     reason: string;
     swapWithPatientId?: string;
     delayMinutes?: number;
@@ -50,6 +51,7 @@ export function RescheduleModal({
   const [readyPatientId, setReadyPatientId] = useState<string>('');
   const [cascadeDoctorDelay, setCascadeDoctorDelay] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   useEffect(() => {
     if (config?.use_standard_date_picker !== undefined) {
@@ -103,6 +105,7 @@ export function RescheduleModal({
 
   const handleApply = async () => {
     try {
+      setModalError(null);
       setIsSubmitting(true);
       let targetNewTime = patient.time;
       let finalReason = '';
@@ -125,6 +128,7 @@ export function RescheduleModal({
         patientId: patient.id,
         strategy,
         newSlotTime: targetNewTime,
+        newDate: strategy === 'custom_slot' && customPickerMode === 'standard' ? customDate : undefined,
         reason: finalReason,
         swapWithPatientId:
           strategy === 'patient_late' && fastTrackReadyPatient ? readyPatientId : undefined,
@@ -134,8 +138,9 @@ export function RescheduleModal({
       });
 
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error applying reschedule:', err);
+      setModalError(err?.message || 'Failed to reschedule. Please choose an open slot.');
     } finally {
       setIsSubmitting(false);
     }
@@ -175,6 +180,14 @@ export function RescheduleModal({
 
           {/* Clean Body */}
           <div className="p-5 space-y-4">
+            {/* Error Banner */}
+            {modalError && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3 rounded-xl flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{modalError}</span>
+              </div>
+            )}
+
             {/* Reason Selector Tabs */}
             <div>
               <label className="text-xs font-semibold text-[#8A909D] block mb-1.5">

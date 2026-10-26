@@ -80,6 +80,39 @@ import { ConsultationView } from '@/components/views/ConsultationView';
 import { InventoryView } from '@/components/views/InventoryView';
 import { AnalyticsView } from '@/components/views/AnalyticsView';
 import { SettingsView } from '@/components/views/SettingsView';
+import { ToastNotification, ToastMessage, ToastType } from '@/components/ui/ToastNotification';
+
+export function convertSlotToFutureIso(timeStr: string, dateStr?: string, fallbackDelayMins: number = 20): string {
+  if (timeStr && timeStr.includes('T') && timeStr.includes('-')) {
+    const d = new Date(timeStr);
+    if (d.getTime() > Date.now()) return d.toISOString();
+  }
+
+  let hour = 10;
+  let minute = 0;
+  const match = (timeStr || '').match(/(\d+):(\d+)\s*(AM|PM)?/i);
+  if (match) {
+    hour = parseInt(match[1], 10);
+    minute = parseInt(match[2], 10);
+    const meridiem = match[3]?.toUpperCase();
+    if (meridiem === 'PM' && hour < 12) hour += 12;
+    if (meridiem === 'AM' && hour === 12) hour = 0;
+  }
+
+  const target = dateStr ? new Date(`${dateStr}T00:00:00`) : new Date();
+  target.setHours(hour, minute, 0, 0);
+
+  // Ensure p_new_time > now() to satisfy database constraint
+  if (target.getTime() <= Date.now()) {
+    if (!dateStr) {
+      target.setDate(target.getDate() + 1);
+    } else {
+      return new Date(Date.now() + fallbackDelayMins * 60000).toISOString();
+    }
+  }
+
+  return target.toISOString();
+}
 
 const INITIAL_QUEUE: Patient[] = [];
 const INITIAL_INVENTORY: InventoryItem[] = [];
@@ -103,6 +136,21 @@ function DashboardContent() {
   });
   const [activeSection, setActiveSection] = useState<NavSection>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // Toast Notifications for Reschedule & Conflict Alerts
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const showToast = (type: ToastType, title: string, message?: string, duration: number = 4000) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    setToasts((prev) => [...prev, { id, type, title, message, duration }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, duration);
+  };
+
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
 
   // Slot Booking Form State
   const [availableDoctors, setAvailableDoctors] = useState<DbDoctor[]>([]);
@@ -606,21 +654,39 @@ function DashboardContent() {
   };
 
   const handleCancelAppointment = async (patientId: string, reason: string) => {
-    await cancelAppointmentDb(patientId, reason);
-    setQueue((prev) =>
-      prev.map((p) => {
-        if (p.id === patientId) {
-          return { ...p, status: 'Cancelled' as PatientStatus };
-        }
-        return p;
-      })
-    );
+    const result = await cancelAppointmentDb(patientId, reason);
+    if (result.success) {
+      showToast(
+        'success',
+        'Appointment Cancelled',
+        result.freed_slot
+          ? `Slot ${result.freed_slot} has been freed immediately.`
+          : 'Time slot has been freed for new bookings.'
+      );
+      // Fetch fresh queue from database to ensure 100% real-time sync across reception & live queue
+      const dbQueue = await fetchQueueFromDb();
+      if (dbQueue) {
+        setQueue(sortQueueWithCompletedAtEnd(dbQueue));
+      } else {
+        setQueue((prev) =>
+          prev.map((p) => {
+            if (p.id === patientId) {
+              return { ...p, status: 'Cancelled' as PatientStatus };
+            }
+            return p;
+          })
+        );
+      }
+    } else {
+      showToast('error', 'Cancellation Failed', result.error || 'Could not cancel appointment.');
+    }
   };
 
   const handleReschedulePatient = async (params: {
     patientId: string;
     strategy: ReallocateStrategy;
     newSlotTime: string;
+    newDate?: string;
     reason: string;
     swapWithPatientId?: string;
     delayMinutes?: number;
@@ -631,12 +697,15 @@ function DashboardContent() {
       patientId,
       strategy,
       newSlotTime,
+      newDate,
       reason,
       swapWithPatientId,
       delayMinutes = 20,
       cascadeAll,
       setUrgentPriority,
     } = params;
+
+    const currentPatient = queue.find((p) => p.id === patientId);
 
     if (strategy === 'patient_late' && swapWithPatientId) {
       const patientA = queue.find((p) => p.id === patientId);
@@ -645,7 +714,6 @@ function DashboardContent() {
       if (patientA && patientB) {
         // Patient B moves up to Patient A's slot to consult doctor immediately
         // Patient A moves to new delayed slot
-        // Patient B's old slot is freed!
         await swapPatientSlotsDb({
           patientAId: patientA.id,
           patientBId: patientB.id,
@@ -654,17 +722,16 @@ function DashboardContent() {
           reason,
         });
 
-        setQueue((prev) =>
-          prev.map((p) => {
-            if (p.id === patientB.id) {
-              return { ...p, time: patientA.time };
-            }
-            if (p.id === patientA.id) {
-              return { ...p, time: newSlotTime };
-            }
-            return p;
-          })
+        showToast(
+          'success',
+          'Slots Swapped Successfully',
+          `${patientB.name} moved up to ${patientA.time}. ${patientA.name} delayed to ${newSlotTime}.`
         );
+
+        const dbQueue = await fetchQueueFromDb();
+        if (dbQueue) {
+          setQueue(sortQueueWithCompletedAtEnd(dbQueue));
+        }
         return;
       }
     }
@@ -676,39 +743,74 @@ function DashboardContent() {
 
       await cascadeDoctorDelayDb(waitingApptIds, delayMinutes, reason);
 
-      setQueue((prev) =>
-        prev.map((p) => {
-          if (p.status === 'Waiting') {
-            return {
-              ...p,
-              time: calculateShiftedTimeStr(p.time, delayMinutes),
-            };
-          }
-          return p;
-        })
+      showToast(
+        'info',
+        'Doctor Delay Cascaded',
+        `All waiting patients shifted by +${delayMinutes} minutes.`
       );
+
+      const dbQueue = await fetchQueueFromDb();
+      if (dbQueue) {
+        setQueue(sortQueueWithCompletedAtEnd(dbQueue));
+      }
       return;
     }
 
-    // Direct / Emergency reschedule
-    await rescheduleAppointmentDb({
+    // Direct / Custom slot reschedule using the new Supabase RPC
+    const targetIso = convertSlotToFutureIso(newSlotTime, newDate, delayMinutes);
+
+    const result = await rescheduleAppointmentDb({
       appointmentId: patientId,
-      newTimeIso: new Date().toISOString(),
+      newTimeIso: targetIso,
+      newDoctorId: null,
       reason,
     });
 
-    setQueue((prev) =>
-      prev.map((p) => {
-        if (p.id === patientId) {
-          return {
-            ...p,
-            time: newSlotTime,
-            priority: setUrgentPriority ? 'Urgent' : p.priority,
-          };
-        }
-        return p;
-      })
-    );
+    if (result.success) {
+      showToast(
+        'success',
+        'Appointment Rescheduled',
+        result.new_slot
+          ? `${result.patient_name || currentPatient?.name || 'Patient'} moved to ${result.new_slot}`
+          : 'Appointment moved successfully!'
+      );
+
+      const dbQueue = await fetchQueueFromDb();
+      if (dbQueue) {
+        setQueue(sortQueueWithCompletedAtEnd(dbQueue));
+      } else {
+        setQueue((prev) =>
+          prev.map((p) => {
+            if (p.id === patientId) {
+              return {
+                ...p,
+                time: newSlotTime,
+                priority: setUrgentPriority ? 'Urgent' : p.priority,
+              };
+            }
+            return p;
+          })
+        );
+      }
+    } else {
+      if (result.errorCode === 'QUOTA_FULL') {
+        showToast(
+          'warning',
+          'Doctor Daily Quota Reached',
+          result.error ||
+            `Doctor quota of ${result.dailyQuota || 30} visits reached for this date. Please select another date or doctor.`
+        );
+      } else if (result.errorCode === 'SLOT_TAKEN') {
+        showToast(
+          'error',
+          'Slot Already Booked',
+          result.error || 'The requested time slot is already taken. Please choose an open slot.'
+        );
+      } else {
+        showToast('error', 'Reschedule Failed', result.error || 'Could not reschedule appointment.');
+      }
+      throw new Error(result.error || 'Reschedule failed');
+    }
   };
 
   const handleReallocate = async (id: string) => {
@@ -1377,6 +1479,9 @@ function DashboardContent() {
           />
         </>
       )}
+
+      {/* Real-time Toast Notifications */}
+      <ToastNotification toasts={toasts} onDismiss={dismissToast} />
     </>
   );
 }
