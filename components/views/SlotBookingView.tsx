@@ -917,18 +917,7 @@ export function SlotBookingView({
                     <span>Select Time Slot</span>
                   </label>
 
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-[#2563EB] border border-blue-100">
-                    <span>Daily Quota:</span>
-                    <span className="font-bold">{slotsSummary.dailyQuota} Slots</span>
-                    <span className="text-blue-300">•</span>
-                    <span className="text-emerald-700 font-bold">{slotsSummary.availableCount} Open</span>
-                    {slotsSummary.bookedCount > 0 && (
-                      <>
-                        <span className="text-blue-300">•</span>
-                        <span className="text-gray-500">{slotsSummary.bookedCount} Booked</span>
-                      </>
-                    )}
-                  </div>
+
 
                   {isLoadingSlots && (
                     <span className="text-[10px] text-blue-500 animate-pulse font-medium">Checking live slots...</span>

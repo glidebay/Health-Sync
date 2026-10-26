@@ -52,7 +52,7 @@ const CATEGORIES: CategoryConfig[] = [
 
 export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) {
   const { config, updateAllConfigs, resetConfigToDefaults } = useClinic();
-  
+
   // Track modified fields
   const [edits, setEdits] = useState<Partial<AppConfig>>({});
   const [activeCategory, setActiveCategory] = useState<string>(CATEGORIES[0].id);
@@ -266,13 +266,12 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
             whileTap={{ scale: 0.97 }}
             onClick={handleSave}
             disabled={isSaving || !hasUnsavedChanges}
-            className={`flex items-center space-x-1.5 text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer shadow-sm flex-shrink-0 whitespace-nowrap ${
-              hasUnsavedChanges
-                ? 'bg-[#2563EB] hover:bg-blue-700 text-white'
-                : isSaved
+            className={`flex items-center space-x-1.5 text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer shadow-sm flex-shrink-0 whitespace-nowrap ${hasUnsavedChanges
+              ? 'bg-[#2563EB] hover:bg-blue-700 text-white'
+              : isSaved
                 ? 'bg-emerald-600 text-white'
                 : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            }`}
+              }`}
           >
             {isSaving ? (
               <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin flex-shrink-0" />
@@ -312,25 +311,14 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                 <button
                   key={cat.id}
                   onClick={() => setActiveCategory(cat.id)}
-                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex-shrink-0 ${
-                    isActive
-                      ? 'bg-[#2563EB] text-white shadow-sm'
-                      : 'bg-white border border-[#ECEEF2] text-[#5E6470] hover:text-[#16191E] hover:bg-gray-50'
-                  }`}
+                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex-shrink-0 ${isActive
+                    ? 'bg-[#2563EB] text-white shadow-sm'
+                    : 'bg-white border border-[#ECEEF2] text-[#5E6470] hover:text-[#16191E] hover:bg-gray-50'
+                    }`}
                 >
                   <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-[#8A909D]'}`} />
                   <span className="whitespace-nowrap">{cat.label}</span>
-                  {cat.isProvision && (
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0 ${
-                        isActive
-                          ? 'bg-blue-400 text-white'
-                          : 'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}
-                    >
-                      Provision
-                    </span>
-                  )}
+
                 </button>
               );
             })}
@@ -356,11 +344,10 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                 key={meta.key}
                 whileHover={{ y: -2, boxShadow: '0 8px 24px -4px rgba(0,0,0,0.06)' }}
                 transition={{ type: 'spring', damping: 20 }}
-                className={`bg-white rounded-2xl p-5 border shadow-sm flex flex-col justify-between transition-colors ${
-                  isDirty
-                    ? 'border-blue-400 bg-blue-50/[0.03]'
-                    : 'border-[#ECEEF2]'
-                }`}
+                className={`bg-white rounded-2xl p-5 border shadow-sm flex flex-col justify-between transition-colors ${isDirty
+                  ? 'border-blue-400 bg-blue-50/[0.03]'
+                  : 'border-[#ECEEF2]'
+                  }`}
               >
                 <div>
                   {/* Title & Badge */}
@@ -373,12 +360,7 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                             Modified
                           </span>
                         )}
-                        {meta.isProvision && (
-                          <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center space-x-1">
-                            <Sparkles className="w-2.5 h-2.5" />
-                            <span>Planned Provision</span>
-                          </span>
-                        )}
+
                       </div>
                       <p className="text-xs text-[#8A909D] leading-relaxed">
                         {meta.description}
@@ -386,11 +368,10 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                     </div>
 
                     <span
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${
-                        meta.paramType === 'Control Parameter'
-                          ? 'bg-purple-50 text-purple-700 border border-purple-100'
-                          : 'bg-blue-50 text-[#2563EB] border border-blue-100'
-                      }`}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${meta.paramType === 'Control Parameter'
+                        ? 'bg-purple-50 text-purple-700 border border-purple-100'
+                        : 'bg-blue-50 text-[#2563EB] border border-blue-100'
+                        }`}
                     >
                       {meta.paramType === 'Control Parameter' ? 'Control Rule' : 'Setting'}
                     </span>
@@ -407,14 +388,12 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                         <button
                           type="button"
                           onClick={() => handleFieldChange(meta.key, !val)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
-                            val ? 'bg-[#2563EB]' : 'bg-gray-300'
-                          }`}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${val ? 'bg-[#2563EB]' : 'bg-gray-300'
+                            }`}
                         >
                           <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              val ? 'translate-x-6' : 'translate-x-1'
-                            }`}
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${val ? 'translate-x-6' : 'translate-x-1'
+                              }`}
                           />
                         </button>
                       </div>
