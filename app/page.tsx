@@ -118,9 +118,28 @@ const INITIAL_QUEUE: Patient[] = [];
 const INITIAL_INVENTORY: InventoryItem[] = [];
 
 export const sortQueueWithCompletedAtEnd = (patients: Patient[]): Patient[] => {
-  const notCompleted = patients.filter((p) => p.status !== 'Completed');
-  const completed = patients.filter((p) => p.status === 'Completed');
-  return [...notCompleted, ...completed];
+  const parseFifoOrder = (p: Patient): number => {
+    if (typeof p.patientNumber === 'number') return p.patientNumber;
+    const raw = String(p.displayId || p.tokenNumber || '');
+    const m = raw.match(/\d+/);
+    return m ? parseInt(m[0], 10) : 999999;
+  };
+
+  const inProgress = patients.filter((p) => p.status === 'In Progress');
+  const waiting = patients.filter((p) => p.status === 'Waiting');
+  const completedOrCancelled = patients.filter(
+    (p) => p.status === 'Completed' || p.status === 'Cancelled'
+  );
+
+  // First-In First-Out (FIFO): ordered by patient registration/patient_number ascending
+  // Urgent triage patients stay ahead if flagged Urgent
+  waiting.sort((a, b) => {
+    if (a.priority === 'Urgent' && b.priority !== 'Urgent') return -1;
+    if (b.priority === 'Urgent' && a.priority !== 'Urgent') return 1;
+    return parseFifoOrder(a) - parseFifoOrder(b);
+  });
+
+  return [...inProgress, ...waiting, ...completedOrCancelled];
 };
 
 function DashboardContent() {
@@ -520,10 +539,7 @@ function DashboardContent() {
     });
 
     if (dbPat) {
-      setQueue((prev) => [
-        { ...dbPat },
-        ...prev,
-      ]);
+      setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, { ...dbPat }]));
     }
 
     setWalkinName('');
@@ -611,7 +627,7 @@ function DashboardContent() {
         priority: bookPriority,
       };
 
-      setQueue((prev) => [newPatient, ...prev]);
+      setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, newPatient]));
 
       fetchQueueFromDb().then((fresh) => {
         if (fresh && fresh.length > 0) {

@@ -372,7 +372,7 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
 
     if (!data || data.length === 0) return [];
 
-    return data.map((item: any, index: number) => {
+    const mapped: FormattedQueuePatient[] = data.map((item: any, index: number) => {
       const patient = item.patient;
       const scheduledDate = item.scheduled_time ? new Date(item.scheduled_time) : new Date();
       const timeStr = scheduledDate.toLocaleTimeString('en-US', {
@@ -402,6 +402,28 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
         priority: item.visit_type === 'Urgent' ? 'Urgent' : 'Normal',
         scheduledTime: item.scheduled_time,
       };
+    });
+
+    // Enforce First-In, First-Out (FIFO) queue order
+    const parseFifoNum = (p: FormattedQueuePatient): number => {
+      if (typeof p.patientNumber === 'number') return p.patientNumber;
+      const raw = String(p.displayId || p.tokenNumber || '');
+      const m = raw.match(/\d+/);
+      return m ? parseInt(m[0], 10) : 999999;
+    };
+
+    return mapped.sort((a, b) => {
+      const isDoneA = a.status === 'Completed' || a.status === 'Cancelled';
+      const isDoneB = b.status === 'Completed' || b.status === 'Cancelled';
+      if (isDoneA !== isDoneB) return isDoneA ? 1 : -1;
+
+      if (a.status === 'In Progress' && b.status !== 'In Progress') return -1;
+      if (b.status === 'In Progress' && a.status !== 'In Progress') return 1;
+
+      if (a.priority === 'Urgent' && b.priority !== 'Urgent') return -1;
+      if (b.priority === 'Urgent' && a.priority !== 'Urgent') return 1;
+
+      return parseFifoNum(a) - parseFifoNum(b);
     });
   } catch (err) {
     console.warn('Queue fetch exception:', err);

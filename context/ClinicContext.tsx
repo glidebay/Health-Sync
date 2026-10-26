@@ -289,10 +289,19 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     });
 
     if (dbPat) {
-      setPatients(prev => [
-        { ...dbPat },
-        ...prev,
-      ]);
+      setPatients(prev => {
+        const next = [...prev, { ...dbPat }];
+        return next.sort((a, b) => {
+          const isDoneA = a.status === 'Completed' || a.status === 'Cancelled';
+          const isDoneB = b.status === 'Completed' || b.status === 'Cancelled';
+          if (isDoneA !== isDoneB) return isDoneA ? 1 : -1;
+          if (a.status === 'In Progress' && b.status !== 'In Progress') return -1;
+          if (b.status === 'In Progress' && a.status !== 'In Progress') return 1;
+          const numA = (typeof a.patientNumber === 'number' ? a.patientNumber : parseInt(String(a.displayId || a.tokenNumber || '').replace(/\D/g, ''), 10)) || 999999;
+          const numB = (typeof b.patientNumber === 'number' ? b.patientNumber : parseInt(String(b.displayId || b.tokenNumber || '').replace(/\D/g, ''), 10)) || 999999;
+          return numA - numB;
+        });
+      });
     }
   };
 
