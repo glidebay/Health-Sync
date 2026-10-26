@@ -326,7 +326,7 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
         )}
       </div>
 
-      {/* 4. PARAMETERS CARDS GRID */}
+      {/* 4. PARAMETERS CARDS  */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
         {filteredParameters.length === 0 ? (
           <div className="col-span-full bg-white rounded-2xl p-12 text-center border border-[#ECEEF2] shadow-sm">
