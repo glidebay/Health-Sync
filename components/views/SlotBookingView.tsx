@@ -298,10 +298,10 @@ export function formatYMDToDisplay(ymd?: string): string {
   return `${parseInt(parts[2], 10)} ${monthStr} ${parts[0]}`;
 }
 
-export function getBookingDates(selectedDateStr?: string, baseDate?: Date, maxDays: number = 7): DateOption[] {
+export function getBookingDates(selectedDateStr?: string, baseDate?: Date, maxDays: number = 14): DateOption[] {
   const dates: DateOption[] = [];
   const today = baseDate ? new Date(baseDate) : new Date();
-  const safeDays = Math.max(1, Math.min(30, maxDays));
+  const safeDays = Math.max(1, Math.min(60, Number(maxDays) || 14));
 
   const formatYMD = (d: Date) => {
     const year = d.getFullYear();
@@ -431,24 +431,19 @@ export function SlotBookingView({
   onBackToGateway,
   isStandalone = false,
 }: SlotBookingViewProps) {
-  const { config, updateConfig } = useClinic();
-  const initialMaxDays = config?.max_advance_booking_days ? Number(config.max_advance_booking_days) : 7;
-  const [maxBookingDays, setMaxBookingDays] = useState<number>(initialMaxDays);
-
-  useEffect(() => {
-    if (config?.max_advance_booking_days) {
-      setMaxBookingDays(Number(config.max_advance_booking_days));
-    }
-  }, [config?.max_advance_booking_days]);
+  const { config } = useClinic();
+  const maxAdvanceBookingDays = config?.max_advance_booking_days
+    ? Number(config.max_advance_booking_days)
+    : 14;
 
   const maxAllowedDate = useMemo(() => {
     const now = new Date();
-    const maxD = new Date(now.getFullYear(), now.getMonth(), now.getDate() + Math.max(1, maxBookingDays) - 1);
+    const maxD = new Date(now.getFullYear(), now.getMonth(), now.getDate() + Math.max(1, maxAdvanceBookingDays) - 1);
     const y = maxD.getFullYear();
     const m = String(maxD.getMonth() + 1).padStart(2, '0');
     const d = String(maxD.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
-  }, [maxBookingDays]);
+  }, [maxAdvanceBookingDays]);
 
   const [pickerMode, setPickerMode] = useState<'grid' | 'standard'>('grid');
   const [standardDate, setStandardDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -493,8 +488,8 @@ export function SlotBookingView({
     if (!bookDate && !internalDate) {
       setInternalDate(ymd);
     }
-    setDateOptions(getBookingDates(targetDate, now, maxBookingDays));
-  }, [bookDate, internalDate, maxBookingDays]);
+    setDateOptions(getBookingDates(targetDate, now, maxAdvanceBookingDays));
+  }, [bookDate, internalDate, maxAdvanceBookingDays]);
 
   const handleDateChange = (dateStr: string) => {
     if (setBookDate) {
@@ -503,17 +498,7 @@ export function SlotBookingView({
       setInternalDate(dateStr);
     }
     const now = new Date();
-    setDateOptions(getBookingDates(dateStr, now, maxBookingDays));
-  };
-
-  const handleMaxDaysChange = (newMaxDays: number) => {
-    setMaxBookingDays(newMaxDays);
-    const now = new Date();
-    const targetDate = activeDate || todayMinDate;
-    setDateOptions(getBookingDates(targetDate, now, newMaxDays));
-    if (updateConfig) {
-      updateConfig('max_advance_booking_days', newMaxDays);
-    }
+    setDateOptions(getBookingDates(dateStr, now, maxAdvanceBookingDays));
   };
 
   const currentDateOption = useMemo(
@@ -773,34 +758,11 @@ export function SlotBookingView({
             {/* 1. Date Selection (BookMyShow Style) */}
             <div className="space-y-2.5 sm:space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-1.5 sm:gap-2">
-                    <Calendar className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
-                    <span>Select Date</span>
-                  </label>
+                <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-1.5 sm:gap-2">
+                  <Calendar className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
+                  <span>Select Date</span>
 
-                  {/* Max Booking Day Selection */}
-                  <div className="inline-flex items-center space-x-1.5 bg-[#F8F9FB] px-2 py-0.5 rounded-xl border border-[#ECEEF2]">
-                    <span className="text-[10px] sm:text-[11px] font-semibold text-[#8A909D] whitespace-nowrap">
-                      Max Days:
-                    </span>
-                    <select
-                      value={maxBookingDays}
-                      onChange={(e) => handleMaxDaysChange(Number(e.target.value))}
-                      className="bg-white border border-[#ECEEF2] text-[#16191E] font-bold text-[11px] sm:text-xs rounded-lg px-2 py-0.5 outline-none focus:border-[#2563EB] cursor-pointer shadow-2xs"
-                      title="Select maximum booking advance days"
-                    >
-                      <option value={3}>3 Days</option>
-                      <option value={5}>5 Days</option>
-                      <option value={6}>6 Days</option>
-                      <option value={7}>7 Days (1 Wk)</option>
-                      <option value={10}>10 Days</option>
-                      <option value={14}>14 Days (2 Wks)</option>
-                      <option value={21}>21 Days (3 Wks)</option>
-                      <option value={30}>30 Days (1 Mo)</option>
-                    </select>
-                  </div>
-                </div>
+                </label>
 
                 {/* Date Controls: Left/Right Chevrons & Calendar Picker Button */}
                 <div className="flex items-center space-x-1.5 self-start sm:self-auto">
@@ -941,7 +903,7 @@ export function SlotBookingView({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] sm:text-xs text-[#8A909D] px-1 gap-1">
 
                 <span className="text-[10px] text-gray-400 font-medium hidden sm:inline">
-                  Book up to {maxBookingDays} days in advance
+                  Book up to {maxAdvanceBookingDays} days in advance
                 </span>
               </div>
             </div>
