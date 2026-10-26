@@ -9,10 +9,9 @@ import {
   Search,
   RefreshCw,
   MessageSquare,
-  Check,
 } from 'lucide-react';
-import { DbDoctor } from '@/types/database';
 import { PatientChatThread } from '@/types/chat';
+import { DbDoctor } from '@/types/database';
 import { fetchInboundChatThreads } from '@/lib/supabaseService';
 
 interface DoctorChatModalProps {
@@ -158,33 +157,30 @@ export function DoctorChatModal({
                   <button
                     type="button"
                     onClick={() => setFilterTab('all')}
-                    className={`flex-1 py-1 rounded-md transition text-center cursor-pointer ${
-                      filterTab === 'all'
-                        ? 'bg-white text-[#2563EB] shadow-2xs font-bold'
-                        : 'hover:text-[#16191E]'
-                    }`}
+                    className={`flex-1 py-1 rounded-md transition text-center cursor-pointer ${filterTab === 'all'
+                      ? 'bg-white text-[#2563EB] shadow-2xs font-bold'
+                      : 'hover:text-[#16191E]'
+                      }`}
                   >
                     All ({threads.length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setFilterTab('pending')}
-                    className={`flex-1 py-1 rounded-md transition text-center cursor-pointer ${
-                      filterTab === 'pending'
-                        ? 'bg-white text-[#2563EB] shadow-2xs font-bold'
-                        : 'hover:text-[#16191E]'
-                    }`}
+                    className={`flex-1 py-1 rounded-md transition text-center cursor-pointer ${filterTab === 'pending'
+                      ? 'bg-white text-[#2563EB] shadow-2xs font-bold'
+                      : 'hover:text-[#16191E]'
+                      }`}
                   >
                     Pending ({threads.filter((t) => t.status !== 'booked').length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setFilterTab('booked')}
-                    className={`flex-1 py-1 rounded-md transition text-center cursor-pointer ${
-                      filterTab === 'booked'
-                        ? 'bg-white text-[#2563EB] shadow-2xs font-bold'
-                        : 'hover:text-[#16191E]'
-                    }`}
+                    className={`flex-1 py-1 rounded-md transition text-center cursor-pointer ${filterTab === 'booked'
+                      ? 'bg-white text-[#2563EB] shadow-2xs font-bold'
+                      : 'hover:text-[#16191E]'
+                      }`}
                   >
                     Booked ({threads.filter((t) => t.status === 'booked').length})
                   </button>
@@ -214,56 +210,42 @@ export function DoctorChatModal({
                             )
                           );
                         }}
-                        className={`p-3 text-left transition cursor-pointer flex items-start gap-2.5 ${
-                          isSelected
-                            ? 'bg-blue-50/70 border-l-3 border-[#2563EB]'
-                            : 'hover:bg-[#F8F9FB]'
-                        }`}
+                        className={`p-3 text-left transition cursor-pointer flex items-start gap-2.5 ${isSelected
+                          ? 'bg-blue-50/70 border-l-3 border-[#2563EB]'
+                          : 'hover:bg-[#F8F9FB]'
+                          }`}
                       >
                         <div
-                          className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                            isBooked
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                              : isUrgent
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 ${isBooked
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                            : isUrgent
                               ? 'bg-amber-50 text-amber-700 border border-amber-200'
                               : 'bg-[#F8F9FB] border border-[#ECEEF2] text-[#16191E]'
-                          }`}
+                            }`}
                         >
                           {thread.patientName.charAt(0).toUpperCase()}
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-1 mb-0.5">
-                            <span className="text-xs font-bold text-[#16191E] truncate">
-                              {thread.patientName}
-                            </span>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-xs font-bold text-[#16191E] truncate">
+                                {thread.patientName}
+                              </span>
+                              {isUrgent && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-600 border border-rose-100 shrink-0">
+                                  Urgent
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[10px] text-[#8A909D] whitespace-nowrap">
                               {thread.lastMessageTime}
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-1 text-[11px] text-[#8A909D] mb-1">
+                          <div className="flex items-center gap-1 text-[11px] text-[#8A909D]">
                             <Phone className="w-3 h-3 flex-shrink-0" />
-                            <span>{thread.phoneNumber}</span>
-                          </div>
-
-                          <div className="flex items-center justify-between gap-1">
-                            {isBooked ? (
-                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700">
-                                <Check className="w-2.5 h-2.5" />
-                                {thread.tokenNumber ? `#${thread.tokenNumber}` : 'Booked'}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700">
-                                {thread.requestedSlot || 'Requested Slot'}
-                              </span>
-                            )}
-
-                            {isUrgent && (
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-100">
-                                Urgent
-                              </span>
-                            )}
+                            <span className="truncate">{thread.phoneNumber}</span>
                           </div>
                         </div>
                       </div>
@@ -333,10 +315,7 @@ export function DoctorChatModal({
                                     #{msg.tokenNumber}
                                   </span>
                                 </div>
-                                <div className="text-right">
-                                  <span className="text-[10px] text-[#8A909D] block">Slot Time</span>
-                                  <span className="text-xs font-bold text-[#16191E]">{msg.slotTime}</span>
-                                </div>
+
                               </div>
                               <p className="text-[11px] text-[#8A909D] pt-1">{msg.text}</p>
                             </div>
@@ -350,17 +329,15 @@ export function DoctorChatModal({
                           className={`flex ${isDoctor ? 'justify-end' : 'justify-start'}`}
                         >
                           <div
-                            className={`max-w-[75%] p-3.5 rounded-2xl text-xs leading-relaxed ${
-                              isDoctor
-                                ? 'bg-[#2563EB] text-white rounded-tr-xs'
-                                : 'bg-white text-[#16191E] border border-[#ECEEF2] rounded-tl-xs shadow-2xs'
-                            }`}
+                            className={`max-w-[75%] p-3.5 rounded-2xl text-xs leading-relaxed ${isDoctor
+                              ? 'bg-[#2563EB] text-white rounded-tr-xs'
+                              : 'bg-white text-[#16191E] border border-[#ECEEF2] rounded-tl-xs shadow-2xs'
+                              }`}
                           >
                             <p className="whitespace-pre-wrap">{msg.text}</p>
                             <span
-                              className={`text-[9px] block text-right mt-1.5 ${
-                                isDoctor ? 'text-blue-100' : 'text-[#8A909D]'
-                              }`}
+                              className={`text-[9px] block text-right mt-1.5 ${isDoctor ? 'text-blue-100' : 'text-[#8A909D]'
+                                }`}
                             >
                               {msg.timestamp}
                             </span>
