@@ -181,7 +181,7 @@ function DashboardContent() {
   const [bookPriority, setBookPriority] = useState<'Normal' | 'Urgent'>('Normal');
   const [bookDoctorId, setBookDoctorId] = useState('');
   const [bookDate, setBookDate] = useState<string>('');
-  const [bookSlotTime, setBookSlotTime] = useState('09:30 AM');
+  const [bookSlotTime, setBookSlotTime] = useState('');
   const [bookReason, setBookReason] = useState('General Consultation');
   const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
   const [confirmedToken, setConfirmedToken] = useState<ConfirmedToken | null>(null);
@@ -520,6 +520,15 @@ function DashboardContent() {
     e.preventDefault();
     if (!walkinName.trim() || !walkinAge) return;
 
+    if (walkinName.trim().length < 2) {
+      showNotification({
+        type: 'warning',
+        title: 'Full Name Required',
+        message: 'Patient name must be at least 2 characters long.',
+      });
+      return;
+    }
+
     const phoneValidation = validateMobileNumber(walkinPhone);
     if (!phoneValidation.isValid) {
       showNotification({
@@ -546,18 +555,32 @@ function DashboardContent() {
           setQueue(sortQueueWithCompletedAtEnd(fresh));
         }
       });
+      setWalkinName('');
+      setWalkinAge('');
+      setWalkinPhone('');
+      setWalkinGender('Male');
+      setShowWalkinModal(false);
+    } else {
+      showNotification({
+        type: 'error',
+        title: 'Registration Notice',
+        message: 'Could not register walk-in patient. Please ensure patient name has at least 2 characters.',
+      });
     }
-
-    setWalkinName('');
-    setWalkinAge('');
-    setWalkinPhone('');
-    setWalkinGender('Male');
-    setShowWalkinModal(false);
   };
 
   const handleBookSlotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bookName.trim()) return;
+
+    if (bookName.trim().length < 2) {
+      showNotification({
+        type: 'warning',
+        title: 'Full Name Required',
+        message: 'Patient name must be at least 2 characters long.',
+      });
+      return;
+    }
 
     const phoneValidation = validateMobileNumber(bookPhone);
     if (!phoneValidation.isValid) {

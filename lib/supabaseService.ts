@@ -446,12 +446,18 @@ export async function registerWalkinPatientDb(params: {
   priority?: 'Normal' | 'Urgent';
 }): Promise<FormattedQueuePatient | null> {
   try {
+    const cleanName = params.name ? params.name.trim() : '';
+    if (cleanName.length < 2) {
+      console.error('Validation Error: Patient name must be at least 2 characters long.');
+      return null;
+    }
+
     // 1. Phone number is required by NOT NULL constraint in Supabase (Section 3.2: Primary lookup key)
     const rawPhone = params.phone ? params.phone.trim() : '';
     const patientPhone = rawPhone.length > 0 ? rawPhone : `+91-WLK-${Date.now().toString().slice(-8)}`;
 
     let patientId: string | null = null;
-    let patientName = params.name;
+    let patientName = cleanName;
     let patientAge = params.age;
     let patientGender = params.gender;
 
@@ -467,7 +473,7 @@ export async function registerWalkinPatientDb(params: {
 
     if (existingPatient) {
       patientId = existingPatient.id;
-      patientName = existingPatient.full_name || params.name;
+      patientName = existingPatient.full_name || cleanName;
       patientAge = existingPatient.age || params.age;
       patientGender = existingPatient.gender || params.gender;
       patientNumber = existingPatient.patient_number || undefined;
@@ -479,7 +485,7 @@ export async function registerWalkinPatientDb(params: {
         .from('patients')
         .insert([
           {
-            full_name: params.name,
+            full_name: cleanName,
             age: params.age,
             gender: params.gender,
             phone_number: patientPhone,
@@ -489,7 +495,10 @@ export async function registerWalkinPatientDb(params: {
         .single();
 
       if (patientError || !patientData) {
-        console.error('Error creating patient:', patientError);
+        const errorMsg = patientError?.message?.includes('chk_patient_name_valid')
+          ? 'Patient name must be at least 2 characters long.'
+          : patientError?.message || 'Error creating patient';
+        console.error('Error creating patient:', errorMsg);
         return null;
       }
       patientId = patientData.id;
@@ -1365,6 +1374,9 @@ export interface SlotItem {
   time: string;
   period: 'Morning' | 'Afternoon' | 'Evening';
   isBooked: boolean;
+  isPast?: boolean;
+  isAvailable?: boolean;
+  status?: 'Available' | 'Booked' | 'Passed' | 'Quota Full';
   scheduledTime?: string;
 }
 
@@ -1440,6 +1452,11 @@ export function generateDailySlots(
   const safeDuration = Math.max(5, durationMins || 15);
   let currentMin = 9 * 60; // 09:00 AM
 
+  const now = new Date();
+  const todayYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const isToday = !dateStr || dateStr === todayYmd;
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+
   for (let i = 0; i < safeQuota; i++) {
     // If morning reaches or exceeds 01:00 PM (780 mins) and we still have slots, shift to afternoon 02:00 PM (840 mins)
     if (currentMin >= 13 * 60 && currentMin < 14 * 60) {
@@ -1453,12 +1470,16 @@ export function generateDailySlots(
     if (displayH === 0) displayH = 12;
     const timeLabel = `${String(displayH).padStart(2, '0')}:${String(m).padStart(2, '0')} ${modifier}`;
     const period = getSlotPeriod(timeLabel);
+    const isPast = isToday && currentMin < nowMins;
 
     result.push({
       time: timeLabel,
       period,
       scheduledTime: dateStr ? formatSlotToIso(dateStr, timeLabel) : undefined,
       isBooked: false,
+      isPast,
+      isAvailable: !isPast,
+      status: isPast ? 'Passed' : 'Available',
     });
 
     currentMin += safeDuration;
@@ -1559,6 +1580,8 @@ export async function getDoctorSlotsForDate(
 
     if (rpcData?.daily_quota_from_settings) {
       doctorQuota = Number(rpcData.daily_quota_from_settings);
+    } else if (rpcData?.daily_quota) {
+      doctorQuota = Number(rpcData.daily_quota);
     } else if (rpcData?.total_slots) {
       doctorQuota = Number(rpcData.total_slots);
     }
@@ -1568,43 +1591,62 @@ export async function getDoctorSlotsForDate(
         ? rpcData.slots
         : (rpcData?.available_slots as any[])) || [];
 
-    // 4. Construct EXACTLY doctorQuota slots as retrieved from Supabase
-    let finalSlots: SlotItem[] = [];
+    const now = new Date();
+    const todayYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const isToday = dateStr === todayYmd;
+    const nowMins = now.getHours() * 60 + now.getMinutes();
 
-    if (rpcSlotsList.length >= doctorQuota) {
-      finalSlots = rpcSlotsList.slice(0, doctorQuota).map((s: any) => {
+    let allSlots: SlotItem[] = [];
+
+    if (rpcSlotsList.length > 0) {
+      allSlots = rpcSlotsList.map((s: any) => {
         const timeLabel = s.slot_time || s.time_label || s.time;
+        const slotMins = parseTimeToMinutes(timeLabel);
+        const isPast = Boolean(s.is_past || s.status === 'Passed' || (isToday && slotMins < nowMins));
+        let isBooked = Boolean(s.is_booked || s.status === 'Booked');
+        if (!isBooked) {
+          if (bookedTimeLabels.has(timeLabel)) {
+            isBooked = true;
+          } else {
+            for (const bt of bookedTimeLabels) {
+              if (parseTimeToMinutes(bt) === slotMins) {
+                isBooked = true;
+                break;
+              }
+            }
+          }
+        }
+        const isAvailable = Boolean(s.is_available !== undefined ? (s.is_available && !isPast && !isBooked) : (!isPast && !isBooked));
+        const status = (s.status as any) || (isBooked ? 'Booked' : isPast ? 'Passed' : isAvailable ? 'Available' : 'Quota Full');
+
         return {
           time: timeLabel,
           period: getSlotPeriod(timeLabel),
           scheduledTime: s.scheduled_time || s.timestamp || formatSlotToIso(dateStr, timeLabel),
-          isBooked: Boolean(s.is_booked),
+          isBooked,
+          isPast,
+          isAvailable,
+          status,
         };
       });
     } else {
-      finalSlots = generateDailySlots(doctorQuota, slotDurationMins, dateStr);
+      allSlots = generateDailySlots(doctorQuota, slotDurationMins, dateStr);
     }
 
-    // Mark any slot that matches a booked appointment as isBooked: true
-    for (const slot of finalSlots) {
-      if (bookedTimeLabels.has(slot.time)) {
-        slot.isBooked = true;
-      } else {
-        const slotMins = parseTimeToMinutes(slot.time);
-        for (const bt of bookedTimeLabels) {
-          if (parseTimeToMinutes(bt) === slotMins) {
-            slot.isBooked = true;
-            break;
-          }
-        }
-      }
-    }
+    // For today, only return slots from the current time onwards (filter out passed morning slots)
+    // For future dates, return all daily slots
+    const visibleSlots = isToday ? allSlots.filter((s) => !s.isPast) : allSlots;
 
-    const bookedCount = finalSlots.filter((s) => s.isBooked).length;
-    const availableCount = Math.max(0, finalSlots.length - bookedCount);
+    const availableCount = rpcData?.available_count !== undefined 
+      ? Number(rpcData.available_count) 
+      : allSlots.filter((s) => s.isAvailable).length;
+
+    const bookedCount = rpcData?.booked_count !== undefined 
+      ? Number(rpcData.booked_count) 
+      : allSlots.filter((s) => s.isBooked).length;
 
     return {
-      slots: finalSlots,
+      slots: visibleSlots,
       availableCount,
       bookedCount,
       lockedAndHiddenCount: bookedCount,
@@ -1688,11 +1730,20 @@ export async function bookAppointmentSlotDb(
       };
     }
 
+    const cleanName = params.name ? params.name.trim() : '';
+    if (cleanName.length < 2) {
+      return {
+        success: false,
+        error: 'INVALID_PATIENT_NAME',
+        message: 'Patient full name must be at least 2 characters long.',
+      };
+    }
+
     // Call unified backend RPC: register_walk_in_patient to allocate patient record & FIFO token
     const { data: rpcData, error: rpcError } = await supabase.rpc(
       'register_walk_in_patient',
       {
-        p_full_name: params.name.trim(),
+        p_full_name: cleanName,
         p_phone_number: cleanPhone,
         p_doctor_id: params.doctorId,
         p_scheduled_time: scheduledTime,
@@ -1703,13 +1754,24 @@ export async function bookAppointmentSlotDb(
     );
 
     if (rpcError) {
+      if (rpcError.message?.includes('chk_patient_name_valid')) {
+        return {
+          success: false,
+          error: 'INVALID_PATIENT_NAME',
+          message: 'Patient full name must be at least 2 characters long.',
+        };
+      }
       console.warn('register_walk_in_patient RPC error, proceeding to direct WhatsApp slot booking:', rpcError.message);
     } else if (rpcData) {
       if (rpcData.success === false) {
+        let msg = rpcData.error_message || 'Target slot is already booked and locked.';
+        if (msg.includes('chk_patient_name_valid')) {
+          msg = 'Patient full name must be at least 2 characters long.';
+        }
         return {
           success: false,
           error: rpcData.error_code || 'SLOT_TAKEN',
-          message: rpcData.error_message || 'Target slot is already booked and locked.',
+          message: msg,
         };
       }
 
@@ -1786,11 +1848,11 @@ export async function bookAppointmentSlotDb(
       patientId = existingPatient.id;
       patientNumber = existingPatient.patient_number || undefined;
     } else {
-      const { data: newPat } = await supabase
+      const { data: newPat, error: newPatError } = await supabase
         .from('patients')
         .insert([
           {
-            full_name: params.name.trim(),
+            full_name: cleanName,
             age: params.age || 28,
             gender: params.gender || 'Male',
             phone_number: cleanPhone,
@@ -1798,6 +1860,15 @@ export async function bookAppointmentSlotDb(
         ])
         .select()
         .single();
+      if (newPatError) {
+        if (newPatError.message?.includes('chk_patient_name_valid')) {
+          return {
+            success: false,
+            error: 'INVALID_PATIENT_NAME',
+            message: 'Patient full name must be at least 2 characters long.',
+          };
+        }
+      }
       if (newPat) {
         patientId = newPat.id;
         patientNumber = newPat.patient_number || undefined;

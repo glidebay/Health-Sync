@@ -19,6 +19,13 @@ export function WalkInRegistrationModal({ doctorId, onClose, onSuccess }: WalkIn
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const cleanName = name.trim();
+    if (cleanName.length < 2) {
+      alert("Registration Failed: Patient name must be at least 2 characters long.");
+      return;
+    }
+
     setLoading(true);
 
     const nowIso = new Date().toISOString();
@@ -26,7 +33,7 @@ export function WalkInRegistrationModal({ doctorId, onClose, onSuccess }: WalkIn
 
     // Call backend RPC
     const { data, error } = await supabase.rpc("register_walk_in_patient", {
-      p_full_name: name.trim(),
+      p_full_name: cleanName,
       p_phone_number: cleanPhone,
       p_doctor_id: doctorId || null,
       p_scheduled_time: nowIso,
@@ -38,7 +45,10 @@ export function WalkInRegistrationModal({ doctorId, onClose, onSuccess }: WalkIn
     setLoading(false);
 
     if (error || (data && data.success === false)) {
-      const errMsg = data?.error_message || error?.message || "Failed to register walk-in patient.";
+      let errMsg = data?.error_message || error?.message || "Failed to register walk-in patient.";
+      if (errMsg.includes("chk_patient_name_valid")) {
+        errMsg = "Patient full name must be at least 2 characters long.";
+      }
       alert(`Registration Failed: ${errMsg}`);
       return;
     }
@@ -69,6 +79,7 @@ export function WalkInRegistrationModal({ doctorId, onClose, onSuccess }: WalkIn
             <label className="text-xs font-semibold text-slate-600">Patient Full Name</label>
             <input 
               required
+              minLength={2}
               value={name} 
               onChange={e => setName(e.target.value)} 
               className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm"
