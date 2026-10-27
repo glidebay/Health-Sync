@@ -697,7 +697,7 @@ function DashboardContent() {
           ? `Slot ${result.freed_slot} has been freed immediately.`
           : 'Time slot has been freed for new bookings.'
       );
-      // Fetch fresh queue from database to ensure 100% real-time sync across reception & live queue
+      // Fetch fresh  from database to ensure 100% real-time sync across reception & live queue
       const dbQueue = await fetchQueueFromDb();
       if (dbQueue) {
         setQueue(sortQueueWithCompletedAtEnd(dbQueue));
