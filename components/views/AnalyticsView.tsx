@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Users,
@@ -9,15 +9,39 @@ import {
   MessageSquare,
   Activity,
   Pill,
+  CalendarX,
 } from 'lucide-react';
 import { ChartLine } from '@/components/ui/chart-line';
 import { RankBarChart, type RankBarItem } from '@/components/ui/rank-bars';
+import { Patient } from '@/types';
+import { formatPatientToken } from '@/lib/utils';
 
 interface AnalyticsViewProps {
   totalPatientsCount: number;
+  queue?: Patient[];
+  cancelledAppointments?: Patient[];
 }
 
-export function AnalyticsView({ totalPatientsCount }: AnalyticsViewProps) {
+export function AnalyticsView({
+  totalPatientsCount,
+  queue,
+  cancelledAppointments,
+}: AnalyticsViewProps) {
+  const cancelledList = useMemo(() => {
+    if (cancelledAppointments !== undefined) {
+      return cancelledAppointments;
+    }
+    return queue ? queue.filter((p) => p.status === 'Cancelled') : [];
+  }, [cancelledAppointments, queue]);
+
+  const cancelledCount = cancelledList.length;
+  const activeCount = totalPatientsCount;
+  const totalBookingsToday = activeCount + cancelledCount;
+  const cancellationRate =
+    totalBookingsToday > 0
+      ? ((cancelledCount / totalBookingsToday) * 100).toFixed(1)
+      : '0.0';
+
   const patientVolumeData = [
     { month: 'Jan', walkins: 420, whatsapp: 180 },
     { month: 'Feb', walkins: 460, whatsapp: 230 },
@@ -89,7 +113,7 @@ export function AnalyticsView({ totalPatientsCount }: AnalyticsViewProps) {
       transition={{ duration: 0.25 }}
       className="space-y-5 sm:space-y-6"
     >
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-5">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         <motion.div
           whileHover={{ y: -3 }}
           className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
@@ -104,11 +128,11 @@ export function AnalyticsView({ totalPatientsCount }: AnalyticsViewProps) {
           </div>
           <div>
             <span className="text-2xl sm:text-3xl font-extrabold text-[#16191E] block">
-              {totalPatientsCount}
+              {activeCount}
             </span>
             <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5 mt-0.5">
               <span>↑ +12%</span>
-              <span className="text-[#8A909D] font-normal">vs yesterday</span>
+              <span className="text-[#8A909D] font-normal">attending today</span>
             </span>
           </div>
         </motion.div>
@@ -161,6 +185,28 @@ export function AnalyticsView({ totalPatientsCount }: AnalyticsViewProps) {
         <motion.div
           whileHover={{ y: -3 }}
           className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
+              Cancelled Bookings
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
+              <CalendarX className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div>
+            <span className="text-2xl sm:text-3xl font-extrabold text-[#16191E] block">
+              {cancelledCount}
+            </span>
+            <span className="text-[10px] text-[#8A909D] block mt-0.5">
+              {cancelledCount > 0 ? `${cancellationRate}% cancellation rate` : '0% cancellation rate'}
+            </span>
+          </div>
+        </motion.div>
+
+        <motion.div
+          whileHover={{ y: -3 }}
+          className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between col-span-2 sm:col-span-1"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
@@ -322,6 +368,85 @@ export function AnalyticsView({ totalPatientsCount }: AnalyticsViewProps) {
             </div>
           </div>
         </motion.div>
+      </div>
+
+      <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2.5">
+            <h3 className="text-sm sm:text-base font-bold text-[#16191E]">
+              Cancelled Appointments
+            </h3>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-[#5E6470]">
+              {cancelledCount}
+            </span>
+          </div>
+          {cancelledCount > 0 && (
+            <span className="text-xs text-[#8A909D]">
+              {cancellationRate}% cancellation rate
+            </span>
+          )}
+        </div>
+
+        {cancelledCount === 0 ? (
+          <div className="py-8 text-center text-[#8A909D]">
+            <p className="text-xs font-medium">No cancelled appointments recorded today.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#ECEEF2]">
+            {cancelledList.map((p) => {
+              const tokenDisplay = formatPatientToken(p);
+              const visitTypeDisplay =
+                p.visitType && (p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online'))
+                  ? 'Online'
+                  : 'Walk-in';
+
+              return (
+                <div
+                  key={p.id}
+                  className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs hover:bg-[#F8F9FB] -mx-2 px-2 rounded-xl transition-colors"
+                >
+                  <div className="flex items-center space-x-3 min-w-0">
+                    <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 flex-shrink-0">
+                      {tokenDisplay}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-semibold text-sm text-[#16191E] truncate">
+                          {p.name}
+                        </span>
+                        <span className="text-[11px] text-[#8A909D]">
+                          {p.age}y · {p.gender}
+                        </span>
+                        {p.phone && (
+                          <span className="text-[11px] text-[#5E6470] hidden md:inline">
+                            · {p.phone}
+                          </span>
+                        )}
+                      </div>
+                      {p.cancellationReason && (
+                        <p className="text-[11px] text-[#8A909D] truncate mt-0.5">
+                          Reason: {p.cancellationReason}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3 self-end sm:self-auto flex-shrink-0">
+                    <span className="text-[11px] text-[#5E6470]">
+                      Slot: {p.time}
+                    </span>
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-gray-50 border border-gray-200 text-gray-600">
+                      {visitTypeDisplay}
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-100">
+                      Cancelled
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </motion.section>
   );

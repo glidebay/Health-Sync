@@ -17,6 +17,7 @@ export interface Patient {
   displayId?: string;
   priority?: 'Normal' | 'Urgent';
   visitType?: 'Walk-in' | 'WhatsApp' | 'WhatsApp Link' | string;
+  cancellationReason?: string;
 }
 
 export interface InventoryItem {

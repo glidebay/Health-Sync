@@ -39,8 +39,9 @@ export function QueueList({
   const [selectedPatientForCancel, setSelectedPatientForCancel] = useState<Patient | null>(null);
 
   const sortedQueue = useMemo(() => {
-    const notCompleted = queue.filter((p) => p.status !== 'Completed' && p.status !== 'Cancelled');
-    const completed = queue.filter((p) => p.status === 'Completed' || p.status === 'Cancelled');
+    const active = queue.filter((p) => p.status !== 'Cancelled');
+    const notCompleted = active.filter((p) => p.status !== 'Completed');
+    const completed = active.filter((p) => p.status === 'Completed');
     return [...notCompleted, ...completed];
   }, [queue]);
 

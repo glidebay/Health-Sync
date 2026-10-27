@@ -125,9 +125,8 @@ export const sortQueueWithCompletedAtEnd = (patients: Patient[]): Patient[] => {
 
   const inProgress = patients.filter((p) => p.status === 'In Progress');
   const waiting = patients.filter((p) => p.status === 'Waiting');
-  const completedOrCancelled = patients.filter(
-    (p) => p.status === 'Completed' || p.status === 'Cancelled'
-  );
+  const completed = patients.filter((p) => p.status === 'Completed');
+  const cancelled = patients.filter((p) => p.status === 'Cancelled');
 
   waiting.sort((a, b) => {
     if (a.priority === 'Urgent' && b.priority !== 'Urgent') return -1;
@@ -135,7 +134,7 @@ export const sortQueueWithCompletedAtEnd = (patients: Patient[]): Patient[] => {
     return parseFifoOrder(a) - parseFifoOrder(b);
   });
 
-  return [...inProgress, ...waiting, ...completedOrCancelled];
+  return [...inProgress, ...waiting, ...completed, ...cancelled];
 };
 
 function DashboardContent() {
@@ -679,7 +678,7 @@ function DashboardContent() {
         setQueue((prev) =>
           prev.map((p) => {
             if (p.id === patientId) {
-              return { ...p, status: 'Cancelled' as PatientStatus };
+              return { ...p, status: 'Cancelled' as PatientStatus, cancellationReason: reason };
             }
             return p;
           })
@@ -986,13 +985,14 @@ function DashboardContent() {
   const filteredQueue = React.useMemo(() => {
     const list = queue.filter(
       (p) =>
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.id.toLowerCase().includes(searchQuery.toLowerCase())
+        p.status !== 'Cancelled' &&
+        (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.id.toLowerCase().includes(searchQuery.toLowerCase()))
     );
     return sortQueueWithCompletedAtEnd(list);
   }, [queue, searchQuery]);
 
-  const totalPatientsCount = queue.length;
+  const totalPatientsCount = queue.filter((p) => p.status !== 'Cancelled').length;
   const waitingPatientsCount = queue.filter((p) => p.status === 'Waiting').length;
   const completedPatientsCount = queue.filter((p) => p.status === 'Completed').length;
   const inChamberPatient = queue.find((p) => p.status === 'In Progress');
@@ -1256,7 +1256,7 @@ function DashboardContent() {
                     nextWaitingPatient={nextWaitingPatient}
                     waitingPatientsCount={waitingPatientsCount}
                     filteredQueue={filteredQueue}
-                    queue={queue}
+                    queue={queue.filter((p) => p.status !== 'Cancelled')}
                     isLoggedIn={isDoctorUnlocked}
                     onRegisterWalkin={() => setShowWalkinModal(true)}
                     onViewAllQueue={() => setActiveSection('assistant')}
@@ -1277,7 +1277,7 @@ function DashboardContent() {
 
                 {activeSection === 'assistant' && (
                   <AssistantView
-                    queue={queue}
+                    queue={queue.filter((p) => p.status !== 'Cancelled')}
                     onRegisterWalkin={() => setShowWalkinModal(true)}
                     onReallocate={handleReallocate}
                     onCancelAppointment={handleCancelAppointment}
@@ -1288,7 +1288,7 @@ function DashboardContent() {
 
                 {activeSection === 'queue' && (
                   <QueueView
-                    queue={queue}
+                    queue={queue.filter((p) => p.status !== 'Cancelled')}
                     onStartConsultation={startConsultation}
                   />
                 )}
@@ -1328,7 +1328,11 @@ function DashboardContent() {
                 )}
 
                 {activeSection === 'analytics' && (
-                  <AnalyticsView totalPatientsCount={totalPatientsCount} />
+                  <AnalyticsView
+                    totalPatientsCount={totalPatientsCount}
+                    queue={queue}
+                    cancelledAppointments={queue.filter((p) => p.status === 'Cancelled')}
+                  />
                 )}
 
                 {activeSection === 'settings' && (

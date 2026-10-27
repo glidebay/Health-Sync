@@ -32,6 +32,7 @@ export interface FormattedQueuePatient {
   priority?: 'Normal' | 'Urgent';
   scheduledTime: string;
   visitType?: string;
+  cancellationReason?: string;
 }
 
 export interface FormattedInventoryItem {
@@ -343,6 +344,7 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
         status,
         clinical_notes,
         visit_type,
+        cancellation_reason,
         updated_at,
         queue_token_no,
         priority,
@@ -389,7 +391,7 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
         age: patient?.age || 30,
         gender: (patient?.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
         phone: patient?.phone_number || undefined,
-        status: (item.status as 'Waiting' | 'In Progress' | 'Completed') || 'Waiting',
+        status: (item.status as 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled') || 'Waiting',
         time: timeStr,
         tokenNumber: tokenDisplay,
         queueTokenNo: qTokenNo,
@@ -398,6 +400,7 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
         priority: (item.priority === 'Urgent' || item.visit_type === 'Urgent' || item.clinical_notes?.includes('URGENT')) ? 'Urgent' : 'Normal',
         scheduledTime: item.scheduled_time,
         visitType,
+        cancellationReason: item.cancellation_reason || undefined,
       };
     });
 
