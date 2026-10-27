@@ -186,7 +186,6 @@ function DashboardContent() {
   const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
   const [confirmedToken, setConfirmedToken] = useState<ConfirmedToken | null>(null);
 
-  // Initialize date client-side to prevent Next.js prerender timing evaluation issues
   useEffect(() => {
     const today = new Date();
     const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
