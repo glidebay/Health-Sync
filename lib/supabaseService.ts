@@ -2312,13 +2312,61 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
           const incomingMsg = rawPayload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
           const isFromDoctor = rawPayload?.sender === 'doctor';
 
+          // Detect WhatsApp Audio Voice Message
+          const isAudio =
+            incomingMsg?.type === 'audio' ||
+            Boolean(incomingMsg?.audio) ||
+            Boolean(rawPayload?.audio) ||
+            Boolean(rawPayload?.audio_id) ||
+            (typeof req.message_text === 'string' && req.message_text.includes('Voice message'));
+
+          let audioUrl: string | undefined = undefined;
+          let mediaId: string | undefined = undefined;
+
+          if (isAudio) {
+            mediaId =
+              rawPayload?.audio_id ||
+              incomingMsg?.audio?.id ||
+              rawPayload?.audio?.id ||
+              (typeof rawPayload?.audio_url === 'string' && rawPayload.audio_url.includes('media_id=')
+                ? rawPayload.audio_url.split('media_id=')[1].split('&')[0]
+                : undefined);
+
+            if (mediaId) {
+              audioUrl = `https://agupndzcqjofnmkhgsqc.supabase.co/functions/v1/whatsapp-webhook?media_id=${mediaId}`;
+            } else if (rawPayload?.audio_url) {
+              audioUrl = String(rawPayload.audio_url).replace(
+                'http://agupndzcqjofnmkhgsqc.supabase.co/whatsapp-webhook',
+                'https://agupndzcqjofnmkhgsqc.supabase.co/functions/v1/whatsapp-webhook'
+              );
+            } else if (incomingMsg?.audio?.url) {
+              audioUrl = incomingMsg.audio.url;
+            }
+          }
+
           if (isFromDoctor) {
             messages.push({
               id: `msg-${req.id}`,
               sender: 'doctor',
               text: req.message_text || rawPayload?.text?.body || 'Doctor response sent.',
               timestamp: msgTime,
-              messageType: 'text',
+              messageType: isAudio ? 'audio' : 'text',
+              audioUrl: isAudio ? audioUrl : undefined,
+              audioType: incomingMsg?.audio?.mime_type || 'audio/ogg',
+              isVoiceNote: isAudio,
+              mediaId,
+            });
+          } else if (isAudio) {
+            messages.push({
+              id: `msg-${req.id}`,
+              sender: 'patient',
+              text: req.message_text || '🎙️ Voice note',
+              timestamp: msgTime,
+              messageType: 'audio',
+              audioUrl,
+              audioType: incomingMsg?.audio?.mime_type || 'audio/ogg',
+              isVoiceNote: true,
+              mediaId,
             });
           } else {
             // Patient inbound message
@@ -2379,6 +2427,7 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
         });
 
         const lastMsg = messages[messages.length - 1];
+        const lastPreview = lastMsg?.messageType === 'audio' ? '🎙️ Voice message' : (lastMsg?.text || 'WhatsApp inquiry');
 
         dbMapped.push({
           id: latest.id,
@@ -2390,8 +2439,8 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
           status: isBooked ? 'booked' : (latest.status as any) || 'received',
           requestedSlot: '10:00 AM',
           requestedDate: latest.preferred_date || '2026-10-23',
-          symptoms: lastMsg?.text || 'WhatsApp inquiry',
-          lastMessage: lastMsg?.text || 'WhatsApp inquiry',
+          symptoms: lastPreview,
+          lastMessage: lastPreview,
           lastMessageTime: formattedLastTime,
           unread: !isBooked,
           tokenNumber: isBooked ? (patToken || ('P00' + (dbMapped.length + 1))) : undefined,

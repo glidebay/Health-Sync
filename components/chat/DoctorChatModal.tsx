@@ -8,12 +8,236 @@ import {
   CheckCircle2,
   Search,
   MessageSquare,
+  Play,
+  Pause,
+  Mic,
+  Volume2,
 } from 'lucide-react';
 import { PatientChatThread } from '@/types/chat';
 import { DbDoctor } from '@/types/database';
 import { fetchInboundChatThreads, subscribeToChatUpdates } from '@/lib/supabaseService';
 import { formatPatientToken } from '@/lib/utils';
 import { getReadThreadStates, markThreadAsRead, isThreadUnread } from '@/lib/chatStorage';
+
+/**
+ * Playable WhatsApp Audio Voice Note Player Component
+ */
+function AudioVoiceMessagePlayer({
+  audioUrl,
+  isDoctor,
+  timestamp,
+}: {
+  audioUrl?: string;
+  isDoctor: boolean;
+  timestamp: string;
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [duration, setDuration] = useState<number>(0);
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [playbackRate, setPlaybackRate] = useState<number>(1);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const onLoadedMetadata = () => {
+      if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+        setDuration(audio.duration);
+      }
+    };
+    const onEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    };
+    const onError = () => {
+      setLoadError(true);
+      setIsPlaying(false);
+    };
+
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    audio.addEventListener('ended', onEnded);
+    audio.addEventListener('error', onError);
+
+    return () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
+    };
+  }, []);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio || !audioUrl) return;
+
+    if (isPlaying) {
+      audio.pause();
+      setIsPlaying(false);
+    } else {
+      audio
+        .play()
+        .then(() => {
+          setIsPlaying(true);
+        })
+        .catch((err) => {
+          console.warn('Playback error:', err);
+          setLoadError(true);
+        });
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const audio = audioRef.current;
+    const newTime = Number(e.target.value);
+    setCurrentTime(newTime);
+    if (audio) {
+      audio.currentTime = newTime;
+    }
+  };
+
+  const cycleRate = () => {
+    const nextRate = playbackRate === 1 ? 1.5 : playbackRate === 1.5 ? 2 : 1;
+    setPlaybackRate(nextRate);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = nextRate;
+    }
+  };
+
+  const formatTime = (secs: number) => {
+    if (!secs || isNaN(secs) || !isFinite(secs)) return '0:00';
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const waveBars = [35, 60, 45, 80, 50, 90, 70, 40, 85, 95, 60, 75, 40, 65, 80, 50, 30, 60];
+
+  return (
+    <div
+      className={`p-3 rounded-2xl w-72 sm:w-80 select-none shadow-xs ${
+        isDoctor
+          ? 'bg-[#2563EB] text-white rounded-tr-xs'
+          : 'bg-white text-[#16191E] border border-[#ECEEF2] rounded-tl-xs shadow-2xs'
+      }`}
+    >
+      {audioUrl && (
+        <audio ref={audioRef} src={audioUrl} preload="metadata" />
+      )}
+
+      <div className="flex items-center gap-2.5">
+        {/* Play/Pause Button */}
+        <button
+          type="button"
+          onClick={togglePlay}
+          disabled={!audioUrl || loadError}
+          className={`w-9 h-9 rounded-full flex items-center justify-center transition-transform active:scale-95 shrink-0 shadow-xs cursor-pointer ${
+            isDoctor
+              ? 'bg-white text-[#2563EB] hover:bg-blue-50'
+              : 'bg-emerald-500 text-white hover:bg-emerald-600'
+          }`}
+          aria-label={isPlaying ? 'Pause audio' : 'Play audio message'}
+        >
+          {isPlaying ? (
+            <Pause className="w-4 h-4 fill-current" />
+          ) : (
+            <Play className="w-4 h-4 fill-current translate-x-0.5" />
+          )}
+        </button>
+
+        {/* Waveform & Scrubber */}
+        <div className="flex-1 flex flex-col justify-center min-w-0">
+          <div className="relative h-6 flex items-center group cursor-pointer">
+            {/* Waveform Bars */}
+            <div className="absolute inset-0 flex items-center justify-between gap-[2px] pointer-events-none">
+              {waveBars.map((height, i) => {
+                const barPercent = (i / waveBars.length) * 100;
+                const isPlayed = barPercent <= progressPercent;
+                return (
+                  <span
+                    key={i}
+                    style={{ height: `${height}%` }}
+                    className={`w-1 rounded-full transition-colors ${
+                      isPlayed
+                        ? isDoctor
+                          ? 'bg-white'
+                          : 'bg-emerald-600'
+                        : isDoctor
+                          ? 'bg-blue-300/50'
+                          : 'bg-gray-200'
+                    }`}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Invisible Range Input for Scrubbing */}
+            <input
+              type="range"
+              min={0}
+              max={duration || 100}
+              step={0.1}
+              value={currentTime}
+              onChange={handleSeek}
+              className="absolute inset-0 w-full opacity-0 cursor-pointer z-10"
+              aria-label="Seek voice note"
+            />
+          </div>
+
+          {/* Time & Duration */}
+          <div className="flex items-center justify-between text-[10px] mt-0.5">
+            <span
+              className={
+                isDoctor
+                  ? 'text-blue-100 font-mono text-[10px]'
+                  : 'text-[#8A909D] font-mono text-[10px]'
+              }
+            >
+              {isPlaying || currentTime > 0
+                ? formatTime(currentTime)
+                : duration > 0
+                  ? formatTime(duration)
+                  : 'Voice note'}
+            </span>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={cycleRate}
+                className={`text-[9px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition ${
+                  isDoctor
+                    ? 'bg-blue-700/60 text-white hover:bg-blue-700'
+                    : 'bg-gray-100 text-[#16191E] hover:bg-gray-200'
+                }`}
+                title="Change playback speed"
+              >
+                {playbackRate}x
+              </button>
+              <Mic
+                className={`w-3.5 h-3.5 ${
+                  isDoctor ? 'text-blue-200' : 'text-emerald-500'
+                }`}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between mt-1 pt-1 border-t border-black/5 text-[9px]">
+        <span className={isDoctor ? 'text-blue-200' : 'text-[#8A909D]'}>
+          {loadError ? 'Audio unavailable' : 'Voice Message'}
+        </span>
+        <span className={isDoctor ? 'text-blue-100' : 'text-[#8A909D]'}>
+          {timestamp}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 interface DoctorChatModalProps {
   isOpen: boolean;
@@ -375,6 +599,21 @@ export function DoctorChatModal({
                               </div>
                               <p className="text-[11px] text-[#8A909D] pt-1">{msg.text}</p>
                             </div>
+                          </div>
+                        );
+                      }
+
+                      if (msg.messageType === 'audio' || msg.audioUrl || msg.isVoiceNote) {
+                        return (
+                          <div
+                            key={msg.id}
+                            className={`flex ${isDoctor ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <AudioVoiceMessagePlayer
+                              audioUrl={msg.audioUrl}
+                              isDoctor={isDoctor}
+                              timestamp={msg.timestamp}
+                            />
                           </div>
                         );
                       }

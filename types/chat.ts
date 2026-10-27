@@ -27,9 +27,13 @@ export interface ChatMessage {
   tokenNumber?: string;
   slotTime?: string;
   date?: string;
-  messageType?: 'text' | 'interactive' | 'action' | 'system';
+  messageType?: 'text' | 'interactive' | 'action' | 'system' | 'audio';
   interactiveOption?: string;
   actionType?: string;
+  audioUrl?: string;
+  audioType?: string;
+  isVoiceNote?: boolean;
+  mediaId?: string;
 }
 
 export interface PatientChatThread {
