@@ -37,6 +37,8 @@ import {
   verifyClinicOrDoctorPin,
   getDoctors,
   subscribeToClinicUpdates,
+  subscribeToChatUpdates,
+  fetchInboundChatThreads,
   saveDoctorSessionLocal,
   getDoctorSessionLocal,
   clearDoctorSessionLocal,
@@ -380,6 +382,24 @@ function DashboardContent() {
 
   // Doctor Chat & Dynamic Slot Booking modal state
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
+
+  // Real-time WhatsApp unread count tracking for floating button
+  useEffect(() => {
+    const updateUnread = async () => {
+      try {
+        const threads = await fetchInboundChatThreads();
+        const unread = threads.filter((t) => t.status !== 'booked').length;
+        setChatUnreadCount(unread);
+      } catch {}
+    };
+
+    updateUnread();
+    const unsub = subscribeToChatUpdates(() => {
+      updateUnread();
+    });
+    return () => unsub();
+  }, []);
 
   const navItems: NavItemConfig[] = [
     { id: 'dashboard', label: 'Dashboard', icon: Home, reqAuth: false },
@@ -1486,7 +1506,7 @@ function DashboardContent() {
         <>
           <FloatingChatButton
             isOpen={isChatModalOpen}
-            unreadCount={2}
+            unreadCount={chatUnreadCount}
             onToggle={() => setIsChatModalOpen((prev) => !prev)}
           />
           <DoctorChatModal

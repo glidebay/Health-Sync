@@ -1106,11 +1106,62 @@ export function subscribeToClinicUpdates(onUpdate: () => void) {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, () => {
       onUpdate();
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_requests' }, () => {
+      onUpdate();
+    })
     .subscribe();
 
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+export function subscribeToChatUpdates(onUpdate: () => void) {
+  const channelName = `chat_realtime_${Math.random().toString(36).substring(2, 9)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_requests' }, () => {
+      onUpdate();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
+      onUpdate();
+    })
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export async function sendChatMessageDb(params: {
+  phoneNumber: string;
+  patientName?: string;
+  messageText: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('whatsapp_requests').insert([
+      {
+        phone_number: params.phoneNumber,
+        patient_name: params.patientName || 'Patient',
+        message_text: params.messageText.trim(),
+        status: 'replied',
+        raw_payload: {
+          sender: 'doctor',
+          text: { body: params.messageText.trim() },
+          timestamp: new Date().toISOString(),
+        },
+      },
+    ]);
+
+    if (error) {
+      console.warn('Error saving chat message to Supabase:', error.message);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.error('Exception saving chat message to Supabase:', err);
+    return { success: false, error: err.message };
+  }
 }
 
 // ====================================================================

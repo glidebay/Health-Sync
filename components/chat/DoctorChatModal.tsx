@@ -1,18 +1,18 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
   Phone,
   CheckCircle2,
   Search,
-  RefreshCw,
+  Send,
   MessageSquare,
 } from 'lucide-react';
 import { PatientChatThread } from '@/types/chat';
 import { DbDoctor } from '@/types/database';
-import { fetchInboundChatThreads } from '@/lib/supabaseService';
+import { fetchInboundChatThreads, subscribeToChatUpdates, sendChatMessageDb } from '@/lib/supabaseService';
 import { formatPatientToken } from '@/lib/utils';
 
 interface DoctorChatModalProps {
@@ -33,30 +33,48 @@ export function DoctorChatModal({
   const [isLoadingThreads, setIsLoadingThreads] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'booked'>('all');
+  const [replyText, setReplyText] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load patient threads
-  const loadThreads = async () => {
-    setIsLoadingThreads(true);
+  const loadThreads = useCallback(async (silent: boolean = false) => {
+    if (!silent) setIsLoadingThreads(true);
     try {
       const data = await fetchInboundChatThreads();
       setThreads(data);
-      if (data.length > 0 && !selectedThreadId) {
-        setSelectedThreadId(data[0].id);
+      if (data.length > 0) {
+        setSelectedThreadId((prev) => prev || data[0].id);
       }
     } catch (err) {
       console.warn('Failed to load chat threads:', err);
     } finally {
-      setIsLoadingThreads(false);
+      if (!silent) setIsLoadingThreads(false);
     }
-  };
+  }, []);
 
+  // Real-time synchronization: Instant Supabase WebSocket updates + 3s live polling guarantee
   useEffect(() => {
-    if (isOpen) {
-      loadThreads();
-    }
-  }, [isOpen]);
+    if (!isOpen) return;
+
+    loadThreads(false);
+
+    // Live WebSocket connection to incoming WhatsApp messages
+    const unsubscribe = subscribeToChatUpdates(() => {
+      loadThreads(true);
+    });
+
+    // Live polling heartbeat while chat modal is open
+    const interval = setInterval(() => {
+      loadThreads(true);
+    }, 3000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, [isOpen, loadThreads]);
 
   const activeThread = useMemo(() => {
     return threads.find((t) => t.id === selectedThreadId) || threads[0] || null;
@@ -64,7 +82,50 @@ export function DoctorChatModal({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeThread?.messages]);
+  }, [activeThread?.messages?.length, activeThread?.id]);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const textToSend = replyText.trim();
+    if (!textToSend || !activeThread || isSending) return;
+
+    setIsSending(true);
+    setReplyText('');
+
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const optimisticMsgId = `opt-${Date.now()}`;
+
+    // Optimistically append message to current thread
+    setThreads((prev) =>
+      prev.map((t) => {
+        if (t.id !== activeThread.id) return t;
+        return {
+          ...t,
+          lastMessage: textToSend,
+          lastMessageTime: nowTime,
+          messages: [
+            ...t.messages,
+            {
+              id: optimisticMsgId,
+              sender: 'doctor',
+              text: textToSend,
+              timestamp: nowTime,
+              messageType: 'text',
+            },
+          ],
+        };
+      })
+    );
+
+    // Send to Supabase whatsapp_requests table
+    await sendChatMessageDb({
+      phoneNumber: activeThread.phoneNumber,
+      patientName: activeThread.patientName,
+      messageText: textToSend,
+    });
+
+    setIsSending(false);
+  };
 
   // Filtered threads
   const filteredThreads = useMemo(() => {
@@ -108,15 +169,14 @@ export function DoctorChatModal({
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={loadThreads}
-                title="Refresh messages"
-                className="p-1.5 rounded-lg text-gray-400 hover:text-[#16191E] hover:bg-gray-100 transition cursor-pointer"
-              >
-                <RefreshCw className={`w-4 h-4 ${isLoadingThreads ? 'animate-spin' : ''}`} />
-              </button>
+            <div className="flex items-center gap-2.5">
+              {/* WhatsApp Live Real-time Indicator */}
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200/70 rounded-full text-[11px] font-bold shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="hidden sm:inline">WhatsApp Live</span>
+                <span className="sm:hidden">Live</span>
+              </div>
+
               <button
                 type="button"
                 onClick={onClose}
@@ -348,6 +408,28 @@ export function DoctorChatModal({
                     })}
                     <div ref={messagesEndRef} />
                   </div>
+
+                  {/* Message Input Bar for sending WhatsApp live responses */}
+                  <form
+                    onSubmit={handleSendMessage}
+                    className="p-3 bg-white border-t border-[#ECEEF2] flex items-center gap-2 flex-shrink-0"
+                  >
+                    <input
+                      type="text"
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      placeholder={`Message ${activeThread.patientName} on WhatsApp...`}
+                      className="flex-1 px-4 py-2 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm text-[#16191E] placeholder-[#8A909D] focus:outline-none focus:border-[#2563EB] focus:bg-white transition"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!replyText.trim() || isSending}
+                      className="px-4 py-2 bg-[#2563EB] hover:bg-blue-600 disabled:opacity-40 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs flex-shrink-0"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Send</span>
+                    </button>
+                  </form>
                 </>
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-[#8A909D]">
