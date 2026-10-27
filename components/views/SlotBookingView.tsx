@@ -536,8 +536,8 @@ export function SlotBookingView({
       });
 
       const currentSelected = res.slots.find((s) => s.time === bookSlotTime);
-      if (currentSelected?.isBooked) {
-        const firstAvailable = res.slots.find((s) => !s.isBooked);
+      if (!currentSelected || currentSelected.isBooked || currentSelected.isPast || !currentSelected.isAvailable) {
+        const firstAvailable = res.slots.find((s) => (s.isAvailable ?? true) && !s.isBooked && !s.isPast);
         if (firstAvailable) {
           setBookSlotTime(firstAvailable.time);
         }
@@ -567,9 +567,20 @@ export function SlotBookingView({
   }, [confirmedToken, loadDoctorSlots]);
 
   const currentSlots = useMemo(() => {
-    if (slots.length > 0) return slots;
-    return generateDailySlots(slotsSummary.dailyQuota || 10, 15, activeDate);
-  }, [slots, slotsSummary.dailyQuota, activeDate]);
+    if (slots.length > 0) {
+      if (activeDate && activeDate === todayMinDate) {
+        const upcoming = slots.filter((slot) => !slot.isPast);
+        return upcoming.length > 0 ? upcoming : slots;
+      }
+      return slots;
+    }
+    const fallback = generateDailySlots(slotsSummary.dailyQuota || 10, 15, activeDate);
+    if (activeDate && activeDate === todayMinDate) {
+      const upcomingFallback = fallback.filter((slot) => !slot.isPast);
+      return upcomingFallback.length > 0 ? upcomingFallback : fallback;
+    }
+    return fallback;
+  }, [slots, slotsSummary.dailyQuota, activeDate, todayMinDate]);
 
   const filteredSlots = useMemo(() => {
     if (selectedPeriod === 'All') return currentSlots;
@@ -584,6 +595,13 @@ export function SlotBookingView({
       Evening: currentSlots.filter((s) => s.period === 'Evening').length,
     };
   }, [currentSlots]);
+
+  // If the active filter has 0 slots (e.g. Morning passed for today), auto-switch to All
+  useEffect(() => {
+    if (selectedPeriod !== 'All' && periodCounts[selectedPeriod] === 0) {
+      setSelectedPeriod('All');
+    }
+  }, [selectedPeriod, periodCounts]);
 
   const handleBookingFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -957,8 +975,13 @@ export function SlotBookingView({
 
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 sm:gap-2.5 p-2.5 sm:p-3.5 bg-[#F8F9FB] rounded-xl sm:rounded-2xl border border-[#ECEEF2]">
                 {filteredSlots.map((slot) => {
-                  const isSelected = bookSlotTime === slot.time && !slot.isBooked;
                   const isBooked = Boolean(slot.isBooked);
+                  const isPast = Boolean(slot.isPast);
+                  const isSelected = bookSlotTime === slot.time && !isBooked && !isPast;
+
+                  if (isPast) {
+                    return null;
+                  }
 
                   if (isBooked) {
                     return (
@@ -970,7 +993,6 @@ export function SlotBookingView({
                         <span className="tracking-tight text-[11px] sm:text-xs md:text-sm font-medium">
                           {slot.time}
                         </span>
-
                       </div>
                     );
                   }
@@ -989,7 +1011,6 @@ export function SlotBookingView({
                         }`}
                     >
                       <span className="tracking-tight text-[11px] sm:text-xs md:text-sm">{slot.time}</span>
-
                     </motion.button>
                   );
                 })}

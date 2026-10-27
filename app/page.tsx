@@ -37,6 +37,8 @@ import {
   verifyClinicOrDoctorPin,
   getDoctors,
   subscribeToClinicUpdates,
+  subscribeToChatUpdates,
+  fetchInboundChatThreads,
   saveDoctorSessionLocal,
   getDoctorSessionLocal,
   clearDoctorSessionLocal,
@@ -67,6 +69,7 @@ import { PrescriptionPrintModal } from '@/components/modals/PrescriptionPrintMod
 import { NotificationModal, NotificationState } from '@/components/modals/NotificationModal';
 import { FloatingChatButton } from '@/components/chat/FloatingChatButton';
 import { DoctorChatModal } from '@/components/chat/DoctorChatModal';
+import { getReadThreadStates, countUnreadPersons } from '@/lib/chatStorage';
 import { validateMobileNumber } from '@/lib/phoneValidation';
 
 import { GatewayScreen } from '@/components/views/GatewayScreen';
@@ -117,10 +120,12 @@ const INITIAL_INVENTORY: InventoryItem[] = [];
 
 export const sortQueueWithCompletedAtEnd = (patients: Patient[]): Patient[] => {
   const parseFifoOrder = (p: Patient): number => {
-    if (typeof p.patientNumber === 'number') return p.patientNumber;
-    const raw = String(p.displayId || p.tokenNumber || '');
+    if (typeof p.queueTokenNo === 'number') return p.queueTokenNo;
+    const raw = String(p.tokenNumber || p.displayId || '');
     const m = raw.match(/\d+/);
-    return m ? parseInt(m[0], 10) : 999999;
+    if (m) return parseInt(m[0], 10);
+    if (typeof p.patientNumber === 'number') return p.patientNumber;
+    return 999999;
   };
 
   const inProgress = patients.filter((p) => p.status === 'In Progress');
@@ -173,11 +178,12 @@ function DashboardContent() {
   const [bookPriority, setBookPriority] = useState<'Normal' | 'Urgent'>('Normal');
   const [bookDoctorId, setBookDoctorId] = useState('');
   const [bookDate, setBookDate] = useState<string>('');
-  const [bookSlotTime, setBookSlotTime] = useState('09:30 AM');
+  const [bookSlotTime, setBookSlotTime] = useState('');
   const [bookReason, setBookReason] = useState('General Consultation');
   const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
   const [confirmedToken, setConfirmedToken] = useState<ConfirmedToken | null>(null);
 
+  // Initialize date client-side to prevent Next.js prerender timing evaluation issues
   useEffect(() => {
     const today = new Date();
     const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -356,6 +362,34 @@ function DashboardContent() {
   } | null>(null);
 
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
+
+  // Real-time WhatsApp unread count tracking for floating button
+  useEffect(() => {
+    const updateUnread = async () => {
+      try {
+        const threads = await fetchInboundChatThreads();
+        const readStates = getReadThreadStates();
+        const unreadPersons = countUnreadPersons(threads, readStates);
+        setChatUnreadCount(unreadPersons);
+      } catch { }
+    };
+
+    updateUnread();
+    const unsub = subscribeToChatUpdates(() => {
+      updateUnread();
+    });
+
+    const onReadChange = () => {
+      updateUnread();
+    };
+    window.addEventListener('healthsync_chat_read_change', onReadChange);
+
+    return () => {
+      unsub();
+      window.removeEventListener('healthsync_chat_read_change', onReadChange);
+    };
+  }, []);
 
   const navItems: NavItemConfig[] = [
     { id: 'dashboard', label: 'Dashboard', icon: Home, reqAuth: false },
@@ -494,6 +528,15 @@ function DashboardContent() {
     e.preventDefault();
     if (!walkinName.trim() || !walkinAge) return;
 
+    if (walkinName.trim().length < 2) {
+      showNotification({
+        type: 'warning',
+        title: 'Full Name Required',
+        message: 'Patient name must be at least 2 characters long.',
+      });
+      return;
+    }
+
     const phoneValidation = validateMobileNumber(walkinPhone);
     if (!phoneValidation.isValid) {
       showNotification({
@@ -520,18 +563,32 @@ function DashboardContent() {
           setQueue(sortQueueWithCompletedAtEnd(fresh));
         }
       });
+      setWalkinName('');
+      setWalkinAge('');
+      setWalkinPhone('');
+      setWalkinGender('Male');
+      setShowWalkinModal(false);
+    } else {
+      showNotification({
+        type: 'error',
+        title: 'Registration Notice',
+        message: 'Could not register walk-in patient. Please ensure patient name has at least 2 characters.',
+      });
     }
-
-    setWalkinName('');
-    setWalkinAge('');
-    setWalkinPhone('');
-    setWalkinGender('Male');
-    setShowWalkinModal(false);
   };
 
   const handleBookSlotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bookName.trim()) return;
+
+    if (bookName.trim().length < 2) {
+      showNotification({
+        type: 'warning',
+        title: 'Full Name Required',
+        message: 'Patient name must be at least 2 characters long.',
+      });
+      return;
+    }
 
     const phoneValidation = validateMobileNumber(bookPhone);
     if (!phoneValidation.isValid) {
@@ -743,9 +800,9 @@ function DashboardContent() {
         'success',
         toastTitle,
         result.message ||
-          (result.new_slot
-            ? `${result.patient_name || currentPatient?.name || 'Patient'} moved to ${result.new_slot}`
-            : 'Appointment moved successfully!')
+        (result.new_slot
+          ? `${result.patient_name || currentPatient?.name || 'Patient'} moved to ${result.new_slot}`
+          : 'Appointment moved successfully!')
       );
 
       const dbQueue = await fetchQueueFromDb();
@@ -1434,7 +1491,7 @@ function DashboardContent() {
         <>
           <FloatingChatButton
             isOpen={isChatModalOpen}
-            unreadCount={2}
+            unreadCount={chatUnreadCount}
             onToggle={() => setIsChatModalOpen((prev) => !prev)}
           />
           <DoctorChatModal

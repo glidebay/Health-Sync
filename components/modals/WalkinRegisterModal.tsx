@@ -33,9 +33,25 @@ export function WalkinRegisterModal({
   onSubmit,
 }: WalkinRegisterModalProps) {
   const phoneInputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (nameInputRef.current) {
+      const cleanName = walkinName.trim();
+      if (!cleanName) {
+        nameInputRef.current.setCustomValidity('Please fill out this field.');
+        nameInputRef.current.reportValidity();
+        return;
+      }
+      if (cleanName.length < 2) {
+        nameInputRef.current.setCustomValidity('Patient name must be at least 2 characters long.');
+        nameInputRef.current.reportValidity();
+        return;
+      }
+      nameInputRef.current.setCustomValidity('');
+    }
 
     if (phoneInputRef.current) {
       if (!walkinPhone.trim()) {
@@ -82,11 +98,16 @@ export function WalkinRegisterModal({
                   Patient Name <span className="text-red-500">*</span>
                 </label>
                 <input
+                  ref={nameInputRef}
                   type="text"
                   required
-                  placeholder="Full name"
+                  minLength={2}
+                  placeholder="Full name (e.g. Ramesh Kumar)"
                   value={walkinName}
-                  onChange={(e) => setWalkinName(e.target.value)}
+                  onChange={(e) => {
+                    e.target.setCustomValidity('');
+                    setWalkinName(e.target.value);
+                  }}
                   className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-sm outline-none focus:ring-1 focus:ring-gray-300"
                 />
               </div>
