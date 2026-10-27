@@ -12,9 +12,11 @@ export interface Patient {
   time: string;
   appointmentDate?: string;
   tokenNumber?: number | string;
+  queueTokenNo?: number;
   patientNumber?: number;
   displayId?: string;
   priority?: 'Normal' | 'Urgent';
+  visitType?: 'Walk-in' | 'WhatsApp' | 'WhatsApp Link' | string;
 }
 
 export interface InventoryItem {
@@ -66,4 +68,5 @@ export interface ConfirmedToken {
   phone?: string;
   doctorName: string;
   priority: string;
+  channel?: string;
 }

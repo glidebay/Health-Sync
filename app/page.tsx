@@ -540,7 +540,12 @@ function DashboardContent() {
     });
 
     if (dbPat) {
-      setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, { ...dbPat }]));
+      setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, { ...dbPat, visitType: 'Walk-in' }]));
+      fetchQueueFromDb().then((fresh) => {
+        if (fresh && fresh.length > 0) {
+          setQueue(sortQueueWithCompletedAtEnd(fresh));
+        }
+      });
     }
 
     setWalkinName('');
@@ -623,9 +628,11 @@ function DashboardContent() {
         time: bookSlotTime || 'Now',
         appointmentDate: finalBookingDate,
         tokenNumber: newTokNum,
+        queueTokenNo: bookingRes.queueTokenNo,
         displayId: bookingRes.displayId || newTokNum,
         patientNumber: bookingRes.patientNumber,
         priority: bookPriority,
+        visitType: 'Online',
       };
 
       setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, newPatient]));
@@ -644,6 +651,7 @@ function DashboardContent() {
         phone: bookPhone.trim(),
         doctorName: docName,
         priority: bookPriority,
+        channel: 'Online',
       });
 
       setBookName('');

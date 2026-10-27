@@ -325,19 +325,6 @@ export function DashboardView({
                           <span className="text-xs text-[#8A909D] font-medium flex-shrink-0">
                             ({tokenDisplay})
                           </span>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
-                              p.status === 'Completed'
-                                ? 'bg-gray-100 text-gray-600'
-                                : p.status === 'In Progress'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : p.status === 'Cancelled'
-                                ? 'bg-rose-50 text-rose-700'
-                                : 'bg-blue-50 text-blue-700'
-                            }`}
-                          >
-                            {p.status}
-                          </span>
                         </div>
                         <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 text-xs text-[#5E6470] font-medium">
                           <span>
@@ -357,6 +344,32 @@ export function DashboardView({
                             <Clock className="w-3.5 h-3.5 text-[#2563EB] stroke-[2]" />
                             Slot: {p.time}
                           </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
+                              p.status === 'Completed'
+                                ? 'bg-gray-100 text-gray-600'
+                                : p.status === 'In Progress'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : p.status === 'Cancelled'
+                                ? 'bg-rose-50 text-rose-700'
+                                : 'bg-blue-50 text-blue-700'
+                            }`}
+                          >
+                            {p.status}
+                          </span>
+                          {p.visitType && (
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1 ${
+                                p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online')
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                              }`}
+                            >
+                              {p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online') ? 'Online' : 'Walk-in'}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -694,7 +694,13 @@ export function SlotBookingView({
                 </div>
                 <div>
                   <span className="text-[#8A909D] font-medium block text-[11px] sm:text-xs">Phone / Contact</span>
-                  <span className="font-bold text-[#16191E]">{confirmedToken.phone || 'Walk-in Desk'}</span>
+                  <span className="font-bold text-[#16191E]">{confirmedToken.phone || 'Online Booking'}</span>
+                </div>
+                <div>
+                  <span className="text-[#8A909D] font-medium block text-[11px] sm:text-xs">Booking Channel</span>
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md mt-0.5">
+                    {confirmedToken.channel || 'Online'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-[#8A909D] font-medium block text-[11px] sm:text-xs">Visit Priority</span>

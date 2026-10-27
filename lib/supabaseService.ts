@@ -27,10 +27,12 @@ export interface FormattedQueuePatient {
   status: 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled';
   time: string;
   tokenNumber: number | string;
+  queueTokenNo?: number;
   patientNumber?: number;
   displayId?: string;
   priority?: 'Normal' | 'Urgent';
   scheduledTime: string;
+  visitType?: string;
 }
 
 export interface FormattedInventoryItem {
@@ -351,6 +353,8 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
         clinical_notes,
         visit_type,
         updated_at,
+        queue_token_no,
+        priority,
         patient:patients (
           id,
           full_name,
@@ -380,33 +384,37 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
         hour12: true,
       });
 
-      const patNum = patient?.patient_number ?? (index + 1);
-      const rawDispId = patient?.display_id;
-      const displayId = rawDispId
-        ? (rawDispId.startsWith('P') ? rawDispId : `P${rawDispId}`)
-        : `P${String(patNum).padStart(3, '0')}`;
+      // Use backend queue_token_no for the appointment's daily FIFO token (e.g., 1 -> P001, 2 -> P002)
+      const qTokenNo = typeof item.queue_token_no === 'number' ? item.queue_token_no : (index + 1);
+      const tokenDisplay = `P${String(qTokenNo).padStart(3, '0')}`;
+      const patNum = patient?.patient_number ?? qTokenNo;
+
+      const rawVisitType = item.visit_type || 'Walk-in';
+      const visitType = rawVisitType.toLowerCase().includes('whatsapp') || rawVisitType.toLowerCase().includes('online') ? 'Online' : 'Walk-in';
 
       return {
         id: item.id,
         patientDbId: item.patient_id,
-        name: patient?.full_name || 'Walk-in Patient',
+        name: patient?.full_name || (visitType === 'Online' ? 'Online Patient' : 'Walk-in Patient'),
         age: patient?.age || 30,
         gender: (patient?.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
         phone: patient?.phone_number || undefined,
         status: (item.status as 'Waiting' | 'In Progress' | 'Completed') || 'Waiting',
         time: timeStr,
-        tokenNumber: displayId,
+        tokenNumber: tokenDisplay,
+        queueTokenNo: qTokenNo,
         patientNumber: patNum,
-        displayId,
-        priority: item.visit_type === 'Urgent' ? 'Urgent' : 'Normal',
+        displayId: tokenDisplay,
+        priority: (item.priority === 'Urgent' || item.visit_type === 'Urgent' || item.clinical_notes?.includes('URGENT')) ? 'Urgent' : 'Normal',
         scheduledTime: item.scheduled_time,
+        visitType,
       };
     });
 
-    // Enforce First-In, First-Out (FIFO) queue order
+    // Enforce First-In, First-Out (FIFO) queue order based on queueTokenNo
     const parseFifoNum = (p: FormattedQueuePatient): number => {
-      if (typeof p.patientNumber === 'number') return p.patientNumber;
-      const raw = String(p.displayId || p.tokenNumber || '');
+      if (typeof p.queueTokenNo === 'number') return p.queueTokenNo;
+      const raw = String(p.tokenNumber || p.displayId || '');
       const m = raw.match(/\d+/);
       return m ? parseInt(m[0], 10) : 999999;
     };
@@ -505,7 +513,17 @@ export async function registerWalkinPatientDb(params: {
     const { data: doctorData } = await supabase.from('doctors').select('id').limit(1);
     const doctorId = doctorData && doctorData.length > 0 ? doctorData[0].id : null;
 
-    // 3. Insert appointment (visit_type must strictly satisfy check constraint: 'Walk-in', 'WhatsApp Link', 'WhatsApp Bot')
+    // 3. Compute next queue_token_no for today in the backend
+    const todayYmd = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+    const { count: todayCount } = await supabase
+      .from('appointments')
+      .select('*', { count: 'exact', head: true })
+      .gte('scheduled_time', `${todayYmd}T00:00:00`)
+      .lte('scheduled_time', `${todayYmd}T23:59:59`);
+    const nextQueueTokenNo = (todayCount || 0) + 1;
+    const tokenDisplay = `P${String(nextQueueTokenNo).padStart(3, '0')}`;
+
+    // 4. Insert appointment (visit_type must strictly satisfy check constraint: 'Walk-in', 'WhatsApp Link', 'WhatsApp Bot')
     const scheduledTime = new Date().toISOString();
     const clinicalNotes = params.priority === 'Urgent' ? '[URGENT TRIAGE]' : null;
 
@@ -519,6 +537,8 @@ export async function registerWalkinPatientDb(params: {
           status: 'Waiting',
           visit_type: 'Walk-in',
           clinical_notes: clinicalNotes,
+          queue_token_no: nextQueueTokenNo,
+          priority: params.priority || 'Normal',
         },
       ])
       .select()
@@ -549,11 +569,13 @@ export async function registerWalkinPatientDb(params: {
       phone: patientPhone,
       status: 'Waiting',
       time: timeStr,
-      tokenNumber: finalPatNumber,
+      tokenNumber: tokenDisplay,
+      queueTokenNo: nextQueueTokenNo,
       patientNumber: finalPatNumber,
-      displayId,
+      displayId: tokenDisplay,
       priority: params.priority || 'Normal',
       scheduledTime,
+      visitType: 'Walk-in',
     };
   } catch (err) {
     console.error('Failed to register patient in DB:', err);
@@ -1374,7 +1396,26 @@ export function getSlotPeriod(timeStr: string): 'Morning' | 'Afternoon' | 'Eveni
   return 'Evening';
 }
 
+export function getTimezoneOffsetString(): string {
+  if (typeof window === 'undefined') {
+    return '+05:30';
+  }
+  const offsetMinutes = -new Date().getTimezoneOffset();
+  if (offsetMinutes === 0) {
+    return '+05:30';
+  }
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const abs = Math.abs(offsetMinutes);
+  const hours = String(Math.floor(abs / 60)).padStart(2, '0');
+  const mins = String(abs % 60).padStart(2, '0');
+  return `${sign}${hours}:${mins}`;
+}
+
 export function formatSlotToIso(dateStr: string, slotTime: string): string {
+  if (!dateStr) {
+    const now = new Date();
+    dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }
   const parts = slotTime.trim().split(' ');
   const time = parts[0];
   const modifier = parts[1] ? parts[1].toUpperCase() : 'AM';
@@ -1385,7 +1426,8 @@ export function formatSlotToIso(dateStr: string, slotTime: string): string {
   if (modifier === 'AM' && hours === 12) hours = 0;
   const padH = String(hours).padStart(2, '0');
   const padM = String(minutes).padStart(2, '0');
-  return `${dateStr}T${padH}:${padM}:00+00:00`;
+  const tz = getTimezoneOffsetString();
+  return `${dateStr}T${padH}:${padM}:00${tz}`;
 }
 
 export function generateDailySlots(
@@ -1600,8 +1642,10 @@ export interface BookAppointmentSlotResult {
   appointmentId?: string;
   patientId?: string;
   tokenNumber?: string | number;
+  queueTokenNo?: number;
   patientNumber?: number;
   displayId?: string;
+  visitType?: string;
   message?: string;
   error?: string;
 }
@@ -1644,7 +1688,7 @@ export async function bookAppointmentSlotDb(
       };
     }
 
-    // Call unified backend RPC: register_walk_in_patient
+    // Call unified backend RPC: register_walk_in_patient to allocate patient record & FIFO token
     const { data: rpcData, error: rpcError } = await supabase.rpc(
       'register_walk_in_patient',
       {
@@ -1659,7 +1703,7 @@ export async function bookAppointmentSlotDb(
     );
 
     if (rpcError) {
-      console.warn('register_walk_in_patient RPC error:', rpcError.message);
+      console.warn('register_walk_in_patient RPC error, proceeding to direct WhatsApp slot booking:', rpcError.message);
     } else if (rpcData) {
       if (rpcData.success === false) {
         return {
@@ -1669,10 +1713,38 @@ export async function bookAppointmentSlotDb(
         };
       }
 
+      const apptId = rpcData.appointment_id || rpcData.unique_appointment_id;
+
+      // CRITICAL: Slot bookings from Book Slot page represent WhatsApp self-service bookings.
+      // Update visit_type to 'WhatsApp Link' in the database (satisfies chk_visit_type constraint)
+      if (apptId) {
+        const { error: updateErr } = await supabase
+          .from('appointments')
+          .update({
+            visit_type: 'WhatsApp Link',
+            clinical_notes: params.reason ? params.reason.trim() : null,
+          })
+          .eq('id', apptId);
+        if (updateErr) {
+          console.warn('Error setting visit_type to WhatsApp Link:', updateErr.message);
+        }
+      }
+
+      // Check if there is an open inbound WhatsApp request for this phone number and mark it confirmed
+      try {
+        const digitsOnly = cleanPhone.replace(/\D/g, '').slice(-10);
+        await supabase
+          .from('whatsapp_requests')
+          .update({ status: 'confirmed' })
+          .ilike('phone_number', `%${digitsOnly}%`)
+          .in('status', ['received', 'link_sent', 'pending']);
+      } catch (waErr) {
+        console.warn('Error updating matching whatsapp_requests status:', waErr);
+      }
+
       const fifoNo = rpcData.queue_token_no || rpcData.fifo_token_no || 1;
-      let tokenNumber = `P${String(fifoNo).padStart(3, '0')}`;
+      const tokenNumber = `P${String(fifoNo).padStart(3, '0')}`;
       let patNumber: number | undefined = undefined;
-      let dispId: string | undefined = undefined;
       const patDbId = rpcData.patient_id || rpcData.unique_patient_id;
 
       if (patDbId) {
@@ -1684,52 +1756,99 @@ export async function bookAppointmentSlotDb(
 
         if (pRec) {
           patNumber = pRec.patient_number || undefined;
-          const rawDisp = pRec.display_id;
-          dispId = rawDisp
-            ? (rawDisp.startsWith('P') ? rawDisp : `P${rawDisp}`)
-            : patNumber
-              ? `P${String(patNumber).padStart(3, '0')}`
-              : undefined;
-          if (dispId) {
-            tokenNumber = dispId;
-          }
         }
       }
 
       return {
         success: true,
         tokenNumber,
+        queueTokenNo: fifoNo,
         patientNumber: patNumber,
-        displayId: dispId || tokenNumber,
-        appointmentId: rpcData.appointment_id || rpcData.unique_appointment_id,
+        displayId: tokenNumber,
+        appointmentId: apptId,
         patientId: patDbId,
-        message: rpcData.message || 'Slot confirmed successfully!',
+        visitType: 'Online',
+        message: 'Online appointment slot confirmed successfully!',
       };
     }
 
-    // Fallback direct insertion if RPC had network issue
-    const regPatient = await registerWalkinPatientDb({
-      name: params.name,
-      age: params.age,
-      gender: params.gender,
-      phone: params.phone,
-      priority: params.priority,
-    });
+    // Direct insertion fallback if RPC had network issue: save as 'WhatsApp Link'
+    let patientId: string | null = null;
+    let patientNumber: number | undefined;
 
-    if (regPatient) {
+    const { data: existingPatient } = await supabase
+      .from('patients')
+      .select('id, full_name, age, gender, phone_number, patient_number, display_id')
+      .eq('phone_number', cleanPhone)
+      .maybeSingle();
+
+    if (existingPatient) {
+      patientId = existingPatient.id;
+      patientNumber = existingPatient.patient_number || undefined;
+    } else {
+      const { data: newPat } = await supabase
+        .from('patients')
+        .insert([
+          {
+            full_name: params.name.trim(),
+            age: params.age || 28,
+            gender: params.gender || 'Male',
+            phone_number: cleanPhone,
+          },
+        ])
+        .select()
+        .single();
+      if (newPat) {
+        patientId = newPat.id;
+        patientNumber = newPat.patient_number || undefined;
+      }
+    }
+
+    // Calculate queue_token_no for target date
+    const targetDate = params.date || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+    const { count: dateCount } = await supabase
+      .from('appointments')
+      .select('*', { count: 'exact', head: true })
+      .gte('scheduled_time', `${targetDate}T00:00:00`)
+      .lte('scheduled_time', `${targetDate}T23:59:59`);
+    const nextQueueTokenNo = (dateCount || 0) + 1;
+    const tokenDisplay = `P${String(nextQueueTokenNo).padStart(3, '0')}`;
+
+    const { data: fallbackAppt, error: fallbackErr } = await supabase
+      .from('appointments')
+      .insert([
+        {
+          patient_id: patientId,
+          doctor_id: params.doctorId,
+          scheduled_time: scheduledTime,
+          status: 'Waiting',
+          visit_type: 'WhatsApp Link',
+          priority: params.priority || 'Normal',
+          clinical_notes: params.reason ? params.reason.trim() : null,
+          queue_token_no: nextQueueTokenNo,
+        },
+      ])
+      .select()
+      .single();
+
+    if (fallbackAppt) {
       return {
         success: true,
-        tokenNumber: regPatient.displayId || regPatient.tokenNumber,
-        appointmentId: regPatient.id,
-        patientId: regPatient.patientDbId,
-        message: 'Appointment booked successfully',
+        tokenNumber: tokenDisplay,
+        queueTokenNo: nextQueueTokenNo,
+        patientNumber,
+        displayId: tokenDisplay,
+        appointmentId: fallbackAppt.id,
+        patientId: patientId || undefined,
+        visitType: 'Online',
+        message: 'Online appointment slot booked successfully',
       };
     }
 
     return {
       success: false,
       error: 'BOOKING_FAILED',
-      message: 'Failed to record booking in database',
+      message: fallbackErr?.message || 'Failed to record booking in database',
     };
   } catch (err: any) {
     console.error('bookAppointmentSlotDb exception:', err);

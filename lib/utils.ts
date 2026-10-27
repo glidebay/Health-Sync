@@ -36,30 +36,26 @@ export function formatPatientToken(p?: {
   displayId?: string;
   patientNumber?: number;
   tokenNumber?: number | string;
+  queueTokenNo?: number | string;
 } | null): string {
   if (!p) return 'P001';
 
-  // 1. Check displayId (e.g., '072', '073', 'P072', 'P073')
-  if (p.displayId && typeof p.displayId === 'string') {
-    const trimmed = p.displayId.trim();
-    if (trimmed) {
-      if (trimmed.toUpperCase().startsWith('P')) {
-        const num = trimmed.slice(1);
-        return !isNaN(Number(num)) ? `P${num.padStart(3, '0')}` : trimmed;
+  // 1. Prioritize queueTokenNo from backend appointments table (e.g., 1 -> P001, 2 -> P002)
+  if (p.queueTokenNo !== undefined && p.queueTokenNo !== null) {
+    const raw = String(p.queueTokenNo).trim();
+    if (raw) {
+      if (raw.toUpperCase().startsWith('P')) {
+        const numPart = raw.slice(1);
+        return !isNaN(Number(numPart)) ? `P${numPart.padStart(3, '0')}` : raw;
       }
-      return `P${trimmed.padStart(3, '0')}`;
+      if (!isNaN(Number(raw))) {
+        return `P${raw.padStart(3, '0')}`;
+      }
+      return raw;
     }
   }
 
-  // 2. Check patientNumber (e.g., 72, 73)
-  if (p.patientNumber !== undefined && p.patientNumber !== null) {
-    const num = Number(p.patientNumber);
-    if (!isNaN(num)) {
-      return `P${String(num).padStart(3, '0')}`;
-    }
-  }
-
-  // 3. Check tokenNumber (e.g., 72, '72', 'P072', 'P001')
+  // 2. Check tokenNumber (e.g., 'P001', 1)
   if (p.tokenNumber !== undefined && p.tokenNumber !== null) {
     const raw = String(p.tokenNumber).trim();
     if (raw) {
@@ -71,6 +67,26 @@ export function formatPatientToken(p?: {
         return `P${raw.padStart(3, '0')}`;
       }
       return raw;
+    }
+  }
+
+  // 3. Fallback to displayId
+  if (p.displayId && typeof p.displayId === 'string') {
+    const trimmed = p.displayId.trim();
+    if (trimmed) {
+      if (trimmed.toUpperCase().startsWith('P')) {
+        const num = trimmed.slice(1);
+        return !isNaN(Number(num)) ? `P${num.padStart(3, '0')}` : trimmed;
+      }
+      return `P${trimmed.padStart(3, '0')}`;
+    }
+  }
+
+  // 4. Fallback to patientNumber
+  if (p.patientNumber !== undefined && p.patientNumber !== null) {
+    const num = Number(p.patientNumber);
+    if (!isNaN(num)) {
+      return `P${String(num).padStart(3, '0')}`;
     }
   }
 

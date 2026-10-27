@@ -105,21 +105,36 @@ export function QueueView({
                       )}
                       <span>• Slot: {p.time}</span>
                     </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
+                          isCompleted
+                            ? 'bg-gray-100 text-gray-600'
+                            : p.status === 'In Progress'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : p.status === 'Cancelled'
+                            ? 'bg-rose-50 text-rose-700'
+                            : 'bg-blue-50 text-blue-700'
+                        }`}
+                      >
+                        {p.status}
+                      </span>
+                      {p.visitType && (
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1 ${
+                            p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online')
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                          }`}
+                        >
+                          {p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online') ? 'Online' : 'Walk-in'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between sm:justify-end space-x-2 sm:space-x-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#ECEEF2]">
-                  <span
-                    className={`text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1 rounded-xl ${
-                      isCompleted
-                        ? 'bg-gray-100 text-gray-600'
-                        : p.status === 'In Progress'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-blue-50 text-blue-700'
-                    }`}
-                  >
-                    {p.status}
-                  </span>
                   {!isCompleted && (
                     <span className="text-xs font-bold text-white bg-[#2563EB] hover:bg-blue-700 px-3.5 py-1.5 rounded-xl transition cursor-pointer shadow-xs whitespace-nowrap">
                       Start Consult &rarr;
