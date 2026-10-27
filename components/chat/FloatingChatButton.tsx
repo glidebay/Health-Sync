@@ -66,14 +66,14 @@ export function FloatingChatButton({
           </motion.button>
         </div>
 
-        {/* Notification badge component with unread count */}
+        {/* Red circle indicator showing number of persons with unread or unopened messages */}
         {!isOpen && unreadCount > 0 && (
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            className="absolute -top-1 -right-1 z-10 flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-gradient-to-r from-rose-500 to-red-600 text-white text-[11px] font-black shadow-md border-2 border-white ring-2 ring-red-500/20"
+            className="absolute -top-1 -right-1 z-10 flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-red-600 text-white text-[11px] font-bold shadow-md border-2 border-white ring-2 ring-red-500/25"
           >
-            {unreadCount}
+            {unreadCount > 99 ? '99+' : unreadCount}
           </motion.div>
         )}
 

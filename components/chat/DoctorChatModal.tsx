@@ -13,6 +13,7 @@ import { PatientChatThread } from '@/types/chat';
 import { DbDoctor } from '@/types/database';
 import { fetchInboundChatThreads, subscribeToChatUpdates } from '@/lib/supabaseService';
 import { formatPatientToken } from '@/lib/utils';
+import { getReadThreadStates, markThreadAsRead, isThreadUnread } from '@/lib/chatStorage';
 
 interface DoctorChatModalProps {
   isOpen: boolean;
@@ -84,6 +85,23 @@ export function DoctorChatModal({
   const activeThread = useMemo(() => {
     return threads.find((t) => t.id === selectedThreadId) || threads[0] || null;
   }, [threads, selectedThreadId]);
+
+  const [readStates, setReadStates] = useState<Record<string, number>>({});
+
+  // Sync read states from storage
+  useEffect(() => {
+    setReadStates(getReadThreadStates());
+    const onReadChange = () => setReadStates(getReadThreadStates());
+    window.addEventListener('healthsync_chat_read_change', onReadChange);
+    return () => window.removeEventListener('healthsync_chat_read_change', onReadChange);
+  }, []);
+
+  // Mark active thread as read whenever it is open and visible
+  useEffect(() => {
+    if (isOpen && activeThread && activeThread.id) {
+      markThreadAsRead(activeThread.id, activeThread.messages?.length || 0);
+    }
+  }, [isOpen, activeThread?.id, activeThread?.messages?.length]);
 
   useEffect(() => {
     if (!isOpen || !activeThread) return;
@@ -233,17 +251,14 @@ export function DoctorChatModal({
                     const isSelected = activeThread?.id === thread.id;
                     const isBooked = thread.status === 'booked';
                     const isUrgent = thread.priority === 'Urgent';
+                    const isUnread = isThreadUnread(thread, readStates);
 
                     return (
                       <div
                         key={thread.id}
                         onClick={() => {
                           setSelectedThreadId(thread.id);
-                          setThreads((prev) =>
-                            prev.map((t) =>
-                              t.id === thread.id ? { ...t, unread: false } : t
-                            )
-                          );
+                          markThreadAsRead(thread.id, thread.messages?.length || 0);
                         }}
                         className={`p-3 text-left transition cursor-pointer flex items-start gap-2.5 ${isSelected
                           ? 'bg-blue-50/70 border-l-3 border-[#2563EB]'
@@ -264,9 +279,12 @@ export function DoctorChatModal({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-1 mb-0.5">
                             <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="text-xs font-bold text-[#16191E] truncate">
+                              <span className={`text-xs truncate ${isUnread ? 'font-black text-[#16191E]' : 'font-bold text-[#16191E]'}`}>
                                 {thread.patientName}
                               </span>
+                              {isUnread && (
+                                <span className="w-2 h-2 rounded-full bg-red-600 shrink-0 ring-2 ring-red-200" title="Unopened message" />
+                              )}
                               {isUrgent && (
                                 <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-600 border border-rose-100 shrink-0">
                                   Urgent

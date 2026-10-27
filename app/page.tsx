@@ -70,6 +70,7 @@ import { PrescriptionPrintModal } from '@/components/modals/PrescriptionPrintMod
 import { NotificationModal, NotificationState } from '@/components/modals/NotificationModal';
 import { FloatingChatButton } from '@/components/chat/FloatingChatButton';
 import { DoctorChatModal } from '@/components/chat/DoctorChatModal';
+import { getReadThreadStates, countUnreadPersons } from '@/lib/chatStorage';
 import { validateMobileNumber } from '@/lib/phoneValidation';
 
 // Screen Views
@@ -389,8 +390,9 @@ function DashboardContent() {
     const updateUnread = async () => {
       try {
         const threads = await fetchInboundChatThreads();
-        const unread = threads.filter((t) => t.status !== 'booked').length;
-        setChatUnreadCount(unread);
+        const readStates = getReadThreadStates();
+        const unreadPersons = countUnreadPersons(threads, readStates);
+        setChatUnreadCount(unreadPersons);
       } catch {}
     };
 
@@ -398,7 +400,16 @@ function DashboardContent() {
     const unsub = subscribeToChatUpdates(() => {
       updateUnread();
     });
-    return () => unsub();
+
+    const onReadChange = () => {
+      updateUnread();
+    };
+    window.addEventListener('healthsync_chat_read_change', onReadChange);
+
+    return () => {
+      unsub();
+      window.removeEventListener('healthsync_chat_read_change', onReadChange);
+    };
   }, []);
 
   const navItems: NavItemConfig[] = [
