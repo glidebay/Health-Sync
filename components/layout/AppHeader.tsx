@@ -40,7 +40,6 @@ export function AppHeader({
 }: AppHeaderProps) {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
 
-  // Keyboard shortcut (/) to open global search
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (

@@ -59,7 +59,6 @@ export function QueueList({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Header exactly matching original design */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-lg sm:text-xl font-bold text-[#16191E]">Assistant Queue Oversight</h2>
@@ -80,7 +79,6 @@ export function QueueList({
         )}
       </div>
 
-      {/* Grid of patient cards exactly matching original layout */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
         {sortedQueue.length === 0 ? (
           <div className="col-span-full bg-white rounded-2xl p-10 border border-[#ECEEF2] text-center shadow-xs">
@@ -175,7 +173,6 @@ export function QueueList({
         )}
       </div>
 
-      {/* Pagination */}
       <NumberedPagination
         currentPage={currentPage}
         totalPages={totalPages}
@@ -185,7 +182,6 @@ export function QueueList({
         itemName="patients"
       />
 
-      {/* Clean Modals */}
       <CancelModal
         isOpen={!!selectedPatientForCancel}
         patient={selectedPatientForCancel}

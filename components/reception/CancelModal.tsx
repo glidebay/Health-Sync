@@ -62,7 +62,6 @@ export function CancelModal({
           className="bg-white rounded-2xl border border-[#ECEEF2] shadow-xl max-w-md w-full overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header */}
           <div className="px-5 py-4 border-b border-[#ECEEF2] flex items-center justify-between">
             <div>
               <h3 className="text-base font-bold text-[#16191E]">Cancel Appointment</h3>
@@ -79,7 +78,6 @@ export function CancelModal({
             </button>
           </div>
 
-          {/* Body */}
           <div className="p-5 space-y-3.5">
             <p className="text-xs text-[#5E6470]">
               The slot at <strong className="text-[#16191E]">{patient.time}</strong> will be freed for new bookings.
@@ -113,7 +111,6 @@ export function CancelModal({
             )}
           </div>
 
-          {/* Footer */}
           <div className="px-5 py-3.5 bg-gray-50/70 border-t border-[#ECEEF2] flex items-center justify-end space-x-2">
             <button
               type="button"

@@ -16,7 +16,6 @@ import {
   ChatMessage,
 } from '@/types/chat';
 
-
 export interface FormattedQueuePatient {
   id: string;
   patientDbId: string;
@@ -104,7 +103,6 @@ export async function verifyDoctorPin(
     }
 
     if (!matchedDoctor) {
-      // If doctorId was provided, increment failed attempts on that doctor
       if (doctorId && doctors.length > 0) {
         const doc = doctors[0];
         const currentFailed = (doc.failed_attempts || 0) + 1;
@@ -122,14 +120,12 @@ export async function verifyDoctorPin(
       return { success: false, message: 'Invalid Security PIN' };
     }
 
-    // Check if the matched doctor PIN entry is locked
     if (matchedDoctor.locked_until && new Date(matchedDoctor.locked_until).getTime() > Date.now()) {
       const waitSec = Math.ceil((new Date(matchedDoctor.locked_until).getTime() - Date.now()) / 1000);
       console.warn(`Doctor profile locked for ${waitSec}s`);
       return { success: false, message: `Account locked. Retry in ${waitSec}s` };
     }
 
-    // Correct PIN: reset failed attempts, clear lock, open 30-minute PIN session
     const pinSessionUntil = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     await supabase
       .from('doctors')
@@ -155,7 +151,6 @@ export async function verifyDoctorPin(
   }
 }
 
-// Global Clinic & Doctor Authentication Result
 export interface VerifyClinicAuthResult {
   success: boolean;
   type?: 'clinic' | 'doctor';
@@ -163,7 +158,6 @@ export interface VerifyClinicAuthResult {
   doctor?: DbDoctor;
   message?: string;
 }
-
 
 export async function verifyClinicPin(
   pin: string
@@ -196,14 +190,12 @@ export async function verifyClinicPin(
   return { success: false, message: 'Invalid Clinic Security PIN' };
 }
 
-
 export async function verifyClinicOrDoctorPin(
   pin: string
 ): Promise<VerifyClinicAuthResult> {
   const cleanPin = pin ? pin.trim() : '';
   if (!cleanPin) return { success: false, message: 'Security PIN is required' };
 
-  // Tier 1: Check clinic gateway PIN dynamically via DB RPC
   const clinicRes = await verifyClinicPin(cleanPin);
   if (clinicRes.success) {
     return {
@@ -214,7 +206,6 @@ export async function verifyClinicOrDoctorPin(
     };
   }
 
-  // Tier 2: Check doctor PIN dynamically via doctors table bcrypt
   const docResult = await verifyDoctorPin(cleanPin);
   if (docResult.success && docResult.doctor) {
     return {
@@ -384,7 +375,6 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
         hour12: true,
       });
 
-      // Use backend queue_token_no for the appointment's daily FIFO token (e.g., 1 -> P001, 2 -> P002)
       const qTokenNo = typeof item.queue_token_no === 'number' ? item.queue_token_no : (index + 1);
       const tokenDisplay = `P${String(qTokenNo).padStart(3, '0')}`;
       const patNum = patient?.patient_number ?? qTokenNo;
@@ -411,7 +401,6 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
       };
     });
 
-    // Enforce First-In, First-Out (FIFO) queue order based on queueTokenNo
     const parseFifoNum = (p: FormattedQueuePatient): number => {
       if (typeof p.queueTokenNo === 'number') return p.queueTokenNo;
       const raw = String(p.tokenNumber || p.displayId || '');
@@ -446,7 +435,6 @@ export async function registerWalkinPatientDb(params: {
   priority?: 'Normal' | 'Urgent';
 }): Promise<FormattedQueuePatient | null> {
   try {
-    // 1. Phone number is required by NOT NULL constraint in Supabase (Section 3.2: Primary lookup key)
     const rawPhone = params.phone ? params.phone.trim() : '';
     const patientPhone = rawPhone.length > 0 ? rawPhone : `+91-WLK-${Date.now().toString().slice(-8)}`;
 
@@ -455,7 +443,6 @@ export async function registerWalkinPatientDb(params: {
     let patientAge = params.age;
     let patientGender = params.gender;
 
-    // Check if returning patient exists by phone number
     const { data: existingPatient } = await supabase
       .from('patients')
       .select('id, full_name, age, gender, phone_number, patient_number, display_id')
@@ -499,7 +486,6 @@ export async function registerWalkinPatientDb(params: {
         : undefined;
     }
 
-    // Fallback if patient_number wasn't returned
     let finalPatNumber = patientNumber;
     if (!finalPatNumber) {
       const { count } = await supabase.from('patients').select('*', { count: 'exact', head: true });
@@ -509,11 +495,9 @@ export async function registerWalkinPatientDb(params: {
       displayId = `P${String(finalPatNumber).padStart(3, '0')}`;
     }
 
-    // 2. Fetch default doctor if available
     const { data: doctorData } = await supabase.from('doctors').select('id').limit(1);
     const doctorId = doctorData && doctorData.length > 0 ? doctorData[0].id : null;
 
-    // 3. Compute next queue_token_no for today in the backend
     const todayYmd = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
     const { count: todayCount } = await supabase
       .from('appointments')
@@ -523,7 +507,6 @@ export async function registerWalkinPatientDb(params: {
     const nextQueueTokenNo = (todayCount || 0) + 1;
     const tokenDisplay = `P${String(nextQueueTokenNo).padStart(3, '0')}`;
 
-    // 4. Insert appointment (visit_type must strictly satisfy check constraint: 'Walk-in', 'WhatsApp Link', 'WhatsApp Bot')
     const scheduledTime = new Date().toISOString();
     const clinicalNotes = params.priority === 'Urgent' ? '[URGENT TRIAGE]' : null;
 
@@ -585,7 +568,6 @@ export async function registerWalkinPatientDb(params: {
 
 export async function reallocateSlotDb(appointmentId: string): Promise<string | null> {
   try {
-    // Look up current time
     const { data: currentAppt } = await supabase
       .from('appointments')
       .select('scheduled_time')
@@ -596,7 +578,6 @@ export async function reallocateSlotDb(appointmentId: string): Promise<string | 
     const newDate = new Date(Date.now() + 20 * 60000);
     const newTimeIso = newDate.toISOString();
 
-    // Update appointment
     const { error: updateError } = await supabase
       .from('appointments')
       .update({
@@ -610,7 +591,6 @@ export async function reallocateSlotDb(appointmentId: string): Promise<string | 
       return null;
     }
 
-    // Log to appointment_logs
     await supabase.from('appointment_logs').insert([
       {
         appointment_id: appointmentId,
@@ -751,8 +731,6 @@ export async function rescheduleAppointmentAdvancedDb(
   params: RescheduleAdvancedParams
 ): Promise<RescheduleResult> {
   try {
-    // Normalize mode to match backend SQL specification:
-    // 'Patient Late', 'Doctor Delay', 'Emergency', 'New Slot'
     let dbMode = 'New Slot';
     const lower = (params.mode || '').toLowerCase().trim();
     if (lower === 'patient_late' || lower === 'patient late' || lower === 'late') {
@@ -923,7 +901,6 @@ export async function completeConsultationDb(params: {
   prescriptions: Array<{ inventoryId: string | number; qty: number }>;
 }): Promise<boolean> {
   try {
-    // 1. Update appointment to Completed with clinical notes
     const { error: apptError } = await supabase
       .from('appointments')
       .update({
@@ -937,9 +914,7 @@ export async function completeConsultationDb(params: {
       console.warn('Error completing appointment:', apptError);
     }
 
-    // 2. Insert prescribed medications & deduct inventory stock
     for (const rx of params.prescriptions) {
-      // Record prescription
       await supabase.from('prescribed_medications').insert([
         {
           appointment_id: params.appointmentId,
@@ -948,7 +923,6 @@ export async function completeConsultationDb(params: {
         },
       ]);
 
-      // Deduct from inventory
       const { data: invItem } = await supabase
         .from('inventory')
         .select('stock_quantity')
@@ -1104,10 +1078,6 @@ export function subscribeToClinicUpdates(onUpdate: () => void) {
   };
 }
 
-// ====================================================================
-// APPLICATION SETTINGS & PARAMETER CATALOG SERVICES
-// ====================================================================
-
 import { AppConfig, DEFAULT_APP_CONFIG } from '@/data/default-config';
 
 const APP_CONFIG_STORAGE_KEY = 'healthsync_app_config';
@@ -1199,11 +1169,9 @@ export async function updateAppConfigDb(
   const current = getAppConfigLocal();
   const nextConfig: AppConfig = { ...current, ...updates };
 
-  // Save to local storage for instant optimistic UI update
   saveAppConfigLocal(nextConfig);
 
   try {
-    // 1. Update app_config table by primary key `key`
     const updatePromises = Object.entries(updates).map(async ([key, val]) => {
       let serializedValue: string;
       if (typeof val === 'boolean') {
@@ -1226,7 +1194,6 @@ export async function updateAppConfigDb(
         );
 
       if (error) {
-        // Fallback to direct update
         await supabase
           .from('app_config')
           .update({ value: serializedValue })
@@ -1236,7 +1203,6 @@ export async function updateAppConfigDb(
 
     await Promise.all(updatePromises);
 
-    // 2. Sync doctor daily quota to doctors table if modified
     if (updates.daily_quota !== undefined) {
       const { error: docError } = await supabase
         .from('doctors')
@@ -1277,7 +1243,6 @@ export async function searchPatientsDb(query: string): Promise<DbPatient[]> {
       .select('id, full_name, age, gender, phone_number, created_at')
       .limit(40);
 
-    // 1. Age range query - e.g. "between 20 and 50", "20-50", "20 to 50"
     const rangeMatch = q.match(/(\d+)\s*(?:-|to|and)\s*(\d+)/i);
     if (rangeMatch) {
       const min = parseInt(rangeMatch[1], 10);
@@ -1292,7 +1257,6 @@ export async function searchPatientsDb(query: string): Promise<DbPatient[]> {
       if (!error && data) return data;
     }
 
-    // 2. Senior / greater than match - e.g. ">= 60", "> 40", "60+", "above 60", "senior"
     const gtMatch = q.match(/(?:>=|>|above)\s*(\d+)|\b(\d+)\s*\+/i);
     if (gtMatch || q.includes('senior') || q.includes('elderly')) {
       const min = gtMatch ? parseInt(gtMatch[1] || gtMatch[2], 10) : 60;
@@ -1306,7 +1270,6 @@ export async function searchPatientsDb(query: string): Promise<DbPatient[]> {
       if (!error && data) return data;
     }
 
-    // 3. Pediatric / under match - e.g. "< 18", "<= 18", "under 18", "pediatric"
     const ltMatch = q.match(/(?:<=|<|under)\s*(\d+)/i);
     if (ltMatch || q.includes('pediatric') || q.includes('child')) {
       const max = ltMatch ? parseInt(ltMatch[1], 10) : 18;
@@ -1320,7 +1283,6 @@ export async function searchPatientsDb(query: string): Promise<DbPatient[]> {
       if (!error && data) return data;
     }
 
-    // 4. Standalone Gender queries - e.g. "female" or "male"
     if (q === 'female' || q === 'females' || q === 'women' || q === 'woman') {
       const { data, error } = await request.ilike('gender', 'Female').order('created_at', { ascending: false });
       if (!error && data) return data;
@@ -1330,7 +1292,6 @@ export async function searchPatientsDb(query: string): Promise<DbPatient[]> {
       if (!error && data) return data;
     }
 
-    // 5. Gender with exact age - e.g. "female 45" or "male 30"
     const genderAgeMatch = q.match(/(female|male)\s*(\d+)/i);
     if (genderAgeMatch) {
       const genderStr = genderAgeMatch[1].toLowerCase() === 'female' ? 'Female' : 'Male';
@@ -1339,7 +1300,6 @@ export async function searchPatientsDb(query: string): Promise<DbPatient[]> {
       if (!error && data) return data;
     }
 
-    // 6. Default: Exact Age, Name substring (ilike), or Phone substring (like)
     const isNum = /^\d+$/.test(raw);
     const numVal = isNum ? parseInt(raw, 10) : null;
 
@@ -1438,12 +1398,11 @@ export function generateDailySlots(
   const result: SlotItem[] = [];
   const safeQuota = Math.max(1, quota || 10);
   const safeDuration = Math.max(5, durationMins || 15);
-  let currentMin = 9 * 60; // 09:00 AM
+  let currentMin = 9 * 60;
 
   for (let i = 0; i < safeQuota; i++) {
-    // If morning reaches or exceeds 01:00 PM (780 mins) and we still have slots, shift to afternoon 02:00 PM (840 mins)
     if (currentMin >= 13 * 60 && currentMin < 14 * 60) {
-      currentMin = 14 * 60; // 02:00 PM
+      currentMin = 14 * 60;
     }
 
     const h = Math.floor(currentMin / 60);
@@ -1483,7 +1442,6 @@ export async function getDoctorSlotsForDate(
       };
     }
 
-    // 1. Fetch doctor's daily quota and clinic slot duration from Supabase
     let doctorQuota = 10;
     let slotDurationMins = 15;
 
@@ -1508,7 +1466,6 @@ export async function getDoctorSlotsForDate(
     const durCfg = cfgRes.data?.find((c) => c.key === 'slot_duration_mins');
     if (durCfg?.value) slotDurationMins = Number(durCfg.value);
 
-    // 2. Fetch booked appointment times on target date
     const bookedTimeLabels = new Set<string>();
     const bookedAppointments = bookedApptsRes.data;
 
@@ -1551,7 +1508,6 @@ export async function getDoctorSlotsForDate(
       }
     }
 
-    // 3. Fetch RPC available slots from Supabase
     const { data: rpcData } = await supabase.rpc('get_available_slots', {
       p_doctor_id: doctorId,
       p_date: dateStr,
@@ -1568,7 +1524,6 @@ export async function getDoctorSlotsForDate(
         ? rpcData.slots
         : (rpcData?.available_slots as any[])) || [];
 
-    // 4. Construct EXACTLY doctorQuota slots as retrieved from Supabase
     let finalSlots: SlotItem[] = [];
 
     if (rpcSlotsList.length >= doctorQuota) {
@@ -1585,7 +1540,6 @@ export async function getDoctorSlotsForDate(
       finalSlots = generateDailySlots(doctorQuota, slotDurationMins, dateStr);
     }
 
-    // Mark any slot that matches a booked appointment as isBooked: true
     for (const slot of finalSlots) {
       if (bookedTimeLabels.has(slot.time)) {
         slot.isBooked = true;
@@ -1662,7 +1616,6 @@ export async function bookAppointmentSlotDb(
 
     const scheduledTime = formatSlotToIso(params.date, params.slotTime);
 
-    // 1. Enforce max number of slot bookings (daily quota) from Supabase
     const { count: currentBookedCount } = await supabase
       .from('appointments')
       .select('*', { count: 'exact', head: true })
@@ -1688,7 +1641,6 @@ export async function bookAppointmentSlotDb(
       };
     }
 
-    // Call unified backend RPC: register_walk_in_patient to allocate patient record & FIFO token
     const { data: rpcData, error: rpcError } = await supabase.rpc(
       'register_walk_in_patient',
       {
@@ -1715,8 +1667,6 @@ export async function bookAppointmentSlotDb(
 
       const apptId = rpcData.appointment_id || rpcData.unique_appointment_id;
 
-      // CRITICAL: Slot bookings from Book Slot page represent WhatsApp self-service bookings.
-      // Update visit_type to 'WhatsApp Link' in the database (satisfies chk_visit_type constraint)
       if (apptId) {
         const { error: updateErr } = await supabase
           .from('appointments')
@@ -1730,7 +1680,6 @@ export async function bookAppointmentSlotDb(
         }
       }
 
-      // Check if there is an open inbound WhatsApp request for this phone number and mark it confirmed
       try {
         const digitsOnly = cleanPhone.replace(/\D/g, '').slice(-10);
         await supabase
@@ -1772,7 +1721,6 @@ export async function bookAppointmentSlotDb(
       };
     }
 
-    // Direct insertion fallback if RPC had network issue: save as 'WhatsApp Link'
     let patientId: string | null = null;
     let patientNumber: number | undefined;
 
@@ -1804,7 +1752,6 @@ export async function bookAppointmentSlotDb(
       }
     }
 
-    // Calculate queue_token_no for target date
     const targetDate = params.date || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
     const { count: dateCount } = await supabase
       .from('appointments')
@@ -1895,7 +1842,6 @@ export async function getDynamicSlotTimetable(
     console.warn('getDynamicSlotTimetable RPC error:', err);
   }
 
-  // Robust calculation matching 1.1 The 3 Slot Lifecycle States
   const now = new Date();
   const todayYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const isToday = dateStr === todayYmd;
@@ -2097,7 +2043,6 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
     ];
 
     if (dbRequests && dbRequests.length > 0) {
-      // Fetch patients to match WhatsApp requests by phone number
       const { data: dbPatients } = await supabase
         .from('patients')
         .select('id, full_name, phone_number, patient_number, display_id');
@@ -2112,7 +2057,6 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
         }
       }
 
-      // Group all Supabase requests by normalized phone number (last 10 digits)
       const phoneGroups = new Map<string, typeof dbRequests>();
       for (const req of dbRequests) {
         const phone = req.phone_number || '';
@@ -2126,7 +2070,6 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
       const dbMapped: PatientChatThread[] = [];
 
       phoneGroups.forEach((requests, key) => {
-        // Sort chronologically (oldest first for message stream)
         const sorted = [...requests].sort((a, b) => {
           const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
           const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -2175,7 +2118,6 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
 
         const isBooked = sorted.some((r) => r.status === 'booked');
 
-        // Build messages stream showing full chat and actions
         const messages: ChatMessage[] = [];
 
         sorted.forEach((req) => {
@@ -2199,7 +2141,6 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
               messageType: 'text',
             });
           } else {
-            // Patient inbound message
             let msgText = req.message_text || '';
             let isInteractive = false;
             let interactiveOption = '';
@@ -2230,7 +2171,6 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
             });
           }
 
-          // System Action in response to this message
           if (req.status === 'link_sent') {
             messages.push({
               id: `act-link-${req.id}`,
@@ -2277,7 +2217,6 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
         });
       });
 
-      // Merge with default mock threads if needed (deduplicating by phone)
       const seenPhones = new Set<string>();
       const combined: PatientChatThread[] = [];
       for (const t of [...dbMapped, ...defaultThreads]) {
@@ -2372,6 +2311,4 @@ export async function markThreadUrgentInDb(phoneNumber: string): Promise<boolean
     return false;
   }
 }
-
-
 

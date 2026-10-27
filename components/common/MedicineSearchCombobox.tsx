@@ -30,13 +30,11 @@ export function MedicineSearchCombobox({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
-  // Find currently selected medicine object
   const selectedMed = useMemo(() => {
     if (!selectedMedId) return null;
     return inventory.find((m) => String(m.id) === String(selectedMedId)) || null;
   }, [inventory, selectedMedId]);
 
-  // Sync input value with selection when selection or inventory changes
   useEffect(() => {
     if (selectedMed) {
       setSearchQuery(`${selectedMed.brand} (${selectedMed.generic})`);
@@ -45,12 +43,10 @@ export function MedicineSearchCombobox({
     }
   }, [selectedMed]);
 
-  // Filter available medicines based on search term
   const filteredInventory = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const available = inventory.filter((m) => m.stock > 0);
 
-    // If query matches current selection exactly, display all medicines when opened
     const isShowingCurrentSelection = selectedMed && searchQuery === `${selectedMed.brand} (${selectedMed.generic})`;
 
     if (!q || isShowingCurrentSelection) {
@@ -65,12 +61,10 @@ export function MedicineSearchCombobox({
     });
   }, [inventory, searchQuery, selectedMed]);
 
-  // Handle outside click to close dropdown
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
-        // If closed without new selection, reset query text to current selection or empty
         if (selectedMed) {
           setSearchQuery(`${selectedMed.brand} (${selectedMed.generic})`);
         } else {
@@ -85,7 +79,6 @@ export function MedicineSearchCombobox({
     };
   }, [selectedMed]);
 
-  // Scroll highlighted item into view
   useEffect(() => {
     if (isOpen && highlightedIndex >= 0 && listRef.current) {
       const items = listRef.current.children;
@@ -98,7 +91,7 @@ export function MedicineSearchCombobox({
   }, [highlightedIndex, isOpen]);
 
   const handleSelect = (item: InventoryItem) => {
-    if (item.stock <= 0) return; // Cannot select out-of-stock
+    if (item.stock <= 0) return;
     onSelectMedId(String(item.id));
     setSearchQuery(`${item.brand} (${item.generic})`);
     setIsOpen(false);
@@ -159,7 +152,6 @@ export function MedicineSearchCombobox({
 
   return (
     <div ref={containerRef} className={`relative flex-1 ${className}`}>
-      {/* Combobox Input Field */}
       <div
         onClick={() => {
           setIsOpen(true);
@@ -181,7 +173,6 @@ export function MedicineSearchCombobox({
           }}
           onFocus={() => {
             setIsOpen(true);
-            // Select text if already populated for fast typing
             if (selectedMed) {
               inputRef.current?.select();
             }
@@ -217,7 +208,6 @@ export function MedicineSearchCombobox({
         </button>
       </div>
 
-      {/* Dropdown Results Menu */}
       <AnimatePresence>
         {isOpen && (
           <motion.div

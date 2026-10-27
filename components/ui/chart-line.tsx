@@ -28,43 +28,24 @@ import {
 } from '@/components/ui/chart-line-utils/chart-kit';
 
 export interface ChartLineProps extends ChartBaseProps {
-  /** Rows of data, e.g. `{ month: "Jan", revenue: 18600 }`. */
   data: ChartDatum[];
-  /** Key in each row used for the x-axis labels. */
   index: string;
-  /** Numeric keys to plot, one line each. */
   series: ChartSeries[];
-  /** Line interpolation. Default: "smooth" */
   curve?: ChartCurve;
-  /** Area under each line. Default: "dots" */
   fill?: 'none' | 'gradient' | 'dots' | 'hatch';
-  /** Line thickness in px. Default: 2.5 */
   strokeWidth?: number;
-  /** Horizontal grid lines at each y tick. Default: true */
   showGrid?: boolean;
-  /** Index labels under the plot. Default: true */
   showXAxis?: boolean;
-  /** Value labels left of the plot. Default: true */
   showYAxis?: boolean;
-  /** Approximate number of y-axis ticks. Default: 4 */
   yTicks?: number;
-  /** Lower bound of the y domain. Default: 0 */
   yMin?: number;
-  /** Upper bound of the y domain */
   yMax?: number;
-  /** Which data points get a marker. Default: "last" */
   showPoints?: 'none' | 'hover' | 'all' | 'last';
-  /** Crosshair and tooltip on hover / arrow keys. Default: true */
   showTooltip?: boolean;
-  /** Toggleable legend. Default: true when there is more than one series */
   showLegend?: boolean;
-  /** Plot height in px, excluding the x-axis. Default: 220 */
   height?: number;
-  /** Show every nth x label */
   xLabelEvery?: number;
-  /** Headline figure from the first series. Default: "last" */
   total?: 'sum' | 'last' | 'none';
-  /** Change pill next to the headline, in percent. Default: "auto" */
   delta?: number | 'auto';
 }
 

@@ -479,7 +479,6 @@ export function SlotBookingView({
 
   const activeDate = bookDate || internalDate;
 
-  // Defer date calculation to useEffect to eliminate any new Date() evaluation during Next.js prerender
   useEffect(() => {
     const now = new Date();
     const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -536,7 +535,6 @@ export function SlotBookingView({
         dailyQuota: res.dailyQuota,
       });
 
-      // If the currently selected bookSlotTime is already booked on this doctor/date, switch to first open slot
       const currentSelected = res.slots.find((s) => s.time === bookSlotTime);
       if (currentSelected?.isBooked) {
         const firstAvailable = res.slots.find((s) => !s.isBooked);
@@ -555,7 +553,6 @@ export function SlotBookingView({
     loadDoctorSlots();
   }, [loadDoctorSlots]);
 
-  // Real-time synchronization whenever appointments change in Supabase
   useEffect(() => {
     const unsub = subscribeToClinicUpdates(() => {
       loadDoctorSlots();
@@ -563,7 +560,6 @@ export function SlotBookingView({
     return () => unsub();
   }, [loadDoctorSlots]);
 
-  // Refresh slots when an appointment is booked and token is confirmed
   useEffect(() => {
     if (confirmedToken) {
       loadDoctorSlots();
@@ -592,7 +588,6 @@ export function SlotBookingView({
   const handleBookingFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // 1. Mobile number validation using browser native validity popover
     if (phoneInputRef.current) {
       if (!bookPhone.trim()) {
         phoneInputRef.current.setCustomValidity('Please fill out this field.');
@@ -608,7 +603,6 @@ export function SlotBookingView({
       phoneInputRef.current.setCustomValidity('');
     }
 
-    // 2. Age validation using browser native validity popover
     if (ageInputRef.current) {
       if (!bookAge.trim()) {
         ageInputRef.current.setCustomValidity('Please fill out this field.');
@@ -743,7 +737,6 @@ export function SlotBookingView({
             onSubmit={handleBookingFormSubmit}
             className="bg-white rounded-2xl sm:rounded-3xl border border-[#ECEEF2] p-4 sm:p-7 lg:p-8 shadow-sm space-y-4 sm:space-y-6"
           >
-            {/* Header */}
             <div className="flex items-center justify-between pb-3.5 sm:pb-5 border-b border-[#ECEEF2]">
               <div>
                 <h2 className="text-base sm:text-xl font-bold text-[#16191E]">Book a Consultation Slot</h2>
@@ -760,7 +753,6 @@ export function SlotBookingView({
               </motion.div>
             </div>
 
-            {/* 1. Date Selection (BookMyShow Style) */}
             <div className="space-y-2.5 sm:space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-1.5 sm:gap-2">
@@ -769,7 +761,6 @@ export function SlotBookingView({
 
                 </label>
 
-                {/* Date Controls: Left/Right Chevrons & Calendar Picker Button */}
                 <div className="flex items-center space-x-1.5 self-start sm:self-auto">
                   <button
                     type="button"
@@ -819,7 +810,6 @@ export function SlotBookingView({
                 </div>
               </div>
 
-              {/* BookMyShow Horizontal Date Strip */}
               <div
                 ref={dateScrollRef}
                 className="flex items-center gap-2 sm:gap-2.5 p-2 sm:p-2.5 bg-[#F8F9FB] rounded-xl sm:rounded-2xl border border-[#ECEEF2] overflow-x-auto scroll-smooth scrollbar-none min-h-[82px]"
@@ -849,7 +839,6 @@ export function SlotBookingView({
                           : 'bg-white hover:bg-blue-50/50 text-[#16191E] border-[#ECEEF2] hover:border-blue-200 shadow-2xs'
                           }`}
                       >
-                        {/* Day of Week or Badge */}
                         <div className="flex items-center justify-center h-4 w-full">
                           {item.isToday ? (
                             <span
@@ -883,7 +872,6 @@ export function SlotBookingView({
                           )}
                         </div>
 
-                        {/* Date Number */}
                         <span
                           className={`text-lg sm:text-2xl font-black leading-none my-1 tracking-tight ${isSelected ? 'text-white' : 'text-[#16191E]'
                             }`}
@@ -891,7 +879,6 @@ export function SlotBookingView({
                           {item.dayNumber}
                         </span>
 
-                        {/* Month */}
                         <span
                           className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wide ${isSelected ? 'text-blue-100' : 'text-[#8A909D]'
                             }`}
@@ -904,7 +891,6 @@ export function SlotBookingView({
                 )}
               </div>
 
-              {/* Informative Status Strip */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] sm:text-xs text-[#8A909D] px-1 gap-1">
 
                 <span className="text-[10px] text-gray-400 font-medium hidden sm:inline">
@@ -913,7 +899,6 @@ export function SlotBookingView({
               </div>
             </div>
 
-            {/* 2. Time Slot Selection */}
             <div className="space-y-2.5 sm:space-y-3 pt-1 border-t border-[#ECEEF2]">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -927,7 +912,6 @@ export function SlotBookingView({
                   )}
                 </div>
 
-                {/* Horizontal scrollable period filter buttons */}
                 <div className="flex items-center space-x-1 bg-[#F8F9FB] p-1 rounded-xl border border-[#ECEEF2] overflow-x-auto max-w-full scrollbar-none self-start sm:self-auto">
                   {(['All', 'Morning', 'Afternoon', 'Evening'] as const)
                     .filter((period) => period === 'All' || periodCounts[period] > 0)
@@ -971,7 +955,6 @@ export function SlotBookingView({
                 </div>
               )}
 
-              {/* Grid of Slots: Fully visible without inner scrolling; Booked slots grey & disabled; Open slots active & clickable */}
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 sm:gap-2.5 p-2.5 sm:p-3.5 bg-[#F8F9FB] rounded-xl sm:rounded-2xl border border-[#ECEEF2]">
                 {filteredSlots.map((slot) => {
                   const isSelected = bookSlotTime === slot.time && !slot.isBooked;
@@ -1013,7 +996,6 @@ export function SlotBookingView({
               </div>
             </div>
 
-            {/* 3. Consulting Physician */}
             {availableDoctors.length > 0 && (
               <div className="space-y-1.5 sm:space-y-2 pt-1 border-t border-[#ECEEF2]">
                 <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-2">
@@ -1028,14 +1010,12 @@ export function SlotBookingView({
               </div>
             )}
 
-            {/* 4. Patient Information */}
             <div className="space-y-3 sm:space-y-4 pt-1 border-t border-[#ECEEF2]">
               <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-2">
                 <User className="w-4 h-4 text-[#2563EB]" />
                 <span>Patient Information</span>
               </label>
 
-              {/* Row 1: Name & Phone */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <span className="text-xs font-semibold text-[#8A909D] block mb-1">Patient Full Name *</span>
@@ -1071,9 +1051,7 @@ export function SlotBookingView({
                 </div>
               </div>
 
-              {/* Row 2: Age, Gender, and Priority - Mobile-Optimized Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 sm:gap-4">
-                {/* Age & Gender combined row on mobile */}
                 <div className="grid grid-cols-12 gap-2.5 sm:gap-3 sm:col-span-7 md:col-span-7">
                   <div className="col-span-5 sm:col-span-5 md:col-span-5">
                     <span className="text-xs font-semibold text-[#8A909D] block mb-1">
@@ -1123,7 +1101,6 @@ export function SlotBookingView({
                   </div>
                 </div>
 
-                {/* Priority */}
                 <div className="sm:col-span-5 md:col-span-5">
                   <span className="text-xs font-semibold text-[#8A909D] block mb-1">Visit Priority</span>
                   <div className="flex gap-2 sm:gap-2.5 h-11 sm:h-12">
@@ -1161,7 +1138,6 @@ export function SlotBookingView({
                 </div>
               </div>
 
-              {/* Row 3: Symptoms / Chief Complaints */}
               <div className="pt-1">
                 <span className="text-xs font-semibold text-[#8A909D] block mb-1.5">Chief Complaints / Symptoms</span>
                 <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-2 sm:mb-2.5">
@@ -1195,7 +1171,6 @@ export function SlotBookingView({
               </div>
             </div>
 
-            {/* Submit button */}
             <div className="pt-2">
               <motion.button
                 type="submit"

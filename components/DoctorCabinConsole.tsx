@@ -21,7 +21,6 @@ export function DoctorCabinConsole({ doctorId, currentPatient, onRefresh }: Doct
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // 1. Doctor calls next waiting patient
   const handleCallNext = async () => {
     setLoading(true);
     try {
@@ -35,7 +34,6 @@ export function DoctorCabinConsole({ doctorId, currentPatient, onRefresh }: Doct
         return;
       }
 
-      // Seamless fallback if backend RPC has a schema difference (e.g. started_at)
       const todayYmd = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
       
       let query = supabase
@@ -79,7 +77,6 @@ export function DoctorCabinConsole({ doctorId, currentPatient, onRefresh }: Doct
     }
   };
 
-  // 2. Doctor completes consultation
   const handleComplete = async () => {
     if (!currentPatient) return;
     setLoading(true);
@@ -98,7 +95,6 @@ export function DoctorCabinConsole({ doctorId, currentPatient, onRefresh }: Doct
         return;
       }
 
-      // Direct fallback update to mark completed in Supabase
       const { error: compErr } = await supabase
         .from('appointments')
         .update({

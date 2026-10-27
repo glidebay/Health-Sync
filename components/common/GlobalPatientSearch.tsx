@@ -17,7 +17,6 @@ interface GlobalPatientSearchProps {
   onClose?: () => void;
 }
 
-// Smart multi-attribute matcher supporting user's SQL-like search criteria
 function matchPatientCriteria(
   p: { name: string; phone?: string; age: number; gender: string; id?: string; displayId?: string },
   query: string
@@ -25,17 +24,13 @@ function matchPatientCriteria(
   const q = query.trim().toLowerCase();
   if (!q) return false;
 
-  // 1. Direct name match (case-insensitive) - e.g. "where full_name ilike '%Menon%'"
   if (p.name.toLowerCase().includes(q)) return true;
 
-  // 2. Direct phone number match - e.g. "where phone_number like '%9000000055%'"
   if (p.phone && p.phone.toLowerCase().includes(q)) return true;
 
-  // 3. ID / token / displayId match (e.g. P001, P002)
   if (p.displayId && p.displayId.toLowerCase().includes(q)) return true;
   if (p.id && p.id.toLowerCase().includes(q)) return true;
 
-  // 4. Age range match - e.g. "between 20 and 50" or "20-50" or "20 to 50"
   const rangeMatch = q.match(/(\d+)\s*(?:-|to|and)\s*(\d+)/i);
   if (rangeMatch) {
     const min = parseInt(rangeMatch[1], 10);
@@ -51,7 +46,6 @@ function matchPatientCriteria(
     return inRange;
   }
 
-  // 5. Senior / greater than match - e.g. ">= 60", "> 40", "40+", "above 40", "senior"
   const gtMatch = q.match(/(?:>=|>|above)\s*(\d+)|\b(\d+)\s*\+/i);
   if (gtMatch) {
     const min = parseInt(gtMatch[1] || gtMatch[2], 10);
@@ -68,7 +62,6 @@ function matchPatientCriteria(
     return isSenior;
   }
 
-  // 6. Pediatric / young match - e.g. "< 18", "<= 18", "under 18", "pediatric", "child"
   const ltMatch = q.match(/(?:<=|<|under)\s*(\d+)/i);
   if (ltMatch) {
     const max = parseInt(ltMatch[1], 10);
@@ -85,7 +78,6 @@ function matchPatientCriteria(
     return isPediatric;
   }
 
-  // 7. Standalone Gender queries - e.g. "Female" or "Male"
   if (q === 'female' || q === 'females' || q === 'women' || q === 'woman') {
     return p.gender.toLowerCase() === 'female';
   }
@@ -93,7 +85,6 @@ function matchPatientCriteria(
     return p.gender.toLowerCase() === 'male';
   }
 
-  // 8. Gender with exact age - e.g. "female 45" or "male 30"
   const genderAgeMatch = q.match(/(female|male)\s*(\d+)/i);
   if (genderAgeMatch) {
     const g = genderAgeMatch[1].toLowerCase();
@@ -101,7 +92,6 @@ function matchPatientCriteria(
     return p.gender.toLowerCase() === g && p.age === age;
   }
 
-  // 9. Exact Age query (if numeric and within human age range) - e.g. "45"
   if (/^\d{1,3}$/.test(q)) {
     const exactAge = parseInt(q, 10);
     if (exactAge <= 120 && p.age === exactAge) return true;
@@ -132,7 +122,6 @@ export function GlobalPatientSearch({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Debounced Supabase DB Patient Search
   useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed || trimmed.length < 2) {
@@ -153,18 +142,14 @@ export function GlobalPatientSearch({
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Merge Queue Patients + Supabase DB Patients
   const searchResults: Patient[] = useMemo(() => {
     let combined: Patient[] = [];
 
-    // If query is empty, show today's active queue patients so user can immediately consult
     if (!query.trim()) {
       combined = [...queue];
     } else {
-      // 1. Matches from active Queue
       const queueMatches = queue.filter((p) => matchPatientCriteria(p, query));
 
-      // 2. Matches from DB patients that are not already in active queue
       const queuePhoneSet = new Set(queue.map((p) => p.phone).filter(Boolean));
       const queueIdSet = new Set(queue.map((p) => p.id));
 
@@ -213,13 +198,11 @@ export function GlobalPatientSearch({
       combined = [...queueMatches, ...externalMatches];
     }
 
-    // Always sort completed patients to the end of the list
     const notCompleted = combined.filter((p) => p.status !== 'Completed');
     const completed = combined.filter((p) => p.status === 'Completed');
     return [...notCompleted, ...completed];
   }, [queue, dbPatients, query]);
 
-  // Outside click listener
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -233,7 +216,6 @@ export function GlobalPatientSearch({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [controlledExpanded]);
 
-  // Scroll highlighted item into view
   useEffect(() => {
     if (isOpen && highlightedIndex >= 0 && listRef.current) {
       const items = listRef.current.children;
@@ -319,7 +301,6 @@ export function GlobalPatientSearch({
     { label: 'Pediatric (<18)', query: '<18' },
   ];
 
-  // Collapsed Mode (pill button in header/screen)
   if (!isSearchExpanded) {
     return (
       <div
@@ -341,10 +322,8 @@ export function GlobalPatientSearch({
     );
   }
 
-  // Expanded Mode (Fully fills the top bar with close button and clean dropdown)
   return (
     <div ref={containerRef} className={`relative w-full flex items-center gap-2 sm:gap-3 ${className}`}>
-      {/* Search Input Box filling width */}
       <div className="relative flex-1 flex items-center">
         <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[#2563EB]">
           <Search className="w-4 h-4 stroke-[2.2]" />
@@ -378,7 +357,6 @@ export function GlobalPatientSearch({
         )}
       </div>
 
-      {/* Clean Close Button */}
       <button
         type="button"
         onClick={handleClose}
@@ -389,7 +367,6 @@ export function GlobalPatientSearch({
         <span className="hidden sm:inline">Close</span>
       </button>
 
-      {/* Dropdown Results Menu: Clean style identical to MedicineSearchCombobox */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -399,7 +376,6 @@ export function GlobalPatientSearch({
             transition={{ duration: 0.15 }}
             className="absolute left-0 right-0 top-full mt-2 z-50 bg-white border border-[#ECEEF2] rounded-2xl shadow-2xl overflow-hidden"
           >
-            {/* Clean Header Bar */}
             <div className="px-4 py-2.5 bg-[#F8F9FB] border-b border-[#ECEEF2] flex items-center justify-between text-xs text-[#8A909D]">
               <span className="font-medium flex items-center gap-1.5">
                 {query.trim() ? (
@@ -424,7 +400,6 @@ export function GlobalPatientSearch({
               </span>
             </div>
 
-            {/* Clean Dropdown List: Name, Time, and Consult only; Grey & Blue only */}
             <div ref={listRef} className="max-h-80 sm:max-h-96 overflow-y-auto divide-y divide-[#ECEEF2] p-1.5">
               {searchResults.length === 0 ? (
                 <div className="px-4 py-8 text-center text-xs">
@@ -470,7 +445,6 @@ export function GlobalPatientSearch({
                         </p>
                       </div>
 
-                      {/* Clean Consult Action Button */}
                       <button
                         type="button"
                         onClick={(e) => {

@@ -53,7 +53,6 @@ const CATEGORIES: CategoryConfig[] = [
 export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) {
   const { config, updateAllConfigs, resetConfigToDefaults } = useClinic();
 
-  // Track modified fields
   const [edits, setEdits] = useState<Partial<AppConfig>>({});
   const [activeCategory, setActiveCategory] = useState<string>(CATEGORIES[0].id);
   const [searchFilter, setSearchFilter] = useState('');
@@ -61,10 +60,8 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
   const [isSaved, setIsSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Derived effective configuration
   const formData = useMemo(() => ({ ...config, ...edits }), [config, edits]);
 
-  // Compute changed keys
   const changedKeys = useMemo(() => {
     return (Object.keys(edits) as (keyof AppConfig)[]).filter(
       (k) => edits[k] !== undefined && edits[k] !== config[k]
@@ -73,12 +70,10 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
 
   const hasUnsavedChanges = changedKeys.length > 0;
 
-  // Active controls count (e.g. booleans currently enabled)
   const activeControlsCount = useMemo(() => {
     return Object.values(formData).filter((v) => v === true).length;
   }, [formData]);
 
-  // Filtered parameters by active category or search query
   const filteredParameters = useMemo(() => {
     return SETTINGS_METADATA.filter((meta) => {
       const matchesSearch =
@@ -145,7 +140,6 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
       transition={{ duration: 0.25 }}
       className={`space-y-6 ${isMobile ? 'pb-24' : 'pb-6'}`}
     >
-      {/* 1. TOP SUMMARY METRIC CARDS (Exact Dashboard Style) */}
       <motion.section
         variants={staggerContainer}
         initial="hidden"
@@ -228,7 +222,6 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
         </motion.div>
       </motion.section>
 
-      {/* 2. SECTION HEADER & ACTION BUTTONS (Exact Dashboard Pattern) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
         <div className="min-w-0 flex-1">
           <h2 className="text-base sm:text-lg font-bold text-[#16191E] tracking-tight truncate">
@@ -285,9 +278,7 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
         </div>
       </div>
 
-      {/* 3. SEARCH & CATEGORY PILLS BAR */}
       <div className="space-y-3">
-        {/* Search Input */}
         <div className="relative w-full sm:max-w-xs">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[#2563EB]">
             <Search className="w-4 h-4 stroke-[2]" />
@@ -301,7 +292,6 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
           />
         </div>
 
-        {/* Category Filter Pills (When not searching) */}
         {!searchFilter && (
           <div className="flex items-center space-x-2 overflow-x-auto pb-1.5 scroll-smooth">
             {CATEGORIES.map((cat) => {
@@ -326,7 +316,6 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
         )}
       </div>
 
-      {/* 4. PARAMETERS CARDS  */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
         {filteredParameters.length === 0 ? (
           <div className="col-span-full bg-white rounded-2xl p-12 text-center border border-[#ECEEF2] shadow-sm">
@@ -350,7 +339,6 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                   }`}
               >
                 <div>
-                  {/* Title & Badge */}
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="space-y-1">
                       <div className="flex items-center space-x-2 flex-wrap gap-y-1">
@@ -377,9 +365,7 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                     </span>
                   </div>
 
-                  {/* Widget Control */}
                   <div className="mt-4 mb-2">
-                    {/* 1. Toggle Switch */}
                     {meta.uiWidget === 'toggle' && (
                       <div className="flex items-center justify-between p-3 rounded-xl bg-[#F8F9FB] border border-[#ECEEF2]">
                         <span className="text-xs font-semibold text-[#16191E]">
@@ -399,7 +385,6 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                       </div>
                     )}
 
-                    {/* 2. Number Stepper */}
                     {meta.uiWidget === 'number' && (
                       <div className="flex items-center space-x-3">
                         <div className="flex items-center border border-[#ECEEF2] rounded-xl overflow-hidden bg-white shadow-2xs">
@@ -442,7 +427,6 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                       </div>
                     )}
 
-                    {/* 3. Dropdown Select */}
                     {meta.uiWidget === 'select' && (
                       <select
                         value={String(val)}
@@ -461,7 +445,6 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                       </select>
                     )}
 
-                    {/* 4. Text Input & Phone */}
                     {(meta.uiWidget === 'text' || meta.uiWidget === 'phone') && (
                       <input
                         type={meta.uiWidget === 'phone' ? 'tel' : 'text'}
@@ -472,7 +455,6 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                       />
                     )}
 
-                    {/* 5. Textarea */}
                     {meta.uiWidget === 'textarea' && (
                       <div className="space-y-1.5">
                         <textarea
@@ -485,7 +467,6 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                       </div>
                     )}
 
-                    {/* 6. Clean File Upload for Clinic Logo */}
                     {meta.uiWidget === 'file' && (
                       <div className="space-y-3">
                         <input
@@ -558,7 +539,6 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
         )}
       </div>
 
-      {/* 5. LOGOUT SECTION AT BOTTOM OF SETTINGS */}
       {onLogout && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}

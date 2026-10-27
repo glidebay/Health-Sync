@@ -63,7 +63,6 @@ export function chartTheme(surface: 'dark' | 'light' = 'light', accent = '#2563E
     };
   }
 
-  // Health-Sync default light theme
   return {
     bg: '#FFFFFF',
     card: '#FFFFFF',
@@ -128,7 +127,6 @@ export function linePath(pts: Point[], curve: ChartCurve = 'smooth'): string {
     return pts.map(([x, y], idx) => `${idx === 0 ? 'M' : 'L'}${x},${y}`).join('');
   }
 
-  // Smooth Catmull-Rom spline converted to cubic Béziers
   let d = `M${pts[0][0]},${pts[0][1]}`;
   for (let i = 0; i < pts.length - 1; i++) {
     const p0 = pts[i === 0 ? 0 : i - 1];
@@ -216,7 +214,6 @@ export function useChartReveal(once = true, animated = true) {
   return { ref, shown, still: !animated };
 }
 
-// Card Wrapper Matching Health-Sync Component Style
 export function ChartCard({
   theme,
   title,
@@ -297,7 +294,6 @@ export function ChartCard({
   );
 }
 
-// Interactive Crosshair Tooltip
 export function ChartTooltip({
   open,
   x,
@@ -353,7 +349,6 @@ export function ChartTooltip({
   );
 }
 
-// Toggleable Legend Component
 export function ChartLegend({
   series,
   theme,
@@ -390,7 +385,6 @@ export function ChartLegend({
   );
 }
 
-// Pattern Fill Utility
 export function ChartPattern({
   id,
   color,

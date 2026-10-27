@@ -160,7 +160,6 @@ export function RescheduleModal({
           className="bg-white rounded-2xl border border-[#ECEEF2] shadow-xl max-w-lg w-full overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Clean Header */}
           <div className="px-5 py-4 border-b border-[#ECEEF2] flex items-center justify-between">
             <div>
               <h3 className="text-base font-bold text-[#16191E]">Reschedule Appointment</h3>
@@ -177,9 +176,7 @@ export function RescheduleModal({
             </button>
           </div>
 
-          {/* Clean Body */}
           <div className="p-5 space-y-4">
-            {/* Error Banner */}
             {modalError && (
               <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3 rounded-xl flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
@@ -187,7 +184,6 @@ export function RescheduleModal({
               </div>
             )}
 
-            {/* Reason Selector Tabs */}
             <div>
               <label className="text-xs font-semibold text-[#8A909D] block mb-1.5">
                 Reschedule Reason
@@ -218,7 +214,6 @@ export function RescheduleModal({
               </div>
             </div>
 
-            {/* Delay Presets for Patient Late & Doctor Delay */}
             {(strategy === 'patient_late' || strategy === 'doctor_delay') && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -246,7 +241,6 @@ export function RescheduleModal({
               </div>
             )}
 
-            {/* If Patient is Late: Fast-track ready patient toggle */}
             {strategy === 'patient_late' && otherWaitingPatients.length > 0 && (
               <div className="bg-[#F8F9FB] rounded-xl p-3 border border-[#ECEEF2] space-y-2">
                 <label className="flex items-center space-x-2 cursor-pointer">
@@ -280,7 +274,6 @@ export function RescheduleModal({
               </div>
             )}
 
-            {/* If Doctor Delay: Cascade toggle */}
             {strategy === 'doctor_delay' && (
               <div className="bg-[#F8F9FB] rounded-xl p-3 border border-[#ECEEF2]">
                 <label className="flex items-center space-x-2 cursor-pointer">
@@ -297,14 +290,12 @@ export function RescheduleModal({
               </div>
             )}
 
-            {/* If Emergency: Clean notice */}
             {strategy === 'emergency_shift' && (
               <div className="bg-red-50/60 rounded-xl p-3.5 border border-red-200 text-xs text-red-800">
                 Marks <strong>{patient.name}</strong> as Urgent Priority and moves them to the front of the queue to consult doctor next.
               </div>
             )}
 
-            {/* If Custom Slot */}
             {strategy === 'custom_slot' && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -387,7 +378,6 @@ export function RescheduleModal({
             )}
           </div>
 
-          {/* Clean Footer */}
           <div className="px-5 py-3.5 bg-gray-50/70 border-t border-[#ECEEF2] flex items-center justify-end space-x-2">
             <button
               type="button"

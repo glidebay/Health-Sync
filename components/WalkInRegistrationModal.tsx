@@ -24,7 +24,6 @@ export function WalkInRegistrationModal({ doctorId, onClose, onSuccess }: WalkIn
     const nowIso = new Date().toISOString();
     const cleanPhone = phone.trim();
 
-    // Call backend RPC
     const { data, error } = await supabase.rpc("register_walk_in_patient", {
       p_full_name: name.trim(),
       p_phone_number: cleanPhone,

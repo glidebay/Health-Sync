@@ -1,26 +1,22 @@
 export interface AppConfig {
-  // 1. Clinic Identity & Branding
   clinic_name: string;
   clinic_phone: string;
   clinic_address: string;
   logo_url: string;
   rx_footer_text: string;
 
-  // 2. Doctor & Quota Controls
   daily_quota: number;
   slot_duration_mins: number;
   allow_quota_override: boolean;
   require_doctor_pin: boolean;
   pin_lock_timeout_mins: string;
 
-  // 3. Queue & Patient Logistics
   queue_sort_order: 'Scheduled Time' | 'Arrival Order' | 'VIP First';
   late_grace_period_mins: number;
   auto_move_unattended: boolean;
   max_advance_booking_days: number;
   use_standard_date_picker: boolean;
 
-  // 4. WhatsApp & Communication Automation
   enable_whatsapp_autoresponder: boolean;
   whatsapp_trigger_keyword: string;
   whatsapp_welcome_template: string;
@@ -28,13 +24,11 @@ export interface AppConfig {
   enable_whatsapp_bot: boolean;
   reminder_lead_time_hours: number;
 
-  // 5. Pharmacy & Inventory Safeguards
   restrict_out_of_stock_rx: boolean;
   auto_deduct_inventory: boolean;
   default_reorder_threshold: number;
   currency_symbol: string;
 
-  // 6. System, Security & Data Privacy (Provisions)
   session_timeout_mins: number;
   enable_pwa_offline: boolean;
   audit_log_level: 'Minimal' | 'Standard' | 'Detailed';
@@ -42,28 +36,24 @@ export interface AppConfig {
 }
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
-  // 1. Clinic Identity & Branding
   clinic_name: 'HealthSync Clinic',
   clinic_phone: '+91 98765 43210',
   clinic_address: '123 Main St, Kochi, Kerala',
   logo_url: '/assets/logo.png',
   rx_footer_text: 'Get well soon! Contact clinic for emergencies.',
 
-  // 2. Doctor & Quota Controls
   daily_quota: 30,
   slot_duration_mins: 15,
   allow_quota_override: true,
   require_doctor_pin: true,
   pin_lock_timeout_mins: '15',
 
-  // 3. Queue & Patient Logistics
   queue_sort_order: 'Scheduled Time',
   late_grace_period_mins: 15,
   auto_move_unattended: false,
   max_advance_booking_days: 7,
   use_standard_date_picker: false,
 
-  // 4. WhatsApp & Communication Automation
   enable_whatsapp_autoresponder: true,
   whatsapp_trigger_keyword: 'Hello',
   whatsapp_welcome_template: 'Hello! Book your appointment here: {booking_link}',
@@ -71,13 +61,11 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   enable_whatsapp_bot: false,
   reminder_lead_time_hours: 2,
 
-  // 5. Pharmacy & Inventory Safeguards
   restrict_out_of_stock_rx: true,
   auto_deduct_inventory: true,
   default_reorder_threshold: 10,
   currency_symbol: '₹ (INR)',
 
-  // 6. System, Security & Data Privacy (Provisions)
   session_timeout_mins: 30,
   enable_pwa_offline: true,
   audit_log_level: 'Standard',
@@ -100,7 +88,6 @@ export interface ParameterMetadata {
 }
 
 export const SETTINGS_METADATA: ParameterMetadata[] = [
-  // 1. Clinic Identity & Branding
   {
     key: 'clinic_name',
     name: 'Clinic Name',
@@ -152,7 +139,6 @@ export const SETTINGS_METADATA: ParameterMetadata[] = [
     role: 'Admin',
   },
 
-  // 2. Doctor & Quota Controls
   {
     key: 'daily_quota',
     name: 'Default Daily Consultation Quota',
@@ -208,7 +194,6 @@ export const SETTINGS_METADATA: ParameterMetadata[] = [
     role: 'Admin / Doctor',
   },
 
-  // 3. Queue & Patient Logistics
   {
     key: 'queue_sort_order',
     name: 'Live Queue Sorting Rule',
@@ -264,7 +249,6 @@ export const SETTINGS_METADATA: ParameterMetadata[] = [
     role: 'Admin',
   },
 
-  // 4. WhatsApp & Communication Automation
   {
     key: 'enable_whatsapp_autoresponder',
     name: 'Enable WhatsApp Auto-Responder',
@@ -328,7 +312,6 @@ export const SETTINGS_METADATA: ParameterMetadata[] = [
     role: 'Admin',
   },
 
-  // 5. Pharmacy & Inventory Safeguards
   {
     key: 'restrict_out_of_stock_rx',
     name: 'Restrict Out-of-Stock Prescribing',
@@ -373,7 +356,6 @@ export const SETTINGS_METADATA: ParameterMetadata[] = [
     role: 'Admin',
   },
 
-  // 6. System, Security & Data Privacy (Provisions on UI)
   {
     key: 'session_timeout_mins',
     name: 'Session Timeout Duration',

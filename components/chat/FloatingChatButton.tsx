@@ -21,12 +21,10 @@ export function FloatingChatButton({
       className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-40 select-none flex flex-col items-end pointer-events-auto"
     >
       <div className="relative group">
-        {/* Animated ambient pulse glow ring around circular component */}
         {!isOpen && (
           <span className="absolute -inset-1.5 rounded-full bg-gradient-to-r from-blue-600/35 via-indigo-500/25 to-emerald-500/35 blur-md animate-pulse opacity-75 group-hover:opacity-100 transition duration-500 pointer-events-none" />
         )}
 
-        {/* Circular background component */}
         <div className="relative rounded-full p-[2px] bg-gradient-to-br from-blue-500 via-indigo-600 to-emerald-500 shadow-xl shadow-blue-600/25">
           <motion.button
             type="button"
@@ -66,7 +64,6 @@ export function FloatingChatButton({
           </motion.button>
         </div>
 
-        {/* Notification badge component with unread count */}
         {!isOpen && unreadCount > 0 && (
           <motion.div
             initial={{ scale: 0 }}
@@ -77,7 +74,6 @@ export function FloatingChatButton({
           </motion.div>
         )}
 
-        {/* Hover pill prompt */}
         {!isOpen && (
           <div className="hidden sm:block absolute right-full top-1/2 -translate-y-1/2 mr-3 px-3 py-1.5 rounded-xl bg-white text-[#16191E] text-xs font-semibold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none shadow-sm border border-slate-200/80">
             <span className="flex items-center gap-1.5">

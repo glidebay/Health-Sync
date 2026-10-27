@@ -56,7 +56,6 @@ import {
 } from '@/types';
 import { DbDoctor } from '@/types/database';
 
-// Reusable Components & Modals
 import EcgLoadingScreen from '@/components/loading/EcgLoadingScreen';
 import { SideMenu, NavItemConfig } from '@/components/layout/SideMenu';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -70,7 +69,6 @@ import { FloatingChatButton } from '@/components/chat/FloatingChatButton';
 import { DoctorChatModal } from '@/components/chat/DoctorChatModal';
 import { validateMobileNumber } from '@/lib/phoneValidation';
 
-// Screen Views
 import { GatewayScreen } from '@/components/views/GatewayScreen';
 import { SlotBookingView } from '@/components/views/SlotBookingView';
 import { DashboardView } from '@/components/views/DashboardView';
@@ -103,7 +101,6 @@ export function convertSlotToFutureIso(timeStr: string, dateStr?: string, fallba
   const target = dateStr ? new Date(`${dateStr}T00:00:00`) : new Date();
   target.setHours(hour, minute, 0, 0);
 
-  // Ensure p_new_time > now() to satisfy database constraint
   if (target.getTime() <= Date.now()) {
     if (!dateStr) {
       target.setDate(target.getDate() + 1);
@@ -132,8 +129,6 @@ export const sortQueueWithCompletedAtEnd = (patients: Patient[]): Patient[] => {
     (p) => p.status === 'Completed' || p.status === 'Cancelled'
   );
 
-  // First-In First-Out (FIFO): ordered by patient registration/patient_number ascending
-  // Urgent triage patients stay ahead if flagged Urgent
   waiting.sort((a, b) => {
     if (a.priority === 'Urgent' && b.priority !== 'Urgent') return -1;
     if (b.priority === 'Urgent' && a.priority !== 'Urgent') return 1;
@@ -157,7 +152,6 @@ function DashboardContent() {
   const [activeSection, setActiveSection] = useState<NavSection>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // Toast Notifications for Reschedule & Conflict Alerts
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const showToast = (type: ToastType, title: string, message?: string, duration: number = 4000) => {
@@ -172,7 +166,6 @@ function DashboardContent() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Slot Booking Form State
   const [availableDoctors, setAvailableDoctors] = useState<DbDoctor[]>([]);
   const [bookName, setBookName] = useState('');
   const [bookPhone, setBookPhone] = useState('');
@@ -192,13 +185,11 @@ function DashboardContent() {
     setBookDate(ymd);
   }, []);
 
-  // Auto-close sidebar on mobile
   useEffect(() => {
     if (isMobile) setIsSidebarOpen(false);
     else setIsSidebarOpen(true);
   }, [isMobile]);
 
-  // Doctor Auth State
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const [intendedSection, setIntendedSection] = useState<NavSection | null>(null);
@@ -206,7 +197,6 @@ function DashboardContent() {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
 
-  // Check saved session on mount
   useEffect(() => {
     const clinicSession = getClinicSessionLocal();
     const docSession = getDoctorSessionLocal();
@@ -235,7 +225,6 @@ function DashboardContent() {
     }
   }, []);
 
-  // Keyboard shortcut (Ctrl+B) to toggle sidebar
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
@@ -247,7 +236,6 @@ function DashboardContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Clinic Data
   const [queue, setQueue] = useState<Patient[]>(INITIAL_QUEUE);
   const [inventory, setInventory] = useState<InventoryItem[]>(INITIAL_INVENTORY);
   const [activePatient, setActivePatient] = useState<Patient | null>(null);
@@ -277,7 +265,6 @@ function DashboardContent() {
     return doctorProfile;
   }, [isLoggedIn, config.require_doctor_pin, availableDoctors, doctorProfile]);
 
-  // Load initial data from Supabase DB and subscribe to live changes
   useEffect(() => {
     let isMounted = true;
 
@@ -337,34 +324,28 @@ function DashboardContent() {
     };
   }, []);
 
-  // Search filter
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Clean Custom Notification Modal state
   const [notification, setNotification] = useState<NotificationState | null>(null);
 
   const showNotification = (notif: Omit<NotificationState, 'isOpen'>) => {
     setNotification({ ...notif, isOpen: true });
   };
 
-  // Walk-in modal state
   const [showWalkinModal, setShowWalkinModal] = useState(false);
   const [walkinName, setWalkinName] = useState('');
   const [walkinAge, setWalkinAge] = useState('');
   const [walkinPhone, setWalkinPhone] = useState('');
   const [walkinGender, setWalkinGender] = useState<'Male' | 'Female' | 'Other'>('Male');
 
-  // Procurement form state
   const [newGeneric, setNewGeneric] = useState('');
   const [newBrand, setNewBrand] = useState('');
   const [newQty, setNewQty] = useState('');
   const [stockUpdates, setStockUpdates] = useState<Record<string, string>>({});
 
-  // Prescription builder form state
   const [selectedMedId, setSelectedMedId] = useState('');
   const [rxQty, setRxQty] = useState('');
 
-  // Print modal state
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printRecord, setPrintRecord] = useState<{
     date: string;
@@ -375,7 +356,6 @@ function DashboardContent() {
     items: PrescriptionItem[];
   } | null>(null);
 
-  // Doctor Chat & Dynamic Slot Booking modal state
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
 
   const navItems: NavItemConfig[] = [
@@ -404,7 +384,6 @@ function DashboardContent() {
       return;
     }
 
-
     if (portalMode === 'gateway') {
       const clinicRes = await verifyClinicPin(clean);
       if (clinicRes.success) {
@@ -414,7 +393,6 @@ function DashboardContent() {
           expiresAt: Date.now() + 8 * 60 * 60 * 1000,
         });
 
-        // Doctor session remains strictly locked
         clearDoctorSessionLocal();
         setIsLoggedIn(false);
         setDoctorProfile({
@@ -434,7 +412,6 @@ function DashboardContent() {
       }
       return;
     }
-
 
     const docRes = await verifyDoctorPin(clean);
     if (docRes.success && docRes.doctor) {
@@ -483,7 +460,6 @@ function DashboardContent() {
     try {
       logoutDoctor();
     } catch { }
-    // If currently on a doctor-restricted section, lock and return to dashboard
     if (['queue', 'consult', 'inventory', 'analytics', 'settings'].includes(activeSection)) {
       setActiveSection('dashboard');
     }
@@ -582,7 +558,6 @@ function DashboardContent() {
           return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
         })();
 
-      // Call unified backend Supabase booking
       const bookingRes = await bookAppointmentSlotDb({
         name: bookName.trim(),
         phone: bookPhone.trim(),
@@ -697,7 +672,6 @@ function DashboardContent() {
           ? `Slot ${result.freed_slot} has been freed immediately.`
           : 'Time slot has been freed for new bookings.'
       );
-      // Fetch fresh  from database to ensure 100% real-time sync across reception & live queue
       const dbQueue = await fetchQueueFromDb();
       if (dbQueue) {
         setQueue(sortQueueWithCompletedAtEnd(dbQueue));
@@ -741,13 +715,11 @@ function DashboardContent() {
 
     const currentPatient = queue.find((p) => p.id === patientId);
 
-    // Compute target ISO if custom_slot / new slot
     let targetIso: string | null = null;
     if (strategy === 'custom_slot' || (strategy as string) === 'new_slot') {
       targetIso = convertSlotToFutureIso(newSlotTime, newDate, delayMinutes);
     }
 
-    // Call master backend RPC reschedule_appointment_advanced
     const result = await rescheduleAppointmentAdvancedDb({
       appointmentId: patientId,
       mode: strategy,
@@ -1449,13 +1421,11 @@ function DashboardContent() {
         buttonText={portalMode === 'gateway' ? 'Unlock Dashboard' : 'Verify & Access'}
       />
 
-      {/* Clean Custom Notification Popup */}
       <NotificationModal
         notification={notification}
         onClose={() => setNotification(null)}
       />
 
-      {/* Floating Doctor Chat Component & Dynamic Slot Timetable Desk */}
       {!isLoading && portalMode === 'dashboard' && (
         <>
           <FloatingChatButton
@@ -1479,7 +1449,6 @@ function DashboardContent() {
         </>
       )}
 
-      {/* Real-time Toast Notifications */}
       <ToastNotification toasts={toasts} onDismiss={dismissToast} />
     </>
   );

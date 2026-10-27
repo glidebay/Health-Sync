@@ -18,7 +18,6 @@ interface AnalyticsViewProps {
 }
 
 export function AnalyticsView({ totalPatientsCount }: AnalyticsViewProps) {
-  // Monthly Patient Volume (Walk-in vs WhatsApp Bookings)
   const patientVolumeData = [
     { month: 'Jan', walkins: 420, whatsapp: 180 },
     { month: 'Feb', walkins: 460, whatsapp: 230 },
@@ -34,7 +33,6 @@ export function AnalyticsView({ totalPatientsCount }: AnalyticsViewProps) {
     { month: 'Dec', walkins: 780, whatsapp: 790 },
   ];
 
-  // Top Selling / Dispensed Medicines Leaderboard
   const topSellingMedicines: RankBarItem[] = [
     {
       label: 'Paracetamol 650mg',
@@ -91,7 +89,6 @@ export function AnalyticsView({ totalPatientsCount }: AnalyticsViewProps) {
       transition={{ duration: 0.25 }}
       className="space-y-5 sm:space-y-6"
     >
-      {/* 4-Stat KPI Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-5">
         <motion.div
           whileHover={{ y: -3 }}
@@ -185,7 +182,6 @@ export function AnalyticsView({ totalPatientsCount }: AnalyticsViewProps) {
         </motion.div>
       </div>
 
-      {/* Main Interactive Line Chart */}
       <div className="w-full">
         <ChartLine
           title="Patient Footfall & Booking Channel Trends"
@@ -209,9 +205,7 @@ export function AnalyticsView({ totalPatientsCount }: AnalyticsViewProps) {
         />
       </div>
 
-      {/* 2-Column Grid: Top Selling Medicines Leaderboard + Case Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        {/* Top Selling Medicines (RankBarChart) */}
         <motion.div
           whileHover={{ y: -2 }}
           className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
@@ -239,7 +233,6 @@ export function AnalyticsView({ totalPatientsCount }: AnalyticsViewProps) {
           </div>
         </motion.div>
 
-        {/* Case Breakdown Donut Chart */}
         <motion.div
           whileHover={{ y: -2 }}
           className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
