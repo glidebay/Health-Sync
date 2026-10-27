@@ -58,7 +58,6 @@ import {
 } from '@/types';
 import { DbDoctor } from '@/types/database';
 
-// Reusable Components & Modals
 import EcgLoadingScreen from '@/components/loading/EcgLoadingScreen';
 import { SideMenu, NavItemConfig } from '@/components/layout/SideMenu';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -73,7 +72,6 @@ import { DoctorChatModal } from '@/components/chat/DoctorChatModal';
 import { getReadThreadStates, countUnreadPersons } from '@/lib/chatStorage';
 import { validateMobileNumber } from '@/lib/phoneValidation';
 
-// Screen Views
 import { GatewayScreen } from '@/components/views/GatewayScreen';
 import { SlotBookingView } from '@/components/views/SlotBookingView';
 import { DashboardView } from '@/components/views/DashboardView';
@@ -393,7 +391,7 @@ function DashboardContent() {
         const readStates = getReadThreadStates();
         const unreadPersons = countUnreadPersons(threads, readStates);
         setChatUnreadCount(unreadPersons);
-      } catch {}
+      } catch { }
     };
 
     updateUnread();
@@ -829,9 +827,9 @@ function DashboardContent() {
         'success',
         toastTitle,
         result.message ||
-          (result.new_slot
-            ? `${result.patient_name || currentPatient?.name || 'Patient'} moved to ${result.new_slot}`
-            : 'Appointment moved successfully!')
+        (result.new_slot
+          ? `${result.patient_name || currentPatient?.name || 'Patient'} moved to ${result.new_slot}`
+          : 'Appointment moved successfully!')
       );
 
       const dbQueue = await fetchQueueFromDb();
