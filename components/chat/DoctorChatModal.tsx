@@ -34,6 +34,14 @@ export function DoctorChatModal({
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'booked'>('all');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
+  }, []);
 
   // Load patient threads
   const loadThreads = useCallback(async (silent: boolean = false) => {
@@ -78,8 +86,31 @@ export function DoctorChatModal({
   }, [threads, selectedThreadId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeThread?.messages?.length, activeThread?.id]);
+    if (!isOpen || !activeThread) return;
+
+    // Immediately snap to bottom so user sees the latest message rather than the top
+    scrollToBottom('auto');
+
+    // Execute in the next rendering frame to ensure DOM layout has calculated
+    const rId = requestAnimationFrame(() => {
+      scrollToBottom('auto');
+    });
+
+    // Handle Framer Motion entrance animation delays
+    const t1 = setTimeout(() => {
+      scrollToBottom('auto');
+    }, 60);
+
+    const t2 = setTimeout(() => {
+      scrollToBottom('smooth');
+    }, 200);
+
+    return () => {
+      cancelAnimationFrame(rId);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [isOpen, activeThread?.id, activeThread?.messages?.length, scrollToBottom]);
 
   // Filtered threads
   const filteredThreads = useMemo(() => {
@@ -308,7 +339,10 @@ export function DoctorChatModal({
                   </div>
 
                   {/* Messages Stream (Takes up the whole pane) */}
-                  <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
+                  <div
+                    ref={messagesContainerRef}
+                    className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 scroll-smooth"
+                  >
                     {activeThread.messages.map((msg) => {
                       const isDoctor = msg.sender === 'doctor';
 
