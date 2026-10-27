@@ -120,10 +120,12 @@ const INITIAL_INVENTORY: InventoryItem[] = [];
 
 export const sortQueueWithCompletedAtEnd = (patients: Patient[]): Patient[] => {
   const parseFifoOrder = (p: Patient): number => {
-    if (typeof p.patientNumber === 'number') return p.patientNumber;
-    const raw = String(p.displayId || p.tokenNumber || '');
+    if (typeof p.queueTokenNo === 'number') return p.queueTokenNo;
+    const raw = String(p.tokenNumber || p.displayId || '');
     const m = raw.match(/\d+/);
-    return m ? parseInt(m[0], 10) : 999999;
+    if (m) return parseInt(m[0], 10);
+    if (typeof p.patientNumber === 'number') return p.patientNumber;
+    return 999999;
   };
 
   const inProgress = patients.filter((p) => p.status === 'In Progress');
@@ -132,7 +134,7 @@ export const sortQueueWithCompletedAtEnd = (patients: Patient[]): Patient[] => {
     (p) => p.status === 'Completed' || p.status === 'Cancelled'
   );
 
-  // First-In First-Out (FIFO): ordered by patient registration/patient_number ascending
+  // First-In First-Out (FIFO): ordered by daily queue token number (Token 1, Token 2, ...) ascending
   // Urgent triage patients stay ahead if flagged Urgent
   waiting.sort((a, b) => {
     if (a.priority === 'Urgent' && b.priority !== 'Urgent') return -1;

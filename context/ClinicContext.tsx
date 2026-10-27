@@ -297,9 +297,17 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
           if (isDoneA !== isDoneB) return isDoneA ? 1 : -1;
           if (a.status === 'In Progress' && b.status !== 'In Progress') return -1;
           if (b.status === 'In Progress' && a.status !== 'In Progress') return 1;
-          const numA = (typeof a.patientNumber === 'number' ? a.patientNumber : parseInt(String(a.displayId || a.tokenNumber || '').replace(/\D/g, ''), 10)) || 999999;
-          const numB = (typeof b.patientNumber === 'number' ? b.patientNumber : parseInt(String(b.displayId || b.tokenNumber || '').replace(/\D/g, ''), 10)) || 999999;
-          return numA - numB;
+
+          const getFifoNum = (p: Patient): number => {
+            if (typeof p.queueTokenNo === 'number') return p.queueTokenNo;
+            const raw = String(p.tokenNumber || p.displayId || '');
+            const m = raw.match(/\d+/);
+            if (m) return parseInt(m[0], 10);
+            if (typeof p.patientNumber === 'number') return p.patientNumber;
+            return 999999;
+          };
+
+          return getFifoNum(a) - getFifoNum(b);
         });
       });
     }
