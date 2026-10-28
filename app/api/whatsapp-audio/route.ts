@@ -29,7 +29,6 @@ export async function GET(req: NextRequest) {
       process.env.WHATSAPP_TOKEN ||
       process.env.META_ACCESS_TOKEN;
 
-    // 1. If WhatsApp permanent access token is configured, try direct Meta Cloud API download
     if (mediaId && whatsappToken) {
       try {
         const metaRes = await fetch(`https://graph.facebook.com/v19.0/${mediaId}`, {
