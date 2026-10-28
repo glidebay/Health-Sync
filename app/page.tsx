@@ -1451,6 +1451,7 @@ function DashboardContent() {
             walkinGender={walkinGender}
             setWalkinGender={setWalkinGender}
             onSubmit={handleRegisterWalkin}
+            isSubmitting={isWalkinSubmitting}
           />
 
           <PrescriptionPrintModal

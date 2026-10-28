@@ -21,6 +21,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { useClinic } from '@/context/ClinicContext';
+import EcgActionLoader from '@/components/loading/EcgActionLoader';
 import {
   AppConfig,
   DEFAULT_APP_CONFIG,
@@ -267,7 +268,9 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
               }`}
           >
             {isSaving ? (
-              <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin flex-shrink-0" />
+              <svg className="w-4 h-3 text-white overflow-visible flex-shrink-0 animate-ecg-glow" viewBox="0 0 160 80" fill="none">
+                <path d="M10 40 H45 L55 22 L65 58 L75 10 L88 70 L98 32 L106 44 L114 40 H150" stroke="white" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" className="animate-ecg-draw" />
+              </svg>
             ) : isSaved ? (
               <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
             ) : (
@@ -316,7 +319,8 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+      <div className="relative grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 min-h-[140px]">
+        <EcgActionLoader isLoading={isSaving} text="Saving configuration..." />
         {filteredParameters.length === 0 ? (
           <div className="col-span-full bg-white rounded-2xl p-12 text-center border border-[#ECEEF2] shadow-sm">
             <Search className="w-8 h-8 text-gray-300 mx-auto mb-2 stroke-[1.5]" />
