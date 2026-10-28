@@ -1,3 +1,4 @@
+import { Patient, PatientStatus } from '@/types';
 import bcrypt from 'bcryptjs';
 import { supabase } from './supabase';
 import {
@@ -426,6 +427,105 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
     });
   } catch (err) {
     console.warn('Queue fetch exception:', err);
+    return [];
+  }
+}
+
+export interface AppointmentDateCounts {
+  date: string;
+  total: number;
+  waiting: number;
+  in_progress: number;
+  completed: number;
+  cancelled: number;
+}
+
+/**
+ * Fetch Date-Aware Status Counters for UI Filter Badges
+ * Powered by get_appointment_date_counts RPC
+ */
+export async function fetchAppointmentDateCountsFromDb(
+  date?: string,
+  doctorId?: string
+): Promise<AppointmentDateCounts> {
+  try {
+    const { data, error } = await supabase.rpc('get_appointment_date_counts', {
+      p_date: date || null,
+      p_doctor_id: doctorId || null,
+    });
+    if (error) {
+      console.warn('Error calling get_appointment_date_counts:', error.message);
+      return { date: date || '', total: 0, waiting: 0, in_progress: 0, completed: 0, cancelled: 0 };
+    }
+    return (data as AppointmentDateCounts) || { date: date || '', total: 0, waiting: 0, in_progress: 0, completed: 0, cancelled: 0 };
+  } catch (err) {
+    console.warn('fetchAppointmentDateCountsFromDb exception:', err);
+    return { date: date || '', total: 0, waiting: 0, in_progress: 0, completed: 0, cancelled: 0 };
+  }
+}
+
+/**
+ * Fetch Filtered Patient Appointments with Date & Status Filtering
+ * Powered by get_patient_appointments RPC
+ */
+export async function fetchPatientAppointmentsFromDb(params?: {
+  date?: string;
+  status?: string;
+  search?: string;
+  doctorId?: string;
+}): Promise<Patient[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_patient_appointments', {
+      p_date: params?.date || null,
+      p_status: params?.status || 'All',
+      p_search: params?.search?.trim() || null,
+      p_doctor_id: params?.doctorId || null,
+    });
+
+    if (error) {
+      console.warn('Error calling get_patient_appointments:', error.message);
+      return [];
+    }
+
+    if (!data || !Array.isArray(data)) return [];
+
+    let mapped: Patient[] = data.map((item: any) => {
+      const qTokenNo = typeof item.queue_token_no === 'number' ? item.queue_token_no : 1;
+      const tokenDisplay = `P${String(qTokenNo).padStart(3, '0')}`;
+
+      return {
+        id: item.appointment_id,
+        name: item.patient_name || 'Patient',
+        age: item.age || 30,
+        gender: (item.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
+        phone: item.phone_number || undefined,
+        status: (item.status as PatientStatus) || 'Waiting',
+        time: item.slot_time || '10:00 AM',
+        appointmentDate: item.appointment_date,
+        tokenNumber: tokenDisplay,
+        queueTokenNo: qTokenNo,
+        patientNumber: qTokenNo,
+        displayId: tokenDisplay,
+        priority: (item.priority === 'Urgent' ? 'Urgent' : 'Normal') as 'Normal' | 'Urgent',
+        visitType: item.visit_type || 'Walk-in',
+        cancellationReason: item.cancellation_reason || undefined,
+      };
+    });
+
+    if (params?.search && params.search.trim()) {
+      const q = params.search.trim().toLowerCase();
+      const digits = q.replace(/\D/g, '');
+      mapped = mapped.filter((p) => {
+        const nameMatch = p.name.toLowerCase().includes(q);
+        const tokenMatch = String(p.tokenNumber || '').toLowerCase().includes(q);
+        const phoneMatch = digits && digits.length >= 2 ? (p.phone || '').replace(/\D/g, '').includes(digits) : false;
+        return nameMatch || tokenMatch || phoneMatch;
+      });
+    }
+
+    return mapped;
+  } catch (err) {
+    console.warn('fetchPatientAppointmentsFromDb exception:', err);
     return [];
   }
 }

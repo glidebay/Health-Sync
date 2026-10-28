@@ -1334,7 +1334,7 @@ function DashboardContent() {
 
                 {activeSection === 'assistant' && (
                   <AssistantView
-                    queue={queue.filter((p) => p.status !== 'Cancelled')}
+                    queue={queue}
                     onRegisterWalkin={() => setShowWalkinModal(true)}
                     onReallocate={handleReallocate}
                     onCancelAppointment={handleCancelAppointment}
