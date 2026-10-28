@@ -4,6 +4,7 @@ import React, { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Phone } from 'lucide-react';
 import { validateMobileNumber } from '@/lib/phoneValidation';
+import EcgActionLoader from '@/components/loading/EcgActionLoader';
 
 interface WalkinRegisterModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ interface WalkinRegisterModalProps {
   walkinGender: 'Male' | 'Female' | 'Other';
   setWalkinGender: (v: 'Male' | 'Female' | 'Other') => void;
   onSubmit: (e: React.FormEvent) => void;
+  isSubmitting?: boolean;
 }
 
 export function WalkinRegisterModal({
@@ -31,6 +33,7 @@ export function WalkinRegisterModal({
   walkinGender,
   setWalkinGender,
   onSubmit,
+  isSubmitting = false,
 }: WalkinRegisterModalProps) {
   const phoneInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -79,8 +82,9 @@ export function WalkinRegisterModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white rounded-2xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-[#ECEEF2] mx-2 sm:mx-4 max-h-[90dvh] overflow-y-auto"
+            className="bg-white rounded-2xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-[#ECEEF2] mx-2 sm:mx-4 max-h-[90dvh] overflow-y-auto relative overflow-hidden"
           >
+            <EcgActionLoader isLoading={isSubmitting} text="Registering walk-in patient..." />
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-base font-bold text-[#16191E]">Register Walk-in Patient</h3>
               <button

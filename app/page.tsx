@@ -339,6 +339,7 @@ function DashboardContent() {
   };
 
   const [showWalkinModal, setShowWalkinModal] = useState(false);
+  const [isWalkinSubmitting, setIsWalkinSubmitting] = useState(false);
   const [walkinName, setWalkinName] = useState('');
   const [walkinAge, setWalkinAge] = useState('');
   const [walkinPhone, setWalkinPhone] = useState('');
@@ -549,32 +550,37 @@ function DashboardContent() {
     }
 
     const ageNum = parseInt(walkinAge, 10);
-    const dbPat = await registerWalkinPatientDb({
-      name: walkinName.trim(),
-      age: ageNum,
-      gender: walkinGender,
-      phone: walkinPhone.trim(),
-      priority: 'Normal',
-    });
+    setIsWalkinSubmitting(true);
+    try {
+      const dbPat = await registerWalkinPatientDb({
+        name: walkinName.trim(),
+        age: ageNum,
+        gender: walkinGender,
+        phone: walkinPhone.trim(),
+        priority: 'Normal',
+      });
 
-    if (dbPat) {
-      setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, { ...dbPat, visitType: 'Walk-in' }]));
-      fetchQueueFromDb().then((fresh) => {
-        if (fresh && fresh.length > 0) {
-          setQueue(sortQueueWithCompletedAtEnd(fresh));
-        }
-      });
-      setWalkinName('');
-      setWalkinAge('');
-      setWalkinPhone('');
-      setWalkinGender('Male');
-      setShowWalkinModal(false);
-    } else {
-      showNotification({
-        type: 'error',
-        title: 'Registration Notice',
-        message: 'Could not register walk-in patient. Please ensure patient name has at least 2 characters.',
-      });
+      if (dbPat) {
+        setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, { ...dbPat, visitType: 'Walk-in' }]));
+        fetchQueueFromDb().then((fresh) => {
+          if (fresh && fresh.length > 0) {
+            setQueue(sortQueueWithCompletedAtEnd(fresh));
+          }
+        });
+        setWalkinName('');
+        setWalkinAge('');
+        setWalkinPhone('');
+        setWalkinGender('Male');
+        setShowWalkinModal(false);
+      } else {
+        showNotification({
+          type: 'error',
+          title: 'Registration Notice',
+          message: 'Could not register walk-in patient. Please ensure patient name has at least 2 characters.',
+        });
+      }
+    } finally {
+      setIsWalkinSubmitting(false);
     }
   };
 

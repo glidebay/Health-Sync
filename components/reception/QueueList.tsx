@@ -17,6 +17,7 @@ import { CancelModal } from './CancelModal';
 import { formatPatientToken } from '@/lib/utils';
 import { fetchPatientAppointmentsFromDb } from '@/lib/supabaseService';
 import { supabase } from '@/lib/supabaseClient';
+import EcgActionLoader from '@/components/loading/EcgActionLoader';
 
 interface QueueListProps {
   queue: Patient[];
@@ -229,23 +230,21 @@ export function QueueList({
         </div>
       </div>
 
-      {/* Patient Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-        {paginatedQueue.length === 0 ? (
-          <div className="col-span-full bg-white rounded-2xl p-10 border border-[#ECEEF2] text-center shadow-xs">
-            <Users className="w-10 h-10 text-gray-300 mx-auto mb-3 stroke-[1.5]" />
-            <h3 className="text-sm font-bold text-[#16191E]">
-              {isLoading
-                ? 'Loading appointments...'
-                : `No patients found for ${formatDisplayDate(selectedDate, todayIST)}`}
-            </h3>
-            <p className="text-xs text-[#8A909D] mt-1 max-w-sm mx-auto">
-              {isLoading
-                ? 'Querying database for live schedule...'
-                : 'Use the "Register Walk-in" button above or WhatsApp self-service booking to add patients.'}
-            </p>
-          </div>
-        ) : (
+      {/* Patient Cards Grid with Scoped ECG Action Loader */}
+      <div className="relative min-h-[180px]">
+        <EcgActionLoader isLoading={isLoading} text="Syncing appointments..." />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+          {paginatedQueue.length === 0 ? (
+            <div className="col-span-full bg-white rounded-2xl p-10 border border-[#ECEEF2] text-center shadow-xs">
+              <Users className="w-10 h-10 text-gray-300 mx-auto mb-3 stroke-[1.5]" />
+              <h3 className="text-sm font-bold text-[#16191E]">
+                No patients found for {formatDisplayDate(selectedDate, todayIST)}
+              </h3>
+              <p className="text-xs text-[#8A909D] mt-1 max-w-sm mx-auto">
+                Use the &quot;Register Walk-in&quot; button above or WhatsApp self-service booking to add patients.
+              </p>
+            </div>
+          ) : (
           paginatedQueue.map((p) => {
             const isWaiting = p.status === 'Waiting';
             const tokenDisplay = formatPatientToken(p);
@@ -343,6 +342,7 @@ export function QueueList({
             );
           })
         )}
+        </div>
       </div>
 
       {/* Pagination */}
