@@ -84,7 +84,7 @@ import { AnalyticsView } from '@/components/views/AnalyticsView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { ToastNotification, ToastMessage, ToastType } from '@/components/ui/ToastNotification';
 
-export function convertSlotToFutureIso(timeStr: string, dateStr?: string, fallbackDelayMins: number = 20): string {
+function convertSlotToFutureIso(timeStr: string, dateStr?: string, fallbackDelayMins: number = 20): string {
   if (timeStr && timeStr.includes('T') && timeStr.includes('-')) {
     const d = new Date(timeStr);
     if (d.getTime() > Date.now()) return d.toISOString();
@@ -118,7 +118,7 @@ export function convertSlotToFutureIso(timeStr: string, dateStr?: string, fallba
 const INITIAL_QUEUE: Patient[] = [];
 const INITIAL_INVENTORY: InventoryItem[] = [];
 
-export const sortQueueWithCompletedAtEnd = (patients: Patient[]): Patient[] => {
+const sortQueueWithCompletedAtEnd = (patients: Patient[]): Patient[] => {
   const parseFifoOrder = (p: Patient): number => {
     if (typeof p.queueTokenNo === 'number') return p.queueTokenNo;
     const raw = String(p.tokenNumber || p.displayId || '');

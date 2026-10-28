@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-
-
+import { NextRequest, NextResponse, connection } from 'next/server';
 
 export async function GET(req: NextRequest) {
+  await connection();
   try {
     const { searchParams } = new URL(req.url);
     const mediaId = searchParams.get('media_id');
@@ -152,6 +151,9 @@ export async function GET(req: NextRequest) {
       }
     );
   } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'digest' in err && typeof (err as { digest: unknown }).digest === 'string' && (err as { digest: string }).digest.startsWith('NEXT_')) {
+      throw err;
+    }
     console.error('[WhatsApp Audio Proxy] Internal error:', err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Internal audio proxy error' },
