@@ -65,7 +65,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 2. Try fetching from Supabase Edge Function whatsapp-webhook
     if (mediaId) {
       const edgeFunctionUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?media_id=${mediaId}`;
       try {
