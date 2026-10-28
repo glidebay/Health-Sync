@@ -39,36 +39,16 @@ function AudioVoiceMessagePlayer({
   const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const onLoadedMetadata = () => {
-      if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
-        setDuration(audio.duration);
-      }
-    };
-    const onEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
-    };
-    const onError = () => {
-      setLoadError(true);
-      setIsPlaying(false);
-    };
-
-    audio.addEventListener('timeupdate', onTimeUpdate);
-    audio.addEventListener('loadedmetadata', onLoadedMetadata);
-    audio.addEventListener('ended', onEnded);
-    audio.addEventListener('error', onError);
-
-    return () => {
-      audio.removeEventListener('timeupdate', onTimeUpdate);
-      audio.removeEventListener('loadedmetadata', onLoadedMetadata);
-      audio.removeEventListener('ended', onEnded);
-      audio.removeEventListener('error', onError);
-    };
-  }, []);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setLoadError(false);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current.load();
+    }
+  }, [audioUrl]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
@@ -126,7 +106,29 @@ function AudioVoiceMessagePlayer({
       }`}
     >
       {audioUrl && (
-        <audio ref={audioRef} src={audioUrl} preload="metadata" />
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          preload="metadata"
+          onTimeUpdate={() => {
+            if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
+          }}
+          onLoadedMetadata={() => {
+            const d = audioRef.current?.duration;
+            if (d && !isNaN(d) && isFinite(d)) {
+              setDuration(d);
+            }
+          }}
+          onEnded={() => {
+            setIsPlaying(false);
+            setCurrentTime(0);
+          }}
+          onError={(e) => {
+            console.warn('Audio playback error for url:', audioUrl, e);
+            setLoadError(true);
+            setIsPlaying(false);
+          }}
+        />
       )}
 
       <div className="flex items-center gap-2.5">
@@ -134,7 +136,7 @@ function AudioVoiceMessagePlayer({
         <button
           type="button"
           onClick={togglePlay}
-          disabled={!audioUrl || loadError}
+          disabled={!audioUrl}
           className={`w-9 h-9 rounded-full flex items-center justify-center transition-transform active:scale-95 shrink-0 shadow-xs cursor-pointer ${
             isDoctor
               ? 'bg-white text-[#2563EB] hover:bg-blue-50'
@@ -229,7 +231,7 @@ function AudioVoiceMessagePlayer({
 
       <div className="flex items-center justify-between mt-1 pt-1 border-t border-black/5 text-[9px]">
         <span className={isDoctor ? 'text-blue-200' : 'text-[#8A909D]'}>
-          {loadError ? 'Audio unavailable' : 'Voice Message'}
+          {loadError ? 'Audio unavailable / Expired' : 'Voice Message'}
         </span>
         <span className={isDoctor ? 'text-blue-100' : 'text-[#8A909D]'}>
           {timestamp}
