@@ -253,7 +253,6 @@ export function DoctorChatModal({
   isOpen,
   onClose,
 }: DoctorChatModalProps) {
-  // Threads state
   const [threads, setThreads] = useState<PatientChatThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string>('');
   const [isLoadingThreads, setIsLoadingThreads] = useState(false);
@@ -270,8 +269,7 @@ export function DoctorChatModal({
     }
   }, []);
 
-  // Load patient threads
-  const loadThreads = useCallback(async (silent: boolean = false) => {
+const loadThreads = useCallback(async (silent: boolean = false) => {
     if (!silent) setIsLoadingThreads(true);
     try {
       const data = await fetchInboundChatThreads();
@@ -345,7 +343,6 @@ export function DoctorChatModal({
     };
   }, [isOpen, activeThread?.id, activeThread?.messages?.length, scrollToBottom]);
 
-  // Filtered threads
   const filteredThreads = useMemo(() => {
     return threads.filter((t) => {
       const match =
@@ -371,7 +368,6 @@ export function DoctorChatModal({
           transition={{ type: 'spring', damping: 24, stiffness: 280 }}
           className="bg-white rounded-2xl w-full max-w-4xl h-[85vh] max-h-[720px] shadow-2xl border border-[#ECEEF2] flex flex-col overflow-hidden"
         >
-          {/* Header */}
           <div className="px-5 py-3.5 border-b border-[#ECEEF2] flex items-center justify-between bg-white flex-shrink-0">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB]">
@@ -406,11 +402,8 @@ export function DoctorChatModal({
             </div>
           </div>
 
-          {/* 2-Pane Split */}
           <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden bg-white">
-            {/* Left Pane: Patient List (Name & Mobile Number) */}
             <div className="w-full md:w-72 lg:w-80 border-r border-[#ECEEF2] flex flex-col flex-shrink-0 bg-white">
-              {/* Search & Tabs */}
               <div className="p-3 border-b border-[#ECEEF2] space-y-2 bg-[#F8F9FB]">
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 text-[#8A909D] absolute left-3 top-1/2 -translate-y-1/2" />
@@ -466,7 +459,6 @@ export function DoctorChatModal({
                 </div>
               </div>
 
-              {/* Patient Items List */}
               <div className="flex-1 overflow-y-auto divide-y divide-[#ECEEF2]">
                 {filteredThreads.length === 0 ? (
                   <div className="p-8 text-center text-xs text-[#8A909D]">
@@ -534,11 +526,9 @@ export function DoctorChatModal({
               </div>
             </div>
 
-            {/* Right Pane: Patient Message Stream */}
             <div className="flex-1 flex flex-col h-full min-w-0 bg-[#F8FAFC]">
               {activeThread ? (
                 <>
-                  {/* Top Bar for Selected Patient */}
                   <div className="px-4 py-3 bg-white border-b border-[#ECEEF2] flex items-center justify-between gap-2 flex-wrap flex-shrink-0">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="w-8 h-8 rounded-xl bg-[#F8F9FB] border border-[#ECEEF2] flex items-center justify-center text-xs font-bold text-[#16191E]">
@@ -571,8 +561,7 @@ export function DoctorChatModal({
                     </div>
                   </div>
 
-                  {/* Messages Stream (Takes up the whole pane) */}
-                  <div
+<div
                     ref={messagesContainerRef}
                     className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3"
                   >

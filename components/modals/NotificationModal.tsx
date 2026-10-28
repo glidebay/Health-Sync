@@ -97,7 +97,6 @@ export function NotificationModal({ notification, onClose }: NotificationModalPr
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-        {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -107,7 +106,6 @@ export function NotificationModal({ notification, onClose }: NotificationModalPr
           className="fixed inset-0 bg-black/45 backdrop-blur-xs"
         />
 
-        {/* Modal Card */}
         <motion.div
           initial={{ opacity: 0, scale: 0.94, y: 16 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -118,7 +116,6 @@ export function NotificationModal({ notification, onClose }: NotificationModalPr
           className="relative w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-[#ECEEF2] overflow-hidden z-10"
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
-          {/* Close button */}
           <button
             type="button"
             onClick={onClose}
@@ -129,7 +126,6 @@ export function NotificationModal({ notification, onClose }: NotificationModalPr
           </button>
 
           <div className="flex flex-col items-center text-center">
-            {/* Animated Icon */}
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
@@ -139,24 +135,20 @@ export function NotificationModal({ notification, onClose }: NotificationModalPr
               <IconComponent className="w-7 h-7 stroke-[2.2]" />
             </motion.div>
 
-            {/* Badge pill */}
             <span
               className={`text-[10px] font-bold uppercase tracking-wider px-3 py-0.5 rounded-full ${themeConfig.pillBg} ${themeConfig.pillText} mb-2.5`}
             >
               {themeConfig.badge}
             </span>
 
-            {/* Title */}
             <h3 className="text-lg sm:text-xl font-bold text-[#16191E] mb-2 leading-tight">
               {title}
             </h3>
 
-            {/* Description */}
             <p className="text-xs sm:text-sm text-[#5E6470] leading-relaxed mb-6 max-w-sm">
               {message}
             </p>
 
-            {/* Action Buttons with equal size */}
             <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full">
               {actionLabel && (
                 <motion.button

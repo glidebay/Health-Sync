@@ -21,8 +21,9 @@ export function QueueView({
   const [currentPage, setCurrentPage] = React.useState(1);
 
   const sortedQueue = React.useMemo(() => {
-    const notCompleted = queue.filter((p) => p.status !== 'Completed');
-    const completed = queue.filter((p) => p.status === 'Completed');
+    const active = queue.filter((p) => p.status !== 'Cancelled');
+    const notCompleted = active.filter((p) => p.status !== 'Completed');
+    const completed = active.filter((p) => p.status === 'Completed');
     return [...notCompleted, ...completed];
   }, [queue]);
 

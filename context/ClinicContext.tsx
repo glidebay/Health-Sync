@@ -114,7 +114,6 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<AppConfig>(getAppConfigLocal);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Initial ECG splash screen delay simulation (1.8s for smooth Apple-style intro)
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsLoading(false);
@@ -122,7 +121,6 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer);
   }, []);
 
-  // Fetch only DB data and subscribe to live updates
   useEffect(() => {
     let isMounted = true;
 
@@ -146,7 +144,6 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
             setInventory(dbInventory as unknown as InventoryItem[]);
           }
           if (dbDoctors && dbDoctors.length > 0) {
-            // Check if THIS browser client has an active authenticated session
             const savedSession = getDoctorSessionLocal();
             if (savedSession) {
               const matched = dbDoctors.find((d: DbDoctor) => d.id === savedSession.doctorId);
@@ -155,7 +152,6 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
                 matched.pin_session_until &&
                 new Date(matched.pin_session_until).getTime() > Date.now()
               ) {
-                // Restore session on page refresh for the specific logged-in doctor
                 setCurrentDoctor({
                   id: matched.id,
                   name: matched.full_name,
@@ -165,14 +161,12 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
                 setIsLoggedIn(true);
                 setRole('doctor');
               } else {
-                // Expired session: clear local storage and stay locked
                 clearDoctorSessionLocal();
                 setIsLoggedIn(false);
                 setRole('assistant');
                 setCurrentDoctor(null);
               }
             } else {
-              // First screen / fresh visit: strictly locked screen!
               setIsLoggedIn(false);
               setRole('assistant');
               setCurrentDoctor(null);
@@ -223,7 +217,6 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
   const authenticateDoctor = async (pin: string): Promise<boolean> => {
     const res = await verifyDoctorPin(pin);
     if (res.success && res.doctor) {
-      // Save authenticated doctor session locally so page refresh preserves it
       saveDoctorSessionLocal({
         doctorId: res.doctor.id,
         name: res.doctor.full_name,
@@ -384,7 +377,6 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
   const completeConsultation = (): boolean => {
     if (!activePatient) return false;
 
-    // Deduct prescribed medication quantities from master inventory
     setInventory(prev =>
       prev.map(item => {
         const prescribed = currentPrescription.find(p => p.med.id === item.id);
@@ -398,10 +390,8 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       })
     );
 
-    // Mark patient as completed in queue
     updatePatientStatus(activePatient.id, 'Completed');
 
-    // Create consultation record for print and records
     const record: ConsultationRecord = {
       id: `RX-${Date.now().toString().slice(-6)}`,
       patientId: activePatient.id,
@@ -425,12 +415,10 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     setActivePrintRecord(record);
     setIsPrintModalOpen(true);
 
-    // Reset active consultation state
     setActivePatient(null);
     setCurrentPrescription([]);
     setDiagnosticNotes('');
 
-    // Call Supabase DB to record consultation, prescriptions, and deduct inventory
     completeConsultationDb({
       appointmentId: activePatient.id,
       prescriptions: currentPrescription.map(p => ({

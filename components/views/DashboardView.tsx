@@ -440,7 +440,6 @@ export function DashboardView({
         </div>
       </section>
 
-      {/* Cancellation Modal */}
       <CancelModal
         isOpen={!!selectedPatientForCancel}
         patient={selectedPatientForCancel}
@@ -448,7 +447,6 @@ export function DashboardView({
         onConfirmCancel={onCancelAppointment || (async () => {})}
       />
 
-      {/* Reschedule Modal */}
       <RescheduleModal
         isOpen={!!selectedPatientForReschedule}
         patient={selectedPatientForReschedule}

@@ -64,7 +64,6 @@ export function NumberedPagination({
     return null;
   }
 
-  // Generate pagination items with numbers and ellipsis
   const getPageNumbers = () => {
     const pages: (number | 'ellipsis-start' | 'ellipsis-end')[] = [];
 
@@ -104,7 +103,6 @@ export function NumberedPagination({
     >
       <Pagination className="mx-auto w-auto flex justify-center">
         <PaginationContent className="flex flex-row items-center justify-center gap-1">
-          {/* Previous Button */}
           <PaginationItem>
             <Button
               variant="ghost"
@@ -118,7 +116,6 @@ export function NumberedPagination({
             </Button>
           </PaginationItem>
 
-          {/* Numbered Page Buttons */}
           {pages.map((p, idx) => {
             if (p === 'ellipsis-start' || p === 'ellipsis-end') {
               return (
@@ -148,7 +145,6 @@ export function NumberedPagination({
             );
           })}
 
-          {/* Next Button */}
           <PaginationItem>
             <Button
               variant="ghost"

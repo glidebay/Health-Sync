@@ -45,9 +45,6 @@ interface GatewayScreenProps {
   doctorSpecialty?: string;
 }
 
-// Clinic & Doctor Equipment Constellation
-// On Desktop: Spreads elegantly from left side to center (left: 3% - 48%, top: 4% - 94%)
-// On Mobile: Moves and spreads across the TOP (left: 4% - 94%, top: 2% - 32%) creating an elegant medical canopy
 interface EquipmentItem {
   Icon: React.ElementType;
   top: string;
@@ -64,7 +61,6 @@ interface EquipmentItem {
 }
 
 const CLINIC_EQUIPMENT: EquipmentItem[] = [
-  // --- TIER 1: UPPER CELESTIAL CANOPY ---
   {
     Icon: BriefcaseMedical,
     top: '6%',
@@ -150,7 +146,6 @@ const CLINIC_EQUIPMENT: EquipmentItem[] = [
     delay: 2.2,
   },
 
-  // --- TIER 2: HIGH-MID DYNAMICS ---
   {
     Icon: Stethoscope,
     top: '20%',
@@ -250,7 +245,6 @@ const CLINIC_EQUIPMENT: EquipmentItem[] = [
     delay: 1.2,
   },
 
-  // --- TIER 3: MID TRANSITION ---
   {
     Icon: ClipboardList,
     top: '44%',
@@ -364,7 +358,6 @@ const CLINIC_EQUIPMENT: EquipmentItem[] = [
     delay: 2.5,
   },
 
-  // --- TIER 4: LOWER & LATERAL COMPOSITION ---
   {
     Icon: Microscope,
     top: '63%',
@@ -478,7 +471,6 @@ const CLINIC_EQUIPMENT: EquipmentItem[] = [
     delay: 1.1,
   },
 
-  // --- TIER 5: BASELINE & FLANK EXTENSIONS ---
   {
     Icon: Ambulance,
     top: '80%',
@@ -616,7 +608,6 @@ export function GatewayScreen({
       className="min-h-screen bg-[#F8F9FB] flex flex-col justify-center items-center py-10 px-4 relative select-none overflow-hidden"
       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
     >
-      {/* Dynamic CSS rules for instant CSS media-query responsive equipment placement */}
       <style>{`
         .equipment-item {
           top: var(--top-mobile);
@@ -638,20 +629,15 @@ export function GatewayScreen({
         }
       `}</style>
 
-      {/* Background Clinic & Doctor Equipment SVG Constellation */}
-      {/* Desktop: Spreads from left to center. Mobile: Spreads across the TOP */}
       <div className="absolute inset-0 pointer-events-none select-none overflow-hidden z-0">
-        {/* Soft atmospheric subtle grey glow spots */}
         <div className="hidden md:block absolute -top-28 -left-28 w-96 h-96 bg-gray-100/60 rounded-full blur-3xl" />
         <div className="hidden md:block absolute top-1/2 left-6 -translate-y-1/2 w-96 h-96 bg-slate-100/50 rounded-full blur-3xl" />
         <div className="hidden md:block absolute -bottom-24 left-1/6 w-96 h-96 bg-gray-100/50 rounded-full blur-2xl" />
 
-        {/* Mobile atmospheric top canopy glow */}
         <div className="md:hidden absolute -top-24 left-1/2 -translate-x-1/2 w-80 h-80 bg-gray-100/60 rounded-full blur-3xl" />
         <div className="md:hidden absolute top-16 -left-12 w-48 h-48 bg-slate-100/50 rounded-full blur-2xl" />
         <div className="md:hidden absolute top-16 -right-12 w-48 h-48 bg-gray-100/50 rounded-full blur-2xl" />
 
-        {/* Mobile Top Canopy Curves */}
         <svg
           className="block md:hidden absolute inset-0 w-full h-full pointer-events-none opacity-[0.2] stroke-gray-400"
           fill="none"
@@ -673,7 +659,6 @@ export function GatewayScreen({
           />
         </svg>
 
-        {/* Desktop Left-to-Center Curves */}
         <svg
           className="hidden md:block absolute inset-0 w-full h-full pointer-events-none opacity-[0.2] stroke-gray-400"
           fill="none"
@@ -700,7 +685,6 @@ export function GatewayScreen({
           />
         </svg>
 
-        {/* Subtle medical dot matrix watermark: Top on mobile, Left on desktop */}
         <div
           className="absolute opacity-[0.05] [background-size:24px_24px] inset-x-0 top-0 h-2/5 [mask-image:linear-gradient(to_bottom,black_45%,transparent_100%)] md:inset-y-0 md:left-0 md:w-3/5 md:[mask-image:linear-gradient(to_right,black_40%,transparent_100%)]"
           style={{
@@ -709,7 +693,6 @@ export function GatewayScreen({
           }}
         />
 
-        {/* Spread of Equipment SVG Elements with Smooth Floating Motion in Clean Grey */}
         {CLINIC_EQUIPMENT.map((item, index) => {
           const ItemIcon = item.Icon;
 
@@ -764,7 +747,6 @@ export function GatewayScreen({
       </div>
 
       <motion.div className="flex flex-col items-center justify-center z-10 max-w-md w-full text-center relative">
-        {/* Soft protective radial veil to guarantee pristine text legibility on all viewports */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] sm:w-[460px] h-[340px] sm:h-[460px] bg-[#F8F9FB]/90 sm:bg-[#F8F9FB]/75 rounded-full blur-2xl pointer-events-none -z-10" />
 
         <motion.div

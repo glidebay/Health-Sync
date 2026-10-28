@@ -20,14 +20,13 @@ export function useLiveQueue(doctorId?: string, date?: string) {
   useEffect(() => {
     fetchQueue();
 
-    // Subscribe to live appointment status changes (Inserts, Updates, Deletions)
     const channel = supabase
       .channel("realtime-queue")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "appointments" },
         () => {
-          fetchQueue(); // Auto-refresh when any patient is booked, called, or completed
+          fetchQueue();
         }
       )
       .subscribe();

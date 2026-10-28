@@ -3,7 +3,7 @@
 /**
  * Storage and tracking for WhatsApp chat threads' read/unopened states.
  * Keeps the floating chat button badge synced with the exact number of
- * persons who have unread or unopened messages.
+ * persons who have unread or unopened message.
  */
 
 const STORAGE_KEY = 'healthsync_chat_read_state_v1';
