@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export const dynamic = 'force-dynamic';
+
 
 
 
@@ -153,6 +153,9 @@ export async function GET(req: NextRequest) {
       }
     );
   } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'digest' in err) {
+      throw err;
+    }
     console.error('[WhatsApp Audio Proxy] Internal error:', err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Internal audio proxy error' },
