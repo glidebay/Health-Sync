@@ -2276,15 +2276,16 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
                 ? rawPayload.audio_url.split('media_id=')[1].split('&')[0]
                 : undefined);
 
+            const directMetaUrl = incomingMsg?.audio?.url;
+            const rawAudioUrl = typeof rawPayload?.audio_url === 'string' ? rawPayload.audio_url : undefined;
+
             if (mediaId) {
-              audioUrl = `https://agupndzcqjofnmkhgsqc.supabase.co/functions/v1/whatsapp-webhook?media_id=${mediaId}`;
-            } else if (rawPayload?.audio_url) {
-              audioUrl = String(rawPayload.audio_url).replace(
-                'http://agupndzcqjofnmkhgsqc.supabase.co/whatsapp-webhook',
-                'https://agupndzcqjofnmkhgsqc.supabase.co/functions/v1/whatsapp-webhook'
-              );
-            } else if (incomingMsg?.audio?.url) {
-              audioUrl = incomingMsg.audio.url;
+              const urlParam = directMetaUrl ? `&url=${encodeURIComponent(directMetaUrl)}` : '';
+              audioUrl = `/api/whatsapp-audio?media_id=${mediaId}${urlParam}`;
+            } else if (rawAudioUrl) {
+              audioUrl = `/api/whatsapp-audio?url=${encodeURIComponent(rawAudioUrl)}`;
+            } else if (directMetaUrl) {
+              audioUrl = `/api/whatsapp-audio?url=${encodeURIComponent(directMetaUrl)}`;
             }
           }
 
