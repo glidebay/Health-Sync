@@ -83,6 +83,7 @@ import { InventoryView } from '@/components/views/InventoryView';
 import { AnalyticsView } from '@/components/views/AnalyticsView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { ToastNotification, ToastMessage, ToastType } from '@/components/ui/ToastNotification';
+import { getTodayIST } from '@/lib/utils';
 
 function convertSlotToFutureIso(timeStr: string, dateStr?: string, fallbackDelayMins: number = 20): string {
   if (timeStr && timeStr.includes('T') && timeStr.includes('-')) {
@@ -665,7 +666,10 @@ function DashboardContent() {
         visitType: 'Online',
       };
 
-      setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, newPatient]));
+      const todayIST = getTodayIST();
+      if (finalBookingDate === todayIST) {
+        setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, newPatient]));
+      }
 
       fetchQueueFromDb().then((fresh) => {
         if (fresh && fresh.length > 0) {
@@ -1345,7 +1349,11 @@ function DashboardContent() {
 
                 {activeSection === 'queue' && (
                   <QueueView
-                    queue={queue.filter((p) => p.status !== 'Cancelled')}
+                    queue={queue.filter(
+                      (p) =>
+                        p.status !== 'Cancelled' &&
+                        (!p.appointmentDate || p.appointmentDate === getTodayIST())
+                    )}
                     onStartConsultation={startConsultation}
                   />
                 )}

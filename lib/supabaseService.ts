@@ -10,6 +10,7 @@ import {
   AppointmentWithPatient
 } from '@/types/database';
 import { AVAILABLE_SLOTS } from '@/lib/constants';
+import { getTodayIST } from '@/lib/utils';
 import {
   DynamicSlotTimetableResponse,
   EngineSlotItem,
@@ -333,9 +334,79 @@ export async function logoutDoctorSessionDb(doctorId?: string): Promise<void> {
   }
 }
 
-export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
+function sortQueuePatients(patients: FormattedQueuePatient[]): FormattedQueuePatient[] {
+  const parseFifoNum = (p: FormattedQueuePatient): number => {
+    if (typeof p.queueTokenNo === 'number') return p.queueTokenNo;
+    const raw = String(p.tokenNumber || p.displayId || '');
+    const m = raw.match(/\d+/);
+    return m ? parseInt(m[0], 10) : 999999;
+  };
+
+  return [...patients].sort((a, b) => {
+    const isDoneA = a.status === 'Completed' || a.status === 'Cancelled';
+    const isDoneB = b.status === 'Completed' || b.status === 'Cancelled';
+    if (isDoneA !== isDoneB) return isDoneA ? 1 : -1;
+
+    if (a.status === 'In Progress' && b.status !== 'In Progress') return -1;
+    if (b.status === 'In Progress' && a.status !== 'In Progress') return 1;
+
+    if (a.priority === 'Urgent' && b.priority !== 'Urgent') return -1;
+    if (b.priority === 'Urgent' && a.priority !== 'Urgent') return 1;
+
+    return parseFifoNum(a) - parseFifoNum(b);
+  });
+}
+
+export async function fetchQueueFromDb(targetDate?: string, doctorId?: string): Promise<FormattedQueuePatient[]> {
   try {
-    const { data, error } = await supabase
+    const todayIST = targetDate || getTodayIST();
+
+    // 1. Primary: Use get_patient_appointments RPC which anchors to Indian Standard Time (Asia/Kolkata)
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_patient_appointments', {
+      p_date: todayIST,
+      p_status: 'All',
+      p_search: null,
+      p_doctor_id: doctorId || null,
+    });
+
+    if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
+      const mapped: FormattedQueuePatient[] = rpcData.map((item: any) => {
+        const qTokenNo = typeof item.queue_token_no === 'number' ? item.queue_token_no : 1;
+        const tokenDisplay = `P${String(qTokenNo).padStart(3, '0')}`;
+        const rawVisitType = item.visit_type || 'Walk-in';
+        const isOnline =
+          rawVisitType.toLowerCase().includes('whatsapp') ||
+          rawVisitType.toLowerCase().includes('online');
+
+        return {
+          id: item.appointment_id,
+          patientDbId: item.patient_id,
+          name: item.patient_name || (isOnline ? 'Online Patient' : 'Walk-in Patient'),
+          age: item.age || 30,
+          gender: (item.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
+          phone: item.phone_number || undefined,
+          status: (item.status as 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled') || 'Waiting',
+          time: item.slot_time || '10:00 AM',
+          appointmentDate: item.appointment_date || todayIST,
+          tokenNumber: tokenDisplay,
+          queueTokenNo: qTokenNo,
+          patientNumber: qTokenNo,
+          displayId: tokenDisplay,
+          priority: item.priority === 'Urgent' ? 'Urgent' : 'Normal',
+          scheduledTime: item.scheduled_time,
+          visitType: isOnline ? 'Online' : 'Walk-in',
+          cancellationReason: item.cancellation_reason || undefined,
+        };
+      });
+
+      return sortQueuePatients(mapped);
+    }
+
+    // 2. Fallback: Direct query on appointments table with strict IST date range
+    const startIso = `${todayIST}T00:00:00+05:30`;
+    const endIso = `${todayIST}T23:59:59.999+05:30`;
+
+    let query = supabase
       .from('appointments')
       .select(`
         id,
@@ -360,10 +431,18 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
           display_id
         )
       `)
+      .gte('scheduled_time', startIso)
+      .lte('scheduled_time', endIso)
       .order('scheduled_time', { ascending: true });
 
+    if (doctorId) {
+      query = query.eq('doctor_id', doctorId);
+    }
+
+    const { data, error } = await query;
+
     if (error) {
-      console.warn('Error fetching queue from Supabase:', error.message);
+      console.warn('Error fetching queue from Supabase fallback:', error.message);
       return [];
     }
 
@@ -373,6 +452,7 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
       const patient = item.patient;
       const scheduledDate = item.scheduled_time ? new Date(item.scheduled_time) : new Date();
       const timeStr = scheduledDate.toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Kolkata',
         hour: '2-digit',
         minute: '2-digit',
         hour12: true,
@@ -394,6 +474,7 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
         phone: patient?.phone_number || undefined,
         status: (item.status as 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled') || 'Waiting',
         time: timeStr,
+        appointmentDate: todayIST,
         tokenNumber: tokenDisplay,
         queueTokenNo: qTokenNo,
         patientNumber: patNum,
@@ -405,26 +486,7 @@ export async function fetchQueueFromDb(): Promise<FormattedQueuePatient[]> {
       };
     });
 
-    const parseFifoNum = (p: FormattedQueuePatient): number => {
-      if (typeof p.queueTokenNo === 'number') return p.queueTokenNo;
-      const raw = String(p.tokenNumber || p.displayId || '');
-      const m = raw.match(/\d+/);
-      return m ? parseInt(m[0], 10) : 999999;
-    };
-
-    return mapped.sort((a, b) => {
-      const isDoneA = a.status === 'Completed' || a.status === 'Cancelled';
-      const isDoneB = b.status === 'Completed' || b.status === 'Cancelled';
-      if (isDoneA !== isDoneB) return isDoneA ? 1 : -1;
-
-      if (a.status === 'In Progress' && b.status !== 'In Progress') return -1;
-      if (b.status === 'In Progress' && a.status !== 'In Progress') return 1;
-
-      if (a.priority === 'Urgent' && b.priority !== 'Urgent') return -1;
-      if (b.priority === 'Urgent' && a.priority !== 'Urgent') return 1;
-
-      return parseFifoNum(a) - parseFifoNum(b);
-    });
+    return sortQueuePatients(mapped);
   } catch (err) {
     console.warn('Queue fetch exception:', err);
     return [];
@@ -495,6 +557,7 @@ export async function fetchPatientAppointmentsFromDb(params?: {
 
       return {
         id: item.appointment_id,
+        patientDbId: item.patient_id,
         name: item.patient_name || 'Patient',
         age: item.age || 30,
         gender: (item.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
@@ -507,6 +570,7 @@ export async function fetchPatientAppointmentsFromDb(params?: {
         patientNumber: qTokenNo,
         displayId: tokenDisplay,
         priority: (item.priority === 'Urgent' ? 'Urgent' : 'Normal') as 'Normal' | 'Urgent',
+        scheduledTime: item.scheduled_time,
         visitType: item.visit_type || 'Walk-in',
         cancellationReason: item.cancellation_reason || undefined,
       };
