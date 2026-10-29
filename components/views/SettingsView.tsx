@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Building2,
@@ -19,6 +19,8 @@ import {
   Trash2,
   Sparkles,
   LogOut,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import { useClinic } from '@/context/ClinicContext';
 import EcgActionLoader from '@/components/loading/EcgActionLoader';
@@ -50,6 +52,117 @@ const CATEGORIES: CategoryConfig[] = [
   { id: 'Pharmacy & Inventory Safeguards', label: 'Pharmacy Safeguards', icon: ShieldCheck },
   { id: 'System, Security & Data Privacy', label: 'Security & Access', icon: ShieldAlert, isProvision: true },
 ];
+
+interface CustomDropdownInputProps {
+  value: unknown;
+  options: (string | number)[];
+  isNumeric: boolean;
+  placeholder?: string;
+  onChange: (value: string | number) => void;
+}
+
+function CustomDropdownInput({
+  value,
+  options,
+  isNumeric,
+  placeholder,
+  onChange,
+}: CustomDropdownInputProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    if (isNumeric) {
+      const digitsOnly = raw.replace(/[^0-9]/g, '');
+      onChange(digitsOnly === '' ? 0 : Number(digitsOnly));
+    } else {
+      onChange(raw);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (isNumeric) {
+      if (
+        !/[0-9]/.test(e.key) &&
+        !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter', 'Escape'].includes(e.key) &&
+        !e.ctrlKey &&
+        !e.metaKey
+      ) {
+        e.preventDefault();
+      }
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div className="relative flex items-center">
+        <input
+          type="text"
+          inputMode={isNumeric ? 'numeric' : 'text'}
+          value={value === undefined || value === null ? '' : String(value)}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          onFocus={() => setIsOpen(true)}
+          placeholder={placeholder || 'Enter custom value or choose preset...'}
+          className="w-full pl-3.5 pr-9 py-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs font-semibold text-[#16191E] placeholder-[#8A909D] focus:outline-none focus:ring-1 focus:ring-[#2563EB] focus:bg-white transition"
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => setIsOpen((prev) => !prev)}
+          className="absolute right-2.5 p-1 rounded-md text-gray-400 hover:text-[#16191E] transition cursor-pointer"
+          aria-label="Toggle options"
+        >
+          <ChevronDown
+            className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+      </div>
+
+      {isOpen && options && options.length > 0 && (
+        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-[#ECEEF2] rounded-xl shadow-xl max-h-56 overflow-y-auto py-1">
+          {options.map((opt) => {
+            const strOpt = String(opt);
+            const isSelected = String(value) === strOpt;
+            return (
+              <button
+                key={strOpt}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const parsed = isNumeric && !isNaN(Number(opt)) ? Number(opt) : opt;
+                  onChange(parsed);
+                  setIsOpen(false);
+                }}
+                className={`w-full text-left px-3.5 py-2 text-xs font-semibold transition cursor-pointer flex items-center justify-between ${
+                  isSelected
+                    ? 'bg-blue-50 text-[#2563EB] font-bold'
+                    : 'text-[#16191E] hover:bg-[#F8F9FB] hover:text-[#2563EB]'
+                }`}
+              >
+                <span>{strOpt}</span>
+                {isSelected && <Check className="w-3.5 h-3.5 text-[#2563EB]" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) {
   const { config, updateAllConfigs, resetConfigToDefaults } = useClinic();
@@ -404,11 +517,25 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                             -
                           </button>
                           <input
-                            type="number"
-                            value={Number(val)}
-                            min={meta.min}
-                            max={meta.max}
-                            onChange={(e) => handleFieldChange(meta.key, Number(e.target.value))}
+                            type="text"
+                            inputMode="numeric"
+                            value={val === undefined || val === null ? '' : String(val)}
+                            onKeyDown={(e) => {
+                              if (
+                                !/[0-9]/.test(e.key) &&
+                                !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter', 'Escape'].includes(e.key) &&
+                                !e.ctrlKey &&
+                                !e.metaKey
+                              ) {
+                                e.preventDefault();
+                              }
+                            }}
+                            onChange={(e) => {
+                              const digitsOnly = e.target.value.replace(/[^0-9]/g, '');
+                              const numVal = digitsOnly === '' ? (meta.min ?? 0) : Number(digitsOnly);
+                              const max = meta.max ?? 9999;
+                              handleFieldChange(meta.key, Math.min(max, numVal));
+                            }}
                             className="w-16 text-center text-xs font-bold py-2 focus:outline-none text-[#16191E]"
                           />
                           <button
@@ -432,59 +559,13 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                     )}
 
                     {meta.uiWidget === 'select' && (
-                      <div className="space-y-2">
-                        <div className="relative flex items-center">
-                          <input
-                            type="text"
-                            list={`options-${meta.key}`}
-                            value={String(val ?? '')}
-                            onChange={(e) => {
-                              const rawVal = e.target.value;
-                              const isNumericDefault = typeof DEFAULT_APP_CONFIG[meta.key] === 'number';
-                              const parsed = isNumericDefault && rawVal !== '' && !isNaN(Number(rawVal))
-                                ? Number(rawVal)
-                                : rawVal;
-                              handleFieldChange(meta.key, parsed);
-                            }}
-                            placeholder={`Enter custom value or choose preset...`}
-                            className="w-full px-3.5 py-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs font-semibold text-[#16191E] placeholder-[#8A909D] focus:outline-none focus:ring-1 focus:ring-[#2563EB] focus:bg-white transition"
-                          />
-                          <datalist id={`options-${meta.key}`}>
-                            {meta.options?.map((opt) => (
-                              <option key={String(opt)} value={String(opt)} />
-                            ))}
-                          </datalist>
-                        </div>
-
-                        {/* Quick Presets as clickable suggestion tags */}
-                        {meta.options && meta.options.length > 0 && (
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] text-[#8A909D] font-medium mr-1">Presets:</span>
-                            {meta.options.map((opt) => {
-                              const strOpt = String(opt);
-                              const isSelected = String(val) === strOpt;
-                              return (
-                                <button
-                                  key={strOpt}
-                                  type="button"
-                                  onClick={() => {
-                                    const isNumericDefault = typeof DEFAULT_APP_CONFIG[meta.key] === 'number';
-                                    const parsed = isNumericDefault && !isNaN(Number(opt)) ? Number(opt) : opt;
-                                    handleFieldChange(meta.key, parsed);
-                                  }}
-                                  className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition cursor-pointer border ${
-                                    isSelected
-                                      ? 'bg-blue-50 text-[#2563EB] border-blue-200 shadow-2xs font-bold'
-                                      : 'bg-white hover:bg-gray-100 text-[#8A909D] hover:text-[#16191E] border-[#ECEEF2]'
-                                  }`}
-                                >
-                                  {strOpt}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
+                      <CustomDropdownInput
+                        value={val}
+                        options={meta.options || []}
+                        isNumeric={typeof DEFAULT_APP_CONFIG[meta.key] === 'number'}
+                        placeholder={`Enter custom value or choose preset...`}
+                        onChange={(newVal) => handleFieldChange(meta.key, newVal)}
+                      />
                     )}
 
                     {(meta.uiWidget === 'text' || meta.uiWidget === 'phone') && (
