@@ -148,6 +148,10 @@ function DashboardContent() {
   const isMobile = useIsMobile();
   const [portalMode, setPortalMode] = useState<PortalMode>(() => {
     if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const modeParam = urlParams.get('mode') || urlParams.get('view');
+      if (modeParam === 'booking' || modeParam === 'book') return 'booking';
+
       const clinicSession = getClinicSessionLocal();
       const docSession = getDoctorSessionLocal();
       if (clinicSession || docSession) return 'dashboard';
@@ -204,6 +208,14 @@ function DashboardContent() {
   const [pinError, setPinError] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const modeParam = urlParams.get('mode') || urlParams.get('view');
+      if (modeParam === 'booking' || modeParam === 'book') {
+        setPortalMode('booking');
+        return;
+      }
+    }
     const clinicSession = getClinicSessionLocal();
     const docSession = getDoctorSessionLocal();
     if (clinicSession || docSession) {

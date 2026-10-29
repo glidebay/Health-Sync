@@ -439,17 +439,9 @@ export function SlotBookingView({
     ? Number(config.max_advance_booking_days)
     : 14;
 
-  const maxAllowedDate = useMemo(() => {
-    const now = new Date();
-    const maxD = new Date(now.getFullYear(), now.getMonth(), now.getDate() + Math.max(1, maxAdvanceBookingDays) - 1);
-    const y = maxD.getFullYear();
-    const m = String(maxD.getMonth() + 1).padStart(2, '0');
-    const d = String(maxD.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }, [maxAdvanceBookingDays]);
-
+  const [maxAllowedDate, setMaxAllowedDate] = useState<string>('');
   const [pickerMode, setPickerMode] = useState<'grid' | 'standard'>('grid');
-  const [standardDate, setStandardDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [standardDate, setStandardDate] = useState<string>('');
   const [standardTime, setStandardTime] = useState('09:30');
 
   useEffect(() => {
@@ -485,6 +477,13 @@ export function SlotBookingView({
     const now = new Date();
     const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     setTodayMinDate(ymd);
+    setStandardDate(ymd);
+
+    const maxD = new Date(now.getFullYear(), now.getMonth(), now.getDate() + Math.max(1, maxAdvanceBookingDays) - 1);
+    const maxY = maxD.getFullYear();
+    const maxM = String(maxD.getMonth() + 1).padStart(2, '0');
+    const maxDay = String(maxD.getDate()).padStart(2, '0');
+    setMaxAllowedDate(`${maxY}-${maxM}-${maxDay}`);
 
     const targetDate = bookDate || internalDate || ymd;
     if (!bookDate && !internalDate) {
@@ -569,15 +568,16 @@ export function SlotBookingView({
   }, [confirmedToken, loadDoctorSlots]);
 
   const currentSlots = useMemo(() => {
+    if (!activeDate) return [];
     if (slots.length > 0) {
-      if (activeDate && activeDate === todayMinDate) {
+      if (activeDate === todayMinDate) {
         const upcoming = slots.filter((slot) => !slot.isPast);
         return upcoming.length > 0 ? upcoming : slots;
       }
       return slots;
     }
     const fallback = generateDailySlots(slotsSummary.dailyQuota || 10, 15, activeDate);
-    if (activeDate && activeDate === todayMinDate) {
+    if (activeDate === todayMinDate) {
       const upcomingFallback = fallback.filter((slot) => !slot.isPast);
       return upcomingFallback.length > 0 ? upcomingFallback : fallback;
     }
@@ -1224,7 +1224,7 @@ export function SlotBookingView({
                 <span className="truncate">
                   {isBookingSubmitting
                     ? 'Allocating Slot...'
-                    : `Confirm & Book Slot (${currentDateOption?.shortLabel || 'Today'}) • Token P${String(queue.length + 1).padStart(3, '0')}`}
+                    : `Confirm & Book Slot - ${currentDateOption?.shortLabel || 'Selected Date'}`}
                 </span>
               </motion.button>
             </div>
