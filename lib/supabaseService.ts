@@ -594,18 +594,26 @@ export async function fetchPatientAppointmentsFromDb(params?: {
   }
 }
 
+export type RegisterWalkinResult =
+  | (FormattedQueuePatient & { success: true; message?: string })
+  | { success: false; error: string; message: string; code?: string; patient?: undefined; id?: undefined };
+
 export async function registerWalkinPatientDb(params: {
   name: string;
   age: number;
   gender: string;
   phone?: string;
   priority?: 'Normal' | 'Urgent';
-}): Promise<FormattedQueuePatient | null> {
+}): Promise<RegisterWalkinResult> {
   try {
     const cleanName = params.name ? params.name.trim() : '';
     if (cleanName.length < 2) {
       console.error('Validation Error: Patient name must be at least 2 characters long.');
-      return null;
+      return {
+        success: false,
+        error: 'INVALID_PATIENT_NAME',
+        message: 'Patient name must be at least 2 characters long.',
+      };
     }
     const rawPhone = params.phone ? params.phone.trim() : '';
     const patientPhone = rawPhone.length > 0 ? rawPhone : `+91-WLK-${Date.now().toString().slice(-8)}`;
@@ -648,11 +656,17 @@ export async function registerWalkinPatientDb(params: {
         .single();
 
       if (patientError || !patientData) {
-        const errorMsg = patientError?.message?.includes('chk_patient_name_valid')
-          ? 'Patient name must be at least 2 characters long.'
-          : patientError?.message || 'Error creating patient';
+        let errorMsg = patientError?.message || 'Error creating patient';
+        if (errorMsg.includes('chk_patient_name_valid')) {
+          errorMsg = 'Patient name must be at least 2 characters long.';
+        }
         console.error('Error creating patient:', errorMsg);
-        return null;
+        return {
+          success: false,
+          error: patientError?.code || 'PATIENT_CREATION_FAILED',
+          message: errorMsg,
+          code: patientError?.code,
+        };
       }
       patientId = patientData.id;
       patientNumber = patientData.patient_number || undefined;
@@ -703,8 +717,14 @@ export async function registerWalkinPatientDb(params: {
       .single();
 
     if (apptError || !apptData) {
-      console.error('Error creating appointment:', apptError?.message || apptError);
-      return null;
+      const errorMsg = apptError?.message || 'Error creating appointment';
+      console.error('Error creating appointment:', errorMsg, apptError);
+      return {
+        success: false,
+        error: apptError?.code || 'APPOINTMENT_CREATION_FAILED',
+        message: errorMsg,
+        code: apptError?.code,
+      };
     }
 
     const timeStr = new Date(scheduledTime).toLocaleTimeString('en-US', {
@@ -715,10 +735,15 @@ export async function registerWalkinPatientDb(params: {
 
     if (!patientId) {
       console.error('Missing patient ID after registration');
-      return null;
+      return {
+        success: false,
+        error: 'MISSING_PATIENT_ID',
+        message: 'Missing patient ID after registration.',
+      };
     }
 
     return {
+      success: true,
       id: apptData.id,
       patientDbId: patientId,
       name: patientName,
@@ -735,9 +760,14 @@ export async function registerWalkinPatientDb(params: {
       scheduledTime,
       visitType: 'Walk-in',
     };
-  } catch (err) {
+  } catch (err: any) {
     console.error('Failed to register patient in DB:', err);
-    return null;
+    return {
+      success: false,
+      error: err?.code || 'EXCEPTION',
+      message: err?.message || 'Failed to register patient in database.',
+      code: err?.code,
+    };
   }
 }
 
@@ -1364,6 +1394,8 @@ export async function fetchAppConfigDb(): Promise<AppConfig> {
       'restrict_out_of_stock_rx',
       'auto_deduct_inventory',
       'enable_pwa_offline',
+      'rx_template_enabled',
+      'rx_template_print_bg',
     ];
     booleanKeys.forEach((k) => {
       if (merged[k] !== undefined) {
@@ -2421,12 +2453,21 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
           const isFromDoctor = rawPayload?.sender === 'doctor';
 
           // Detect WhatsApp Audio Voice Message
+          const rawText = typeof req.message_text === 'string' ? req.message_text.trim() : '';
+          const looksLikeMediaId =
+            /^FA[A-Za-z0-9_-]{20,}$/.test(rawText) ||
+            (rawText.startsWith('FA') && rawText.length > 25);
+
           const isAudio =
             incomingMsg?.type === 'audio' ||
             Boolean(incomingMsg?.audio) ||
             Boolean(rawPayload?.audio) ||
             Boolean(rawPayload?.audio_id) ||
-            (typeof req.message_text === 'string' && req.message_text.includes('Voice message'));
+            Boolean(rawPayload?.media_id) ||
+            Boolean(rawPayload?.type === 'audio') ||
+            rawText.toLowerCase().includes('voice message') ||
+            rawText.toLowerCase().includes('audio') ||
+            looksLikeMediaId;
 
           let audioUrl: string | undefined = undefined;
           let mediaId: string | undefined = undefined;
@@ -2434,13 +2475,15 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
           if (isAudio) {
             mediaId =
               rawPayload?.audio_id ||
+              rawPayload?.media_id ||
               incomingMsg?.audio?.id ||
               rawPayload?.audio?.id ||
+              (looksLikeMediaId ? rawText : undefined) ||
               (typeof rawPayload?.audio_url === 'string' && rawPayload.audio_url.includes('media_id=')
                 ? rawPayload.audio_url.split('media_id=')[1].split('&')[0]
                 : undefined);
 
-            const directMetaUrl = incomingMsg?.audio?.url;
+            const directMetaUrl = incomingMsg?.audio?.url || rawPayload?.audio?.url;
             const rawAudioUrl = typeof rawPayload?.audio_url === 'string' ? rawPayload.audio_url : undefined;
 
             if (mediaId) {
@@ -2469,7 +2512,7 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
             messages.push({
               id: `msg-${req.id}`,
               sender: 'patient',
-              text: req.message_text || '🎙️ Voice note',
+              text: looksLikeMediaId ? '🎙️ Voice note' : (req.message_text || '🎙️ Voice note'),
               timestamp: msgTime,
               messageType: 'audio',
               audioUrl,

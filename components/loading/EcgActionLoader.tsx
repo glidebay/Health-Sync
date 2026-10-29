@@ -1,13 +1,16 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export interface EcgActionLoaderProps {
   isLoading?: boolean;
   text?: string;
+  showText?: boolean;
   size?: 'sm' | 'md' | 'lg';
   overlay?: boolean;
+  fullscreen?: boolean;
   transparent?: boolean;
   className?: string;
   badge?: boolean;
@@ -15,45 +18,46 @@ export interface EcgActionLoaderProps {
 
 /**
  * EcgActionLoader
- * Scoped, non-fullscreen action loading indicator featuring the signature HealthSync
- * moving ECG heartbeat pulse animation over a semi-transparent backdrop.
+ * Clean, full-screen centered action loading indicator.
+ * Exclusively displays the moving ECG heartbeat pulse animation in the viewport center
+ * over a transparent backdrop, with all background boxes/capsules and text removed.
  */
 export function EcgActionLoader({
   isLoading = true,
   text,
+  showText = false,
   size = 'md',
   overlay = true,
+  fullscreen = true,
   transparent = true,
   className = '',
-  badge = true,
+  badge = false,
 }: EcgActionLoaderProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   if (!isLoading) return null;
 
   const dims = {
-    sm: { width: 56, height: 28, strokeWidth: 3.5, ring: 'w-12 h-12', padding: 'px-3 py-1.5' },
-    md: { width: 84, height: 42, strokeWidth: 4.5, ring: 'w-16 h-16', padding: 'px-4 py-2.5' },
-    lg: { width: 120, height: 60, strokeWidth: 5, ring: 'w-24 h-24', padding: 'px-6 py-4' },
+    sm: { width: 80, height: 40, strokeWidth: 4 },
+    md: { width: 120, height: 60, strokeWidth: 5 },
+    lg: { width: 160, height: 80, strokeWidth: 6 },
   }[size];
 
   const content = (
     <motion.div
-      initial={{ opacity: 0, scale: 0.94 }}
+      initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.94 }}
-      transition={{ duration: 0.18, ease: 'easeOut' }}
-      className={`flex flex-col items-center justify-center p-3 text-center select-none ${className}`}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className={`flex flex-col items-center justify-center select-none ${className}`}
     >
       <div className="relative flex items-center justify-center">
-        {/* Soft pulsing heartbeat ring */}
-        <div
-          className={`absolute rounded-full border border-blue-400/30 animate-pulse-ring pointer-events-none ${dims.ring}`}
-        />
-
-        {/* Translucent glass capsule */}
         {badge ? (
-          <div
-            className={`relative rounded-2xl bg-white/95 backdrop-blur-md border border-blue-100 shadow-[0_8px_30px_rgba(37,99,235,0.12)] flex items-center justify-center ${dims.padding}`}
-          >
+          <div className="relative rounded-2xl bg-white/95 backdrop-blur-md border border-blue-100 shadow-[0_12px_40px_rgba(37,99,235,0.18)] flex items-center justify-center px-5 py-3">
             <svg
               className="text-[#2563EB] animate-ecg-glow overflow-visible"
               style={{ width: dims.width, height: dims.height }}
@@ -61,15 +65,6 @@ export function EcgActionLoader({
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >
-              {/* Ghost track */}
-              <path
-                d="M10 40 H45 L55 22 L65 58 L75 10 L88 70 L98 32 L106 44 L114 40 H150"
-                stroke="rgba(37, 99, 235, 0.18)"
-                strokeWidth={dims.strokeWidth}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              {/* Animated pulsating blue heartbeat trace */}
               <path
                 d="M10 40 H45 L55 22 L65 58 L75 10 L88 70 L98 32 L106 44 L114 40 H150"
                 stroke="#2563EB"
@@ -90,13 +85,6 @@ export function EcgActionLoader({
           >
             <path
               d="M10 40 H45 L55 22 L65 58 L75 10 L88 70 L98 32 L106 44 L114 40 H150"
-              stroke="rgba(37, 99, 235, 0.18)"
-              strokeWidth={dims.strokeWidth}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M10 40 H45 L55 22 L65 58 L75 10 L88 70 L98 32 L106 44 L114 40 H150"
               stroke="#2563EB"
               strokeWidth={dims.strokeWidth}
               strokeLinecap="round"
@@ -107,23 +95,51 @@ export function EcgActionLoader({
         )}
       </div>
 
-      {text && (
-        <motion.p
-          initial={{ opacity: 0, y: 3 }}
+      {showText && text && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-2.5 text-xs font-semibold text-[#16191E] flex items-center gap-1.5"
+          className="mt-3.5 px-3.5 py-1.5 rounded-full bg-white/95 backdrop-blur-md border border-slate-100 shadow-sm flex items-center gap-2"
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] animate-ping flex-shrink-0" />
-          <span>{text}</span>
-        </motion.p>
+          <span className="w-2 h-2 rounded-full bg-[#2563EB] animate-ping flex-shrink-0" />
+          <span className="text-xs font-semibold text-[#16191E] tracking-tight">{text}</span>
+        </motion.div>
       )}
     </motion.div>
   );
 
+  // If overlay is disabled, render inline directly
   if (!overlay) {
     return <AnimatePresence>{content}</AnimatePresence>;
   }
 
+  // Full-screen overlay via React Portal directly onto document.body
+  if (fullscreen) {
+    if (!mounted || typeof document === 'undefined') return null;
+
+    return createPortal(
+      <AnimatePresence>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.16 }}
+          className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-auto select-none ${
+            transparent
+              ? 'bg-white/60 backdrop-blur-[2px]'
+              : 'bg-white'
+          }`}
+          role="status"
+          aria-live="polite"
+        >
+          {content}
+        </motion.div>
+      </AnimatePresence>,
+      document.body
+    );
+  }
+
+  // Fallback scoped container overlay
   return (
     <AnimatePresence>
       <motion.div
@@ -133,7 +149,7 @@ export function EcgActionLoader({
         transition={{ duration: 0.16 }}
         className={`absolute inset-0 z-30 flex items-center justify-center rounded-[inherit] pointer-events-auto ${
           transparent
-            ? 'bg-white/75 backdrop-blur-[2.5px]'
+            ? 'bg-white/60 backdrop-blur-[2px]'
             : 'bg-white'
         }`}
       >
@@ -144,4 +160,3 @@ export function EcgActionLoader({
 }
 
 export default EcgActionLoader;
-

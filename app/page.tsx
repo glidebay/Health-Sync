@@ -148,6 +148,10 @@ function DashboardContent() {
   const isMobile = useIsMobile();
   const [portalMode, setPortalMode] = useState<PortalMode>(() => {
     if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const modeParam = urlParams.get('mode') || urlParams.get('view');
+      if (modeParam === 'booking' || modeParam === 'book') return 'booking';
+
       const clinicSession = getClinicSessionLocal();
       const docSession = getDoctorSessionLocal();
       if (clinicSession || docSession) return 'dashboard';
@@ -204,6 +208,14 @@ function DashboardContent() {
   const [pinError, setPinError] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const modeParam = urlParams.get('mode') || urlParams.get('view');
+      if (modeParam === 'booking' || modeParam === 'book') {
+        setPortalMode('booking');
+        return;
+      }
+    }
     const clinicSession = getClinicSessionLocal();
     const docSession = getDoctorSessionLocal();
     if (clinicSession || docSession) {
@@ -344,6 +356,7 @@ function DashboardContent() {
   const [walkinAge, setWalkinAge] = useState('');
   const [walkinPhone, setWalkinPhone] = useState('');
   const [walkinGender, setWalkinGender] = useState<'Male' | 'Female' | 'Other'>('Male');
+  const [walkinPriority, setWalkinPriority] = useState<'Normal' | 'Urgent'>('Normal');
 
   const [newGeneric, setNewGeneric] = useState('');
   const [newBrand, setNewBrand] = useState('');
@@ -352,6 +365,7 @@ function DashboardContent() {
 
   const [selectedMedId, setSelectedMedId] = useState('');
   const [rxQty, setRxQty] = useState('');
+  const [rxDosage, setRxDosage] = useState('');
 
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printRecord, setPrintRecord] = useState<{
@@ -361,6 +375,9 @@ function DashboardContent() {
     demographics: string;
     diagnostics: string;
     items: PrescriptionItem[];
+    patientAge?: number | string;
+    patientGender?: string;
+    tokenNumber?: string | number;
   } | null>(null);
 
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
@@ -552,16 +569,16 @@ function DashboardContent() {
     const ageNum = parseInt(walkinAge, 10);
     setIsWalkinSubmitting(true);
     try {
-      const dbPat = await registerWalkinPatientDb({
+      const res = await registerWalkinPatientDb({
         name: walkinName.trim(),
         age: ageNum,
         gender: walkinGender,
         phone: walkinPhone.trim(),
-        priority: 'Normal',
+        priority: walkinPriority,
       });
 
-      if (dbPat) {
-        setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, { ...dbPat, visitType: 'Walk-in' }]));
+      if (res && res.success) {
+        setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, { ...res, visitType: 'Walk-in' }]));
         fetchQueueFromDb().then((fresh) => {
           if (fresh && fresh.length > 0) {
             setQueue(sortQueueWithCompletedAtEnd(fresh));
@@ -571,12 +588,23 @@ function DashboardContent() {
         setWalkinAge('');
         setWalkinPhone('');
         setWalkinGender('Male');
+        setWalkinPriority('Normal');
         setShowWalkinModal(false);
       } else {
+        const msg = res?.message || 'Could not register walk-in patient.';
+        const isQuotaReached = msg.toLowerCase().includes('quota');
+        const canSwitchUrgent = msg.toLowerCase().includes('urgent');
+
         showNotification({
-          type: 'error',
-          title: 'Registration Notice',
-          message: 'Could not register walk-in patient. Please ensure patient name has at least 2 characters.',
+          type: isQuotaReached ? 'warning' : 'error',
+          title: isQuotaReached ? 'Doctor Daily Quota Reached' : 'Registration Notice',
+          message: msg,
+          actionLabel: canSwitchUrgent ? 'Switch to Urgent' : undefined,
+          onAction: canSwitchUrgent
+            ? () => {
+                setWalkinPriority('Urgent');
+              }
+            : undefined,
         });
       }
     } finally {
@@ -950,14 +978,22 @@ function DashboardContent() {
         return;
       }
       setCurrentPrescription((prev) =>
-        prev.map((p) => (String(p.med.id) === String(med.id) ? { ...p, qty: p.qty + qtyNum } : p))
+        prev.map((p) =>
+          String(p.med.id) === String(med.id)
+            ? { ...p, qty: p.qty + qtyNum, dosage: rxDosage.trim() || p.dosage }
+            : p
+        )
       );
     } else {
-      setCurrentPrescription((prev) => [...prev, { med, qty: qtyNum }]);
+      setCurrentPrescription((prev) => [
+        ...prev,
+        { med, qty: qtyNum, dosage: rxDosage.trim() || undefined },
+      ]);
     }
 
     setSelectedMedId('');
     setRxQty('');
+    setRxDosage('');
   };
 
   const removeRx = (index: number) => {
@@ -1004,6 +1040,13 @@ function DashboardContent() {
       patientName: activePatient.name,
       patientPhone: activePatient.phone,
       demographics: `${activePatient.age} Yrs / ${activePatient.gender}`,
+      patientAge: activePatient.age,
+      patientGender: activePatient.gender,
+      tokenNumber:
+        activePatient.tokenNumber ||
+        activePatient.displayId ||
+        activePatient.patientNumber ||
+        `P${activePatient.queueTokenNo || ''}`,
       diagnostics: diagnosticNotes || 'Clinical examination normal. Prescription issued.',
       items: [...currentPrescription],
     });
@@ -1152,31 +1195,6 @@ function DashboardContent() {
             }`}
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
-          <style jsx global>{`
-            @media print {
-              body * {
-                visibility: hidden;
-              }
-              #print-modal,
-              #print-modal * {
-                visibility: visible;
-              }
-              #print-modal {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
-                height: 100%;
-                background: white !important;
-                z-index: 9999;
-                padding: 30px;
-              }
-              .no-print {
-                display: none !important;
-              }
-            }
-          `}</style>
-
           {!isMobile && (
             <SideMenu
               isOpen={isSidebarOpen}
@@ -1373,6 +1391,8 @@ function DashboardContent() {
                     setSelectedMedId={setSelectedMedId}
                     rxQty={rxQty}
                     setRxQty={setRxQty}
+                    rxDosage={rxDosage}
+                    setRxDosage={setRxDosage}
                     inventory={inventory}
                     currentPrescription={currentPrescription}
                     onAddMedicineToRx={addMedicineToRx}
@@ -1450,6 +1470,8 @@ function DashboardContent() {
             setWalkinAge={setWalkinAge}
             walkinGender={walkinGender}
             setWalkinGender={setWalkinGender}
+            walkinPriority={walkinPriority}
+            setWalkinPriority={setWalkinPriority}
             onSubmit={handleRegisterWalkin}
             isSubmitting={isWalkinSubmitting}
           />

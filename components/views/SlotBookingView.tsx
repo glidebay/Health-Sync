@@ -17,6 +17,7 @@ import {
   Ticket,
   Printer,
   Phone,
+  MapPin,
   ChevronDown,
   X,
   Calendar,
@@ -438,17 +439,9 @@ export function SlotBookingView({
     ? Number(config.max_advance_booking_days)
     : 14;
 
-  const maxAllowedDate = useMemo(() => {
-    const now = new Date();
-    const maxD = new Date(now.getFullYear(), now.getMonth(), now.getDate() + Math.max(1, maxAdvanceBookingDays) - 1);
-    const y = maxD.getFullYear();
-    const m = String(maxD.getMonth() + 1).padStart(2, '0');
-    const d = String(maxD.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }, [maxAdvanceBookingDays]);
-
+  const [maxAllowedDate, setMaxAllowedDate] = useState<string>('');
   const [pickerMode, setPickerMode] = useState<'grid' | 'standard'>('grid');
-  const [standardDate, setStandardDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [standardDate, setStandardDate] = useState<string>('');
   const [standardTime, setStandardTime] = useState('09:30');
 
   useEffect(() => {
@@ -484,6 +477,13 @@ export function SlotBookingView({
     const now = new Date();
     const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     setTodayMinDate(ymd);
+    setStandardDate(ymd);
+
+    const maxD = new Date(now.getFullYear(), now.getMonth(), now.getDate() + Math.max(1, maxAdvanceBookingDays) - 1);
+    const maxY = maxD.getFullYear();
+    const maxM = String(maxD.getMonth() + 1).padStart(2, '0');
+    const maxDay = String(maxD.getDate()).padStart(2, '0');
+    setMaxAllowedDate(`${maxY}-${maxM}-${maxDay}`);
 
     const targetDate = bookDate || internalDate || ymd;
     if (!bookDate && !internalDate) {
@@ -568,15 +568,16 @@ export function SlotBookingView({
   }, [confirmedToken, loadDoctorSlots]);
 
   const currentSlots = useMemo(() => {
+    if (!activeDate) return [];
     if (slots.length > 0) {
-      if (activeDate && activeDate === todayMinDate) {
+      if (activeDate === todayMinDate) {
         const upcoming = slots.filter((slot) => !slot.isPast);
         return upcoming.length > 0 ? upcoming : slots;
       }
       return slots;
     }
     const fallback = generateDailySlots(slotsSummary.dailyQuota || 10, 15, activeDate);
-    if (activeDate && activeDate === todayMinDate) {
+    if (activeDate === todayMinDate) {
       const upcomingFallback = fallback.filter((slot) => !slot.isPast);
       return upcomingFallback.length > 0 ? upcomingFallback : fallback;
     }
@@ -667,6 +668,28 @@ export function SlotBookingView({
             <p className="text-xs sm:text-sm text-[#8A909D] mb-5">Present this token at reception or clinical waiting lounge</p>
 
             <div className="bg-[#F8F9FB] rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] max-w-md mx-auto mb-5 text-left">
+              {/* Clinic Header on Slip */}
+              <div className="flex items-center gap-2.5 pb-3.5 mb-3.5 border-b border-[#ECEEF2]">
+                {config?.logo_url ? (
+                  <div className="w-8 h-8 rounded-lg border border-[#ECEEF2] bg-white overflow-hidden flex items-center justify-center p-0.5 flex-shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={config.logo_url} alt={config.clinic_name || 'Clinic Logo'} className="w-full h-full object-contain" />
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB] flex-shrink-0">
+                    <HeartPulse className="w-4 h-4 stroke-[2.2]" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-xs font-bold text-[#16191E] truncate">
+                    {config?.clinic_name || 'HealthSync Clinic'}
+                  </h4>
+                  <p className="text-[10px] text-[#8A909D] truncate">
+                    {[config?.clinic_address, config?.clinic_phone].filter(Boolean).join(' • ')}
+                  </p>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between pb-3.5 border-b border-[#ECEEF2]">
                 <div>
                   <span className="text-[10px] sm:text-[11px] font-bold text-[#8A909D] uppercase tracking-wider block">OPD Token Number</span>
@@ -757,20 +780,14 @@ export function SlotBookingView({
             className="bg-white rounded-2xl sm:rounded-3xl border border-[#ECEEF2] p-4 sm:p-7 lg:p-8 shadow-sm space-y-4 sm:space-y-6 relative overflow-hidden"
           >
             <EcgActionLoader isLoading={isBookingSubmitting} text="Confirming consultation booking..." />
-            <div className="flex items-center justify-between pb-3.5 sm:pb-5 border-b border-[#ECEEF2]">
-              <div>
-                <h2 className="text-base sm:text-xl font-bold text-[#16191E]">Book a Consultation Slot</h2>
-                <p className="text-xs sm:text-sm text-[#8A909D] mt-0.5">
-                  Select consultation date, time slot & register patient details
-                </p>
-              </div>
-              <motion.div
-                whileHover={{ rotate: 12, scale: 1.08 }}
-                transition={{ type: 'spring', damping: 15 }}
-                className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB] shadow-2xs flex-shrink-0 ml-2"
-              >
-                <CalendarPlus className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.2]" />
-              </motion.div>
+            <div className="text-center pb-4 sm:pb-5 border-b border-[#ECEEF2]">
+
+              <h2 className="text-lg sm:text-2xl font-bold text-[#16191E] tracking-tight">
+                Book a Consultation Slot
+              </h2>
+              <p className="text-xs sm:text-sm text-[#8A909D] mt-1 max-w-md mx-auto">
+                Select your preferred date, available time slot & register patient details
+              </p>
             </div>
 
             <div className="space-y-2.5 sm:space-y-3">
@@ -1207,7 +1224,7 @@ export function SlotBookingView({
                 <span className="truncate">
                   {isBookingSubmitting
                     ? 'Allocating Slot...'
-                    : `Confirm & Book Slot (${currentDateOption?.shortLabel || 'Today'}) • Token P${String(queue.length + 1).padStart(3, '0')}`}
+                    : `Confirm & Book Slot - ${currentDateOption?.shortLabel || 'Selected Date'}`}
                 </span>
               </motion.button>
             </div>
@@ -1228,20 +1245,49 @@ export function SlotBookingView({
         style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
       >
         <header className="bg-white border-b border-[#ECEEF2] px-3.5 sm:px-8 py-2.5 sm:py-3.5 flex items-center justify-between sticky top-0 z-30">
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB] shadow-2xs flex-shrink-0">
-              <HeartPulse className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.2]" />
-            </div>
-            <div>
+          <div className="flex items-center space-x-2.5 sm:space-x-3.5 min-w-0">
+            {config?.logo_url ? (
+              <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl border border-[#ECEEF2] bg-white overflow-hidden flex items-center justify-center p-1 shadow-2xs flex-shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={config.logo_url}
+                  alt={config.clinic_name || 'Clinic Logo'}
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            ) : (
+              <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB] shadow-2xs flex-shrink-0">
+                <HeartPulse className="w-5 h-5 stroke-[2.2]" />
+              </div>
+            )}
+            <div className="min-w-0">
               <div className="flex items-center space-x-1.5 sm:space-x-2">
-                <span className="text-sm sm:text-lg font-bold text-[#16191E]">HealthSync</span>
-                <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-blue-50 text-[9px] sm:text-[10px] font-bold text-[#2563EB] tracking-wide uppercase">
+                <span className="text-sm sm:text-lg font-bold text-[#16191E] truncate">
+                  {config?.clinic_name || 'HealthSync Clinic'}
+                </span>
+                <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-blue-50 text-[9px] sm:text-[10px] font-bold text-[#2563EB] tracking-wide uppercase flex-shrink-0">
                   Slot Booking
                 </span>
               </div>
-              <p className="text-[11px] text-[#8A909D] font-medium hidden sm:block">
-                Live OPD Consultation Scheduling & Instant Token Assignment
-              </p>
+              <div className="flex items-center gap-2 sm:gap-3 text-[11px] text-[#8A909D] font-medium flex-wrap mt-0.5">
+                {config?.clinic_address && (
+                  <span className="flex items-center gap-1 truncate max-w-[220px] sm:max-w-none">
+                    <MapPin className="w-3 h-3 text-[#2563EB] flex-shrink-0" />
+                    <span className="truncate">{config.clinic_address}</span>
+                  </span>
+                )}
+                {config?.clinic_phone && (
+                  <span className="flex items-center gap-1 flex-shrink-0">
+                    <Phone className="w-3 h-3 text-[#2563EB]" />
+                    <span>{config.clinic_phone}</span>
+                  </span>
+                )}
+                {!config?.clinic_address && !config?.clinic_phone && (
+                  <span className="hidden sm:inline">
+                    Live OPD Consultation Scheduling & Instant Token Assignment
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 

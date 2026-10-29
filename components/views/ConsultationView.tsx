@@ -15,6 +15,8 @@ interface ConsultationViewProps {
   setSelectedMedId: (v: string) => void;
   rxQty: string;
   setRxQty: (v: string) => void;
+  rxDosage?: string;
+  setRxDosage?: (v: string) => void;
   inventory: InventoryItem[];
   currentPrescription: PrescriptionItem[];
   onAddMedicineToRx: () => void;
@@ -31,6 +33,8 @@ export function ConsultationView({
   setSelectedMedId,
   rxQty,
   setRxQty,
+  rxDosage = '',
+  setRxDosage,
   inventory,
   currentPrescription,
   onAddMedicineToRx,
@@ -112,40 +116,78 @@ export function ConsultationView({
               </h3>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 mb-5">
-              <MedicineSearchCombobox
-                inventory={inventory}
-                selectedMedId={selectedMedId}
-                onSelectMedId={setSelectedMedId}
-                onSelectAndFocusQty={() => qtyInputRef.current?.focus()}
-              />
-
-              <div className="flex gap-2">
-                <input
-                  ref={qtyInputRef}
-                  type="number"
-                  placeholder="Qty"
-                  min="1"
-                  value={rxQty}
-                  onChange={(e) => setRxQty(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      onAddMedicineToRx();
-                    }
-                  }}
-                  className="w-24 p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300"
+            <div className="space-y-3 mb-5">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <MedicineSearchCombobox
+                  inventory={inventory}
+                  selectedMedId={selectedMedId}
+                  onSelectMedId={setSelectedMedId}
+                  onSelectAndFocusQty={() => qtyInputRef.current?.focus()}
                 />
 
-                <motion.button
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={onAddMedicineToRx}
-                  className="flex-1 sm:flex-initial bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold px-5 py-2.5 rounded-xl transition cursor-pointer whitespace-nowrap"
-                >
-                  Add to Rx
-                </motion.button>
+                <div className="flex gap-2">
+                  <input
+                    ref={qtyInputRef}
+                    type="number"
+                    placeholder="Qty"
+                    min="1"
+                    value={rxQty}
+                    onChange={(e) => setRxQty(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        onAddMedicineToRx();
+                      }
+                    }}
+                    className="w-20 p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300"
+                  />
+
+                  <input
+                    type="text"
+                    placeholder="Dosage (e.g. 1-0-1 after food)"
+                    value={rxDosage}
+                    onChange={(e) => setRxDosage?.(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        onAddMedicineToRx();
+                      }
+                    }}
+                    className="flex-1 min-w-[140px] p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300"
+                  />
+
+                  <motion.button
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
+                    onClick={onAddMedicineToRx}
+                    className="bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold px-5 py-2.5 rounded-xl transition cursor-pointer whitespace-nowrap"
+                  >
+                    Add to Rx
+                  </motion.button>
+                </div>
               </div>
+
+              {/* Quick Dosage Presets */}
+              {setRxDosage && (
+                <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-[11px] text-[#5E6470]">
+                  <span className="font-semibold text-gray-400 text-[10px] uppercase tracking-wider mr-1">Presets:</span>
+                  {['1-0-1', '1-1-1', '1-0-0', '0-0-1 (HS)', 'SOS (As needed)', 'After food', 'Before food'].map(
+                    (preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => {
+                          const nextVal = rxDosage ? `${rxDosage} • ${preset}` : preset;
+                          setRxDosage(nextVal);
+                        }}
+                        className="px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-blue-50 hover:text-[#2563EB] border border-gray-200/60 font-medium transition cursor-pointer flex-shrink-0"
+                      >
+                        +{preset}
+                      </button>
+                    )
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="border border-[#ECEEF2] rounded-xl p-3 sm:p-4 bg-[#F8F9FB] min-h-[100px]">
@@ -163,6 +205,11 @@ export function ConsultationView({
                       <div className="min-w-0 flex-1">
                         <span className="font-bold text-sm text-[#16191E] block truncate">{item.med.brand}</span>
                         <span className="text-[10px] text-[#8A909D] block truncate">{item.med.generic}</span>
+                        {item.dosage && (
+                          <span className="text-[11px] text-[#2563EB] font-medium block truncate mt-0.5">
+                            • {item.dosage}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
                         <span className="text-xs font-bold bg-[#F4F5F7] px-2.5 py-1 rounded-lg">
