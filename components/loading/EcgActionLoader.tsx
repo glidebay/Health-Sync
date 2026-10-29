@@ -126,8 +126,8 @@ export function EcgActionLoader({
           transition={{ duration: 0.16 }}
           className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-auto select-none ${
             transparent
-              ? 'bg-slate-900/20 backdrop-blur-[2.5px]'
-              : 'bg-white/90 backdrop-blur-md'
+              ? 'bg-white/60 backdrop-blur-[2px]'
+              : 'bg-white'
           }`}
           role="status"
           aria-live="polite"
@@ -149,7 +149,7 @@ export function EcgActionLoader({
         transition={{ duration: 0.16 }}
         className={`absolute inset-0 z-30 flex items-center justify-center rounded-[inherit] pointer-events-auto ${
           transparent
-            ? 'bg-slate-900/10 backdrop-blur-[2px]'
+            ? 'bg-white/60 backdrop-blur-[2px]'
             : 'bg-white'
         }`}
       >
