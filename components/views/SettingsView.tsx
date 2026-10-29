@@ -58,7 +58,7 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
   const [searchFilter, setSearchFilter] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const formData = useMemo(() => ({ ...config, ...edits }), [config, edits]);
 
@@ -93,17 +93,18 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
     setIsSaved(false);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (key: keyof AppConfig, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        handleFieldChange('logo_url', reader.result);
+        handleFieldChange(key, reader.result);
       }
     };
     reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const handleSave = async () => {
@@ -470,10 +471,12 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                     {meta.uiWidget === 'file' && (
                       <div className="space-y-3">
                         <input
-                          ref={fileInputRef}
+                          ref={(el) => {
+                            fileInputRefs.current[meta.key] = el;
+                          }}
                           type="file"
                           accept="image/*"
-                          onChange={handleFileUpload}
+                          onChange={(e) => handleFileUpload(meta.key, e)}
                           className="hidden"
                         />
 
@@ -483,22 +486,26 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={String(val)}
-                                alt="Clinic Logo"
+                                alt={meta.name}
                                 className="w-full h-full object-contain"
                               />
                             </div>
                             <div className="flex-1 min-w-0">
                               <span className="text-xs font-bold text-[#16191E] block truncate">
-                                Logo Uploaded
+                                {meta.key === 'prescription_page_url'
+                                  ? 'Prescription Page Uploaded'
+                                  : 'Logo Uploaded'}
                               </span>
                               <span className="text-[11px] text-[#8A909D]">
-                                Used on header & prescription prints
+                                {meta.key === 'prescription_page_url'
+                                  ? 'Used on prescription print layout & letterhead'
+                                  : 'Used on header & prescription prints'}
                               </span>
                             </div>
                             <div className="flex items-center space-x-1.5">
                               <button
                                 type="button"
-                                onClick={() => fileInputRef.current?.click()}
+                                onClick={() => fileInputRefs.current[meta.key]?.click()}
                                 className="px-3 py-1.5 bg-white border border-[#ECEEF2] hover:bg-gray-100 rounded-lg text-xs font-semibold text-[#16191E] transition cursor-pointer"
                               >
                                 Change
@@ -515,21 +522,26 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                           </div>
                         ) : (
                           <div
-                            onClick={() => fileInputRef.current?.click()}
+                            onClick={() => fileInputRefs.current[meta.key]?.click()}
                             className="border-2 border-dashed border-[#ECEEF2] hover:border-[#2563EB] rounded-xl p-4 text-center cursor-pointer transition-colors bg-[#F8F9FB] hover:bg-blue-50/20"
                           >
                             <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#2563EB] flex items-center justify-center mx-auto mb-2">
                               <Upload className="w-4 h-4 stroke-[2]" />
                             </div>
                             <span className="text-xs font-bold text-[#16191E] block">
-                              Choose Clinic Logo
+                              {meta.key === 'prescription_page_url'
+                                ? 'Choose Prescription Printed Page'
+                                : 'Choose Clinic Logo'}
                             </span>
                             <span className="text-[11px] text-[#8A909D] mt-0.5 block">
-                              PNG, JPG, SVG or WebP from your device
+                              {meta.key === 'prescription_page_url'
+                                ? 'PNG, JPG, SVG or WebP letterhead or prescription pad'
+                                : 'PNG, JPG, SVG or WebP from your device'}
                             </span>
                           </div>
                         )}
                       </div>
+
                     )}
                   </div>
                 </div>

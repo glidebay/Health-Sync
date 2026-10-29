@@ -25,6 +25,7 @@ INSERT INTO public.app_config (key, value, category, description) VALUES
   ('clinic_phone', '"+91 98765 43210"', 'Clinic Identity & Branding', 'Primary contact phone number displayed on patient receipts and WhatsApp communications.'),
   ('clinic_address', '"123 Main St, Kochi, Kerala"', 'Clinic Identity & Branding', 'Physical address printed on official prescription headers and patient receipts.'),
   ('logo_url', '"/assets/logo.png"', 'Clinic Identity & Branding', 'File upload or asset URL for rendering the clinic logo on UI headers and PDFs.'),
+  ('prescription_page_url', '""', 'Clinic Identity & Branding', 'Upload pre-printed prescription pad, clinic letterhead, or custom printed page background for prescriptions.'),
   ('rx_footer_text', '"Get well soon! Contact clinic for emergencies."', 'Clinic Identity & Branding', 'Standard legal or health advisory notice printed at the bottom of physical prescriptions.'),
 
   -- 2. Doctor & Quota Controls

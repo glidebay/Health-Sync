@@ -3,6 +3,7 @@ export interface AppConfig {
   clinic_phone: string;
   clinic_address: string;
   logo_url: string;
+  prescription_page_url: string;
   rx_footer_text: string;
 
   daily_quota: number;
@@ -40,6 +41,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   clinic_phone: '+91 98765 43210',
   clinic_address: '123 Main St, Kochi, Kerala',
   logo_url: '/assets/logo.png',
+  prescription_page_url: '',
   rx_footer_text: 'Get well soon! Contact clinic for emergencies.',
 
   daily_quota: 30,
@@ -126,6 +128,16 @@ export const SETTINGS_METADATA: ParameterMetadata[] = [
     description: 'Upload clinic branding logo for receipts, headers, and prescriptions.',
     uiWidget: 'file',
     target: 'app_config.logo_url',
+    role: 'Admin',
+  },
+  {
+    key: 'prescription_page_url',
+    name: 'Prescription Printed Page Template',
+    category: 'Clinic Identity & Branding',
+    paramType: 'Functional Parameter',
+    description: 'Upload pre-printed prescription pad, clinic letterhead, or custom printed page background for prescriptions.',
+    uiWidget: 'file',
+    target: 'app_config.prescription_page_url',
     role: 'Admin',
   },
   {
