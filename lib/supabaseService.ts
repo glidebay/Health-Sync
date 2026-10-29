@@ -594,18 +594,26 @@ export async function fetchPatientAppointmentsFromDb(params?: {
   }
 }
 
+export type RegisterWalkinResult =
+  | (FormattedQueuePatient & { success: true; message?: string })
+  | { success: false; error: string; message: string; code?: string; patient?: undefined; id?: undefined };
+
 export async function registerWalkinPatientDb(params: {
   name: string;
   age: number;
   gender: string;
   phone?: string;
   priority?: 'Normal' | 'Urgent';
-}): Promise<FormattedQueuePatient | null> {
+}): Promise<RegisterWalkinResult> {
   try {
     const cleanName = params.name ? params.name.trim() : '';
     if (cleanName.length < 2) {
       console.error('Validation Error: Patient name must be at least 2 characters long.');
-      return null;
+      return {
+        success: false,
+        error: 'INVALID_PATIENT_NAME',
+        message: 'Patient name must be at least 2 characters long.',
+      };
     }
     const rawPhone = params.phone ? params.phone.trim() : '';
     const patientPhone = rawPhone.length > 0 ? rawPhone : `+91-WLK-${Date.now().toString().slice(-8)}`;
@@ -648,11 +656,17 @@ export async function registerWalkinPatientDb(params: {
         .single();
 
       if (patientError || !patientData) {
-        const errorMsg = patientError?.message?.includes('chk_patient_name_valid')
-          ? 'Patient name must be at least 2 characters long.'
-          : patientError?.message || 'Error creating patient';
+        let errorMsg = patientError?.message || 'Error creating patient';
+        if (errorMsg.includes('chk_patient_name_valid')) {
+          errorMsg = 'Patient name must be at least 2 characters long.';
+        }
         console.error('Error creating patient:', errorMsg);
-        return null;
+        return {
+          success: false,
+          error: patientError?.code || 'PATIENT_CREATION_FAILED',
+          message: errorMsg,
+          code: patientError?.code,
+        };
       }
       patientId = patientData.id;
       patientNumber = patientData.patient_number || undefined;
@@ -703,8 +717,14 @@ export async function registerWalkinPatientDb(params: {
       .single();
 
     if (apptError || !apptData) {
-      console.error('Error creating appointment:', apptError?.message || apptError);
-      return null;
+      const errorMsg = apptError?.message || 'Error creating appointment';
+      console.error('Error creating appointment:', errorMsg, apptError);
+      return {
+        success: false,
+        error: apptError?.code || 'APPOINTMENT_CREATION_FAILED',
+        message: errorMsg,
+        code: apptError?.code,
+      };
     }
 
     const timeStr = new Date(scheduledTime).toLocaleTimeString('en-US', {
@@ -715,10 +735,15 @@ export async function registerWalkinPatientDb(params: {
 
     if (!patientId) {
       console.error('Missing patient ID after registration');
-      return null;
+      return {
+        success: false,
+        error: 'MISSING_PATIENT_ID',
+        message: 'Missing patient ID after registration.',
+      };
     }
 
     return {
+      success: true,
       id: apptData.id,
       patientDbId: patientId,
       name: patientName,
@@ -735,9 +760,14 @@ export async function registerWalkinPatientDb(params: {
       scheduledTime,
       visitType: 'Walk-in',
     };
-  } catch (err) {
+  } catch (err: any) {
     console.error('Failed to register patient in DB:', err);
-    return null;
+    return {
+      success: false,
+      error: err?.code || 'EXCEPTION',
+      message: err?.message || 'Failed to register patient in database.',
+      code: err?.code,
+    };
   }
 }
 

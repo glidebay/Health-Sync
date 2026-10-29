@@ -682,6 +682,9 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
             onUpdateEnabled={(en) => handleFieldChange('rx_template_enabled', en)}
             onUpdatePrintBg={(bg) => handleFieldChange('rx_template_print_bg', bg)}
             onUpdateFields={(json) => handleFieldChange('rx_template_fields', json)}
+            onSaveImmediate={handleSave}
+            isSaving={isSaving}
+            isSaved={isSaved}
           />
         </motion.div>
       )}

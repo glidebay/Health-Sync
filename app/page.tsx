@@ -356,6 +356,7 @@ function DashboardContent() {
   const [walkinAge, setWalkinAge] = useState('');
   const [walkinPhone, setWalkinPhone] = useState('');
   const [walkinGender, setWalkinGender] = useState<'Male' | 'Female' | 'Other'>('Male');
+  const [walkinPriority, setWalkinPriority] = useState<'Normal' | 'Urgent'>('Normal');
 
   const [newGeneric, setNewGeneric] = useState('');
   const [newBrand, setNewBrand] = useState('');
@@ -568,16 +569,16 @@ function DashboardContent() {
     const ageNum = parseInt(walkinAge, 10);
     setIsWalkinSubmitting(true);
     try {
-      const dbPat = await registerWalkinPatientDb({
+      const res = await registerWalkinPatientDb({
         name: walkinName.trim(),
         age: ageNum,
         gender: walkinGender,
         phone: walkinPhone.trim(),
-        priority: 'Normal',
+        priority: walkinPriority,
       });
 
-      if (dbPat) {
-        setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, { ...dbPat, visitType: 'Walk-in' }]));
+      if (res && res.success) {
+        setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, { ...res, visitType: 'Walk-in' }]));
         fetchQueueFromDb().then((fresh) => {
           if (fresh && fresh.length > 0) {
             setQueue(sortQueueWithCompletedAtEnd(fresh));
@@ -587,12 +588,23 @@ function DashboardContent() {
         setWalkinAge('');
         setWalkinPhone('');
         setWalkinGender('Male');
+        setWalkinPriority('Normal');
         setShowWalkinModal(false);
       } else {
+        const msg = res?.message || 'Could not register walk-in patient.';
+        const isQuotaReached = msg.toLowerCase().includes('quota');
+        const canSwitchUrgent = msg.toLowerCase().includes('urgent');
+
         showNotification({
-          type: 'error',
-          title: 'Registration Notice',
-          message: 'Could not register walk-in patient. Please ensure patient name has at least 2 characters.',
+          type: isQuotaReached ? 'warning' : 'error',
+          title: isQuotaReached ? 'Doctor Daily Quota Reached' : 'Registration Notice',
+          message: msg,
+          actionLabel: canSwitchUrgent ? 'Switch to Urgent' : undefined,
+          onAction: canSwitchUrgent
+            ? () => {
+                setWalkinPriority('Urgent');
+              }
+            : undefined,
         });
       }
     } finally {
@@ -1183,31 +1195,6 @@ function DashboardContent() {
             }`}
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
-          <style jsx global>{`
-            @media print {
-              body * {
-                visibility: hidden;
-              }
-              #print-modal,
-              #print-modal * {
-                visibility: visible;
-              }
-              #print-modal {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
-                height: 100%;
-                background: white !important;
-                z-index: 9999;
-                padding: 30px;
-              }
-              .no-print {
-                display: none !important;
-              }
-            }
-          `}</style>
-
           {!isMobile && (
             <SideMenu
               isOpen={isSidebarOpen}
@@ -1483,6 +1470,8 @@ function DashboardContent() {
             setWalkinAge={setWalkinAge}
             walkinGender={walkinGender}
             setWalkinGender={setWalkinGender}
+            walkinPriority={walkinPriority}
+            setWalkinPriority={setWalkinPriority}
             onSubmit={handleRegisterWalkin}
             isSubmitting={isWalkinSubmitting}
           />

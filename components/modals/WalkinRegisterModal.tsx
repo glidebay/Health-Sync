@@ -17,6 +17,8 @@ interface WalkinRegisterModalProps {
   setWalkinAge: (v: string) => void;
   walkinGender: 'Male' | 'Female' | 'Other';
   setWalkinGender: (v: 'Male' | 'Female' | 'Other') => void;
+  walkinPriority?: 'Normal' | 'Urgent';
+  setWalkinPriority?: (v: 'Normal' | 'Urgent') => void;
   onSubmit: (e: React.FormEvent) => void;
   isSubmitting?: boolean;
 }
@@ -32,6 +34,8 @@ export function WalkinRegisterModal({
   setWalkinAge,
   walkinGender,
   setWalkinGender,
+  walkinPriority = 'Normal',
+  setWalkinPriority,
   onSubmit,
   isSubmitting = false,
 }: WalkinRegisterModalProps) {
@@ -165,6 +169,42 @@ export function WalkinRegisterModal({
                     <option value="Other">Other</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-[#8A909D] block mb-1">
+                  Consultation Priority
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setWalkinPriority?.('Normal')}
+                    className={`py-2 px-3 rounded-xl text-xs font-semibold border transition flex items-center justify-center space-x-1.5 cursor-pointer ${
+                      walkinPriority !== 'Urgent'
+                        ? 'bg-blue-50 border-[#2563EB] text-[#2563EB] shadow-2xs font-bold'
+                        : 'bg-[#F8F9FB] border-[#ECEEF2] text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span>Normal Queue</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWalkinPriority?.('Urgent')}
+                    className={`py-2 px-3 rounded-xl text-xs font-semibold border transition flex items-center justify-center space-x-1.5 cursor-pointer ${
+                      walkinPriority === 'Urgent'
+                        ? 'bg-red-50 border-red-500 text-red-600 shadow-2xs font-bold'
+                        : 'bg-[#F8F9FB] border-[#ECEEF2] text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    <span>Urgent (Quota Bypass)</span>
+                  </button>
+                </div>
+                {walkinPriority === 'Urgent' && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-1.5 leading-snug">
+                    ⚡ <strong>Urgent Triage:</strong> Authorized to bypass daily consultation quota for emergency care.
+                  </p>
+                )}
               </div>
 
               <motion.button

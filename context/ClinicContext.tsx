@@ -281,7 +281,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       priority,
     });
 
-    if (dbPat) {
+    if (dbPat && 'id' in dbPat && dbPat.id) {
       setPatients(prev => {
         const next = [...prev, { ...dbPat }];
         return next.sort((a, b) => {

@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Printer,
@@ -13,6 +14,7 @@ import {
   RxTemplateFields,
   DEFAULT_RX_TEMPLATE_FIELDS,
 } from '@/data/default-config';
+import { getAppConfigLocal } from '@/lib/supabaseService';
 
 interface PrescriptionPrintRecord {
   date: string;
@@ -33,6 +35,187 @@ interface PrescriptionPrintModalProps {
   doctorProfile: { name: string; title: string };
 }
 
+// Dedicated Isolated Iframe Print Function - 100% Reliable, Never Blank
+function printIsolatedPrescription(params: {
+  templateUrl: string;
+  printBg: boolean;
+  fields: RxTemplateFields;
+  printRecord: PrescriptionPrintRecord;
+  doctorProfile: { name: string; title: string };
+  ageDisplay: string;
+  genderDisplay: string;
+}) {
+  let iframe = document.getElementById('rx-isolated-print-frame') as HTMLIFrameElement;
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'rx-isolated-print-frame';
+    iframe.style.position = 'fixed';
+    iframe.style.top = '0';
+    iframe.style.left = '0';
+    iframe.style.width = '210mm';
+    iframe.style.height = '297mm';
+    iframe.style.border = 'none';
+    iframe.style.zIndex = '-99999';
+    iframe.style.opacity = '0.001';
+    iframe.style.pointerEvents = 'none';
+    document.body.appendChild(iframe);
+  }
+
+  const itemsHtml = (params.printRecord.items || [])
+    .map((p, idx) => {
+      const cleanDosage = p.dosage ? p.dosage.replace(/^\+\s*/, '') : '';
+      const sig = cleanDosage ? `<div style="font-size: 11px; color: #2563EB; font-weight: 600; padding-left: 12px; margin-top: 2px;">Sig: ${cleanDosage}</div>` : '';
+      const inst = p.instructions ? `<div style="font-size: 10px; color: #666; font-style: italic; padding-left: 12px;">${p.instructions}</div>` : '';
+      return `
+        <div style="margin-bottom: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <div>
+              <span style="font-weight: bold; color: #16191E;">${idx + 1}. ${p.med.brand}</span>
+              <span style="font-size: 11px; color: #555; text-transform: uppercase; margin-left: 6px;">(${p.med.generic})</span>
+            </div>
+            <span style="font-weight: bold; font-size: 12px; color: #16191E; white-space: nowrap;">Qty: ${p.qty}</span>
+          </div>
+          ${sig}
+          ${inst}
+        </div>
+      `;
+    })
+    .join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Prescription - ${params.printRecord.patientName}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 210mm;
+      height: 297mm;
+      background: white;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    .page-container {
+      position: relative;
+      width: 210mm;
+      height: 297mm;
+      overflow: hidden;
+      background: white;
+    }
+    .bg-image {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: fill;
+      display: block;
+      z-index: 0;
+    }
+    .field {
+      position: absolute;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    ${params.printBg && params.templateUrl ? `<img src="${params.templateUrl}" class="bg-image" />` : ''}
+    
+    ${params.fields.patientName?.visible !== false ? `
+      <div class="field" style="left: ${params.fields.patientName.x}%; top: ${params.fields.patientName.y}%; font-size: ${params.fields.patientName.fontSize || 13}px; font-weight: ${params.fields.patientName.fontWeight || 'bold'}; color: ${params.fields.patientName.color || '#16191E'}; text-align: ${params.fields.patientName.align || 'left'};">
+        ${params.printRecord.patientName}
+      </div>
+    ` : ''}
+
+    ${params.fields.patientAge?.visible !== false ? `
+      <div class="field" style="left: ${params.fields.patientAge.x}%; top: ${params.fields.patientAge.y}%; font-size: ${params.fields.patientAge.fontSize || 13}px; font-weight: ${params.fields.patientAge.fontWeight || 'bold'}; color: ${params.fields.patientAge.color || '#16191E'}; text-align: ${params.fields.patientAge.align || 'left'};">
+        ${params.ageDisplay}
+      </div>
+    ` : ''}
+
+    ${params.fields.patientGender?.visible !== false ? `
+      <div class="field" style="left: ${params.fields.patientGender.x}%; top: ${params.fields.patientGender.y}%; font-size: ${params.fields.patientGender.fontSize || 13}px; font-weight: ${params.fields.patientGender.fontWeight || 'bold'}; color: ${params.fields.patientGender.color || '#16191E'}; text-align: ${params.fields.patientGender.align || 'left'};">
+        ${params.genderDisplay === 'Male' ? 'Male [ ✓ ]' : params.genderDisplay === 'Female' ? 'Female [ ✓ ]' : params.genderDisplay}
+      </div>
+    ` : ''}
+
+    ${params.fields.patientPhone?.visible !== false && params.printRecord.patientPhone ? `
+      <div class="field" style="left: ${params.fields.patientPhone.x}%; top: ${params.fields.patientPhone.y}%; font-size: ${params.fields.patientPhone.fontSize || 12}px; font-weight: ${params.fields.patientPhone.fontWeight || 'medium'}; color: ${params.fields.patientPhone.color || '#16191E'}; text-align: ${params.fields.patientPhone.align || 'left'};">
+        ${params.printRecord.patientPhone}
+      </div>
+    ` : ''}
+
+    ${params.fields.tokenNumber?.visible !== false && params.printRecord.tokenNumber ? `
+      <div class="field" style="left: ${params.fields.tokenNumber.x}%; top: ${params.fields.tokenNumber.y}%; font-size: ${params.fields.tokenNumber.fontSize || 12}px; font-weight: ${params.fields.tokenNumber.fontWeight || 'bold'}; color: ${params.fields.tokenNumber.color || '#2563EB'}; text-align: ${params.fields.tokenNumber.align || 'right'}; text-transform: uppercase;">
+        Token: ${params.printRecord.tokenNumber}
+      </div>
+    ` : ''}
+
+    ${params.fields.diagnostics?.visible !== false && params.printRecord.diagnostics ? `
+      <div class="field" style="left: ${params.fields.diagnostics.x}%; top: ${params.fields.diagnostics.y}%; width: ${params.fields.diagnostics.width || 72}%; font-size: ${params.fields.diagnostics.fontSize || 12}px; font-weight: ${params.fields.diagnostics.fontWeight || 'normal'}; color: ${params.fields.diagnostics.color || '#16191E'}; text-align: ${params.fields.diagnostics.align || 'left'}; line-height: 1.5; word-break: break-word; white-space: pre-wrap;">
+        ${params.printRecord.diagnostics}
+      </div>
+    ` : ''}
+
+    ${params.fields.medications?.visible !== false ? `
+      <div class="field" style="left: ${params.fields.medications.x}%; top: ${params.fields.medications.y}%; width: ${params.fields.medications.width || 72}%; font-size: ${params.fields.medications.fontSize || 12}px; font-weight: ${params.fields.medications.fontWeight || 'normal'}; color: ${params.fields.medications.color || '#16191E'}; text-align: ${params.fields.medications.align || 'left'};">
+        ${itemsHtml || '<p style="font-style: italic; color: #888;">No medication prescribed during this visit.</p>'}
+      </div>
+    ` : ''}
+
+    ${params.fields.consultationDate?.visible !== false ? `
+      <div class="field" style="left: ${params.fields.consultationDate.x}%; top: ${params.fields.consultationDate.y}%; width: ${params.fields.consultationDate.width ? params.fields.consultationDate.width + '%' : 'auto'}; font-size: ${params.fields.consultationDate.fontSize || 12}px; font-weight: ${params.fields.consultationDate.fontWeight || 'bold'}; color: ${params.fields.consultationDate.color || '#16191E'}; text-align: ${params.fields.consultationDate.align || 'center'};">
+        ${params.printRecord.date}
+      </div>
+    ` : ''}
+
+    ${params.fields.doctorSignature?.visible !== false ? `
+      <div class="field" style="left: ${params.fields.doctorSignature.x}%; top: ${params.fields.doctorSignature.y}%; width: ${params.fields.doctorSignature.width ? params.fields.doctorSignature.width + '%' : 'auto'}; font-size: ${params.fields.doctorSignature.fontSize || 12}px; font-weight: ${params.fields.doctorSignature.fontWeight || 'semibold'}; color: ${params.fields.doctorSignature.color || '#16191E'}; text-align: ${params.fields.doctorSignature.align || 'center'};">
+        ${params.doctorProfile.name}
+      </div>
+    ` : ''}
+  </div>
+</body>
+</html>`;
+
+  const doc = iframe.contentWindow?.document || iframe.contentDocument;
+  if (!doc) {
+    window.print();
+    return;
+  }
+
+  doc.open();
+  doc.write(html);
+  doc.close();
+
+  const printWindow = iframe.contentWindow;
+  if (printWindow) {
+    const trigger = () => {
+      printWindow.focus();
+      printWindow.print();
+    };
+
+    const img = doc.querySelector('img');
+    if (img && !img.complete) {
+      img.onload = () => setTimeout(trigger, 80);
+      img.onerror = () => trigger();
+    } else {
+      setTimeout(trigger, 120);
+    }
+  }
+}
+
 export function PrescriptionPrintModal({
   isOpen,
   onClose,
@@ -40,8 +223,17 @@ export function PrescriptionPrintModal({
   doctorProfile,
 }: PrescriptionPrintModalProps) {
   const { config } = useClinic();
+  const [mounted, setMounted] = useState(false);
 
-  const hasCustomTemplate = Boolean(config?.rx_template_url);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Check local storage first for latest immediate calibrator edits
+  const localConfig = useMemo(() => getAppConfigLocal(), [isOpen]);
+
+  const activeTemplateUrl = config?.rx_template_url || localConfig?.rx_template_url || '';
+  const hasCustomTemplate = Boolean(activeTemplateUrl);
 
   const [printBackground, setPrintBackground] = useState<boolean>(() =>
     config?.rx_template_print_bg !== false
@@ -49,17 +241,18 @@ export function PrescriptionPrintModal({
 
   const parsedFields: RxTemplateFields = useMemo(() => {
     try {
-      if (config?.rx_template_fields) {
+      const raw = localConfig?.rx_template_fields || config?.rx_template_fields;
+      if (raw) {
         return {
           ...DEFAULT_RX_TEMPLATE_FIELDS,
-          ...JSON.parse(config.rx_template_fields),
+          ...JSON.parse(raw),
         };
       }
     } catch {
       // fallback
     }
     return DEFAULT_RX_TEMPLATE_FIELDS;
-  }, [config?.rx_template_fields]);
+  }, [config?.rx_template_fields, localConfig?.rx_template_fields]);
 
   // Derived patient demographics
   const ageDisplay = useMemo(() => {
@@ -81,15 +274,19 @@ export function PrescriptionPrintModal({
     return 'Male';
   }, [printRecord]);
 
-  if (!isOpen || !printRecord) return null;
+  const handlePrintClick = () => {
+    window.print();
+  };
 
-  return (
+  if (!isOpen || !printRecord || !mounted) return null;
+
+  const modalContent = (
     <AnimatePresence>
       <div
         id="print-modal-backdrop"
-        className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex flex-col overflow-y-auto p-2 sm:p-6"
+        className="fixed inset-0 bg-black/65 backdrop-blur-xs z-[999999] flex flex-col overflow-y-auto p-2 sm:p-6"
       >
-        <div className="max-w-4xl mx-auto w-full my-auto flex flex-col space-y-4">
+        <div className="max-w-2xl mx-auto w-full my-auto flex flex-col space-y-4">
           {/* Top Control Bar (Hidden on print) */}
           <div className="no-print bg-white rounded-2xl p-4 border border-[#ECEEF2] shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center space-x-3">
@@ -97,7 +294,7 @@ export function PrescriptionPrintModal({
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span>
                   {hasCustomTemplate
-                    ? 'Custom Clinic Prescription Pad'
+                    ? 'Prescription Ready to Print'
                     : 'Standard Consultation Slip'}
                 </span>
               </span>
@@ -110,7 +307,7 @@ export function PrescriptionPrintModal({
                     onChange={(e) => setPrintBackground(e.target.checked)}
                     className="rounded border-[#ECEEF2] text-[#2563EB] focus:ring-[#2563EB] w-4 h-4 cursor-pointer"
                   />
-                  <span>Print Template Background Graphic</span>
+                  <span>Print Template Background</span>
                 </label>
               )}
             </div>
@@ -119,7 +316,7 @@ export function PrescriptionPrintModal({
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={() => window.print()}
+                onClick={handlePrintClick}
                 className="bg-[#2563EB] hover:bg-blue-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer flex items-center space-x-2 shadow-sm"
               >
                 <Printer className="w-4 h-4" />
@@ -142,17 +339,17 @@ export function PrescriptionPrintModal({
             id="print-modal-content"
             className="w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200"
           >
-            {hasCustomTemplate && config?.rx_template_url ? (
-              /* Custom Prescription Pad Layout with Calibrated Coordinates */
+            {hasCustomTemplate ? (
+              /* Custom Prescription Pad Layout with Exact A4 Aspect Ratio (210 : 297) */
               <div
                 id="printable-prescription-pad"
-                className="relative w-full aspect-[1/1.414] min-h-[680px] sm:min-h-[900px] overflow-hidden select-none bg-white"
+                className="relative w-full max-w-xl mx-auto aspect-[210/297] bg-white overflow-hidden select-none"
               >
                 {/* Background Image rendered as <img> for 100% reliable physical print output */}
                 {printBackground && (
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img
-                    src={config.rx_template_url}
+                    src={activeTemplateUrl}
                     alt="Prescription Letterhead Background"
                     className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0"
                     style={{
@@ -259,7 +456,7 @@ export function PrescriptionPrintModal({
                       color: parsedFields.diagnostics.color || '#16191E',
                       textAlign: parsedFields.diagnostics.align || 'left',
                     }}
-                    className="absolute z-10 font-sans leading-relaxed"
+                    className="absolute z-10 font-sans leading-relaxed break-words whitespace-pre-wrap"
                   >
                     {printRecord.diagnostics}
                   </div>
@@ -277,35 +474,34 @@ export function PrescriptionPrintModal({
                       color: parsedFields.medications.color || '#16191E',
                       textAlign: parsedFields.medications.align || 'left',
                     }}
-                    className="absolute z-10 font-sans space-y-2.5"
+                    className="absolute z-10 font-sans space-y-2"
                   >
                     {printRecord.items && printRecord.items.length > 0 ? (
                       printRecord.items.map((p, idx) => (
-                        <div
-                          key={idx}
-                          className="flex justify-between items-baseline gap-2 pb-1.5 border-b border-gray-100/60"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <span className="font-bold">
-                              {idx + 1}. {p.med.brand}
-                            </span>
-                            <span className="text-[11px] text-[#5E6470] ml-1.5 uppercase">
-                              ({p.med.generic})
-                            </span>
-                            {p.dosage && (
-                              <span className="text-[11px] text-[#2563EB] font-medium block mt-0.5">
-                                • {p.dosage}
+                        <div key={idx} className="mb-2">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <span className="font-bold text-[#16191E]">
+                                {idx + 1}. {p.med.brand}
                               </span>
-                            )}
-                            {p.instructions && (
-                              <span className="text-[10px] text-gray-500 block italic">
-                                {p.instructions}
+                              <span className="text-[11px] text-[#5E6470] ml-1.5 uppercase font-medium">
+                                ({p.med.generic})
                               </span>
-                            )}
+                            </div>
+                            <span className="font-bold text-xs text-[#16191E] flex-shrink-0 whitespace-nowrap">
+                              Qty: {p.qty}
+                            </span>
                           </div>
-                          <span className="font-bold text-xs bg-gray-50/80 px-2 py-0.5 rounded border border-gray-100 flex-shrink-0">
-                            Qty: {p.qty}
-                          </span>
+                          {p.dosage && (
+                            <div className="text-[11px] text-[#2563EB] font-semibold pl-3 mt-0.5">
+                              Sig: {p.dosage.replace(/^\+\s*/, '')}
+                            </div>
+                          )}
+                          {p.instructions && (
+                            <div className="text-[10px] text-gray-500 italic pl-3">
+                              {p.instructions}
+                            </div>
+                          )}
                         </div>
                       ))
                     ) : (
@@ -332,7 +528,25 @@ export function PrescriptionPrintModal({
                   </div>
                 )}
 
-                {/* 9. Doctor's Signature */}
+                {/* 9. Doctor Name */}
+                {parsedFields.doctorName?.visible !== false && (
+                  <div
+                    style={{
+                      left: `${parsedFields.doctorName.x}%`,
+                      top: `${parsedFields.doctorName.y}%`,
+                      width: parsedFields.doctorName.width ? `${parsedFields.doctorName.width}%` : 'auto',
+                      fontSize: `${parsedFields.doctorName.fontSize || 12}px`,
+                      fontWeight: parsedFields.doctorName.fontWeight || 'bold',
+                      color: parsedFields.doctorName.color || '#16191E',
+                      textAlign: parsedFields.doctorName.align || 'center',
+                    }}
+                    className="absolute z-10 font-sans leading-normal"
+                  >
+                    {doctorProfile.name}
+                  </div>
+                )}
+
+                {/* 10. Doctor's Signature */}
                 {parsedFields.doctorSignature?.visible !== false && (
                   <div
                     style={{
@@ -344,7 +558,7 @@ export function PrescriptionPrintModal({
                       color: parsedFields.doctorSignature.color || '#16191E',
                       textAlign: parsedFields.doctorSignature.align || 'center',
                     }}
-                    className="absolute z-10 font-sans"
+                    className="absolute z-10 font-sans leading-normal"
                   >
                     {doctorProfile.name}
                   </div>
@@ -469,6 +683,8 @@ export function PrescriptionPrintModal({
       </div>
     </AnimatePresence>
   );
+
+  return createPortal(modalContent, document.body);
 }
 
 export default PrescriptionPrintModal;

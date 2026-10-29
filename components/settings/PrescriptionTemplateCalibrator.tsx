@@ -23,6 +23,7 @@ import {
   RxFieldCoord,
   DEFAULT_RX_TEMPLATE_FIELDS,
 } from '@/data/default-config';
+import { getAppConfigLocal, saveAppConfigLocal } from '@/lib/supabaseService';
 
 interface PrescriptionTemplateCalibratorProps {
   templateUrl: string;
@@ -33,6 +34,9 @@ interface PrescriptionTemplateCalibratorProps {
   onUpdateEnabled: (enabled: boolean) => void;
   onUpdatePrintBg: (printBg: boolean) => void;
   onUpdateFields: (fieldsJson: string) => void;
+  onSaveImmediate?: () => void;
+  isSaving?: boolean;
+  isSaved?: boolean;
 }
 
 type FieldKey = keyof RxTemplateFields;
@@ -99,6 +103,9 @@ export function PrescriptionTemplateCalibrator({
   onUpdateEnabled,
   onUpdatePrintBg,
   onUpdateFields,
+  onSaveImmediate,
+  isSaving,
+  isSaved,
 }: PrescriptionTemplateCalibratorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -128,7 +135,17 @@ export function PrescriptionTemplateCalibrator({
           ...updates,
         },
       };
-      onUpdateFields(JSON.stringify(nextFields));
+      const json = JSON.stringify(nextFields);
+      onUpdateFields(json);
+      try {
+        const local = getAppConfigLocal();
+        saveAppConfigLocal({
+          ...local,
+          rx_template_fields: json,
+        });
+      } catch {
+        // ignore
+      }
     },
     [fields, onUpdateFields]
   );
@@ -182,8 +199,19 @@ export function PrescriptionTemplateCalibrator({
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        onUpdateTemplate(reader.result);
+        const url = reader.result;
+        onUpdateTemplate(url);
         onUpdateEnabled(true);
+        try {
+          const local = getAppConfigLocal();
+          saveAppConfigLocal({
+            ...local,
+            rx_template_url: url,
+            rx_template_enabled: true,
+          });
+        } catch {
+          // ignore
+        }
       }
     };
     reader.readAsDataURL(file);
@@ -191,7 +219,17 @@ export function PrescriptionTemplateCalibrator({
 
   const handleResetFields = () => {
     if (window.confirm('Reset all field positions to the default layout coordinates?')) {
-      onUpdateFields(JSON.stringify(DEFAULT_RX_TEMPLATE_FIELDS));
+      const defaultStr = JSON.stringify(DEFAULT_RX_TEMPLATE_FIELDS);
+      onUpdateFields(defaultStr);
+      try {
+        const local = getAppConfigLocal();
+        saveAppConfigLocal({
+          ...local,
+          rx_template_fields: defaultStr,
+        });
+      } catch {
+        // ignore
+      }
     }
   };
 
@@ -277,11 +315,38 @@ export function PrescriptionTemplateCalibrator({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 bg-[#2563EB] hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-xs"
+            className="px-4 py-2 bg-white border border-[#ECEEF2] hover:bg-gray-50 text-gray-800 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-2xs"
           >
-            <Upload className="w-3.5 h-3.5" />
+            <Upload className="w-3.5 h-3.5 text-[#2563EB]" />
             <span>{templateUrl ? 'Replace Pad Image' : 'Upload Prescription Pad'}</span>
           </button>
+
+          {templateUrl && onSaveImmediate && (
+            <button
+              type="button"
+              onClick={onSaveImmediate}
+              disabled={isSaving}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer shadow-sm ${
+                isSaved
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-[#2563EB] hover:bg-blue-700 text-white'
+              }`}
+            >
+              {isSaving ? (
+                <span>Saving...</span>
+              ) : isSaved ? (
+                <>
+                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>Layout Saved!</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Save Prescription Layout</span>
+                </>
+              )}
+            </button>
+          )}
 
           {templateUrl && (
             <button
@@ -375,10 +440,10 @@ export function PrescriptionTemplateCalibrator({
               </button>
             </div>
 
-            {/* A4 Container (Aspect Ratio: 1 : 1.414) */}
+            {/* A4 Container (Exact Aspect Ratio: 210 : 297) */}
             <div
               ref={canvasRef}
-              className="relative w-full max-w-xl aspect-[1/1.414] bg-white rounded-2xl border-2 border-gray-300 shadow-xl overflow-hidden select-none"
+              className="relative w-full max-w-xl aspect-[210/297] bg-white rounded-2xl border-2 border-gray-300 shadow-xl overflow-hidden select-none"
             >
               {/* Background Image Element */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -409,15 +474,15 @@ export function PrescriptionTemplateCalibrator({
                       textAlign: coord.align || 'left',
                       color: coord.color || '#16191E',
                     }}
-                    className={`absolute cursor-move transition-all z-20 group p-1 rounded-md ${
+                    className={`absolute cursor-move transition-none z-20 group select-none ${
                       isSelected
-                        ? 'ring-2 ring-[#2563EB] bg-blue-500/15 shadow-md backdrop-blur-[1px]'
-                        : 'hover:ring-1 hover:ring-blue-400 hover:bg-blue-50/20'
+                        ? 'ring-2 ring-[#2563EB] bg-blue-500/15'
+                        : 'hover:ring-1 hover:ring-blue-400'
                     }`}
                   >
                     {/* Badge Pill for Field Identifier */}
                     <div
-                      className={`absolute -top-3 left-0 px-1.5 py-0.2 rounded text-[8px] font-bold tracking-tight whitespace-nowrap shadow-xs pointer-events-none ${
+                      className={`absolute -top-3.5 left-0 px-1 py-0.2 rounded text-[8px] font-bold tracking-tight whitespace-nowrap shadow-xs pointer-events-none ${
                         isSelected
                           ? 'bg-[#2563EB] text-white ring-1 ring-white'
                           : 'bg-gray-800/80 text-white opacity-0 group-hover:opacity-100 transition-opacity'
@@ -427,7 +492,7 @@ export function PrescriptionTemplateCalibrator({
                     </div>
 
                     {/* Live Sample Content */}
-                    <div className="leading-snug whitespace-pre-line pointer-events-none font-sans">
+                    <div className="leading-normal whitespace-pre-line pointer-events-none font-sans">
                       {fieldInfo.sample}
                     </div>
                   </div>
@@ -665,6 +730,33 @@ export function PrescriptionTemplateCalibrator({
                     </button>
                   </div>
                 </div>
+
+                {onSaveImmediate && (
+                  <button
+                    type="button"
+                    onClick={onSaveImmediate}
+                    disabled={isSaving}
+                    className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-sm mt-4 ${
+                      isSaved
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-[#2563EB] hover:bg-blue-700 text-white'
+                    }`}
+                  >
+                    {isSaving ? (
+                      <span>Saving Layout...</span>
+                    ) : isSaved ? (
+                      <>
+                        <Check className="w-4 h-4 stroke-[2.5]" />
+                        <span>Layout Saved Successfully!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Save Prescription Layout</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           </div>
