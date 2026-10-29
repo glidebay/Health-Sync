@@ -432,21 +432,59 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                     )}
 
                     {meta.uiWidget === 'select' && (
-                      <select
-                        value={String(val)}
-                        onChange={(e) => {
-                          const rawVal = e.target.value;
-                          const parsed = typeof DEFAULT_APP_CONFIG[meta.key] === 'number' ? Number(rawVal) : rawVal;
-                          handleFieldChange(meta.key, parsed);
-                        }}
-                        className="w-full px-3.5 py-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs font-semibold text-[#16191E] focus:outline-none focus:ring-1 focus:ring-[#2563EB] cursor-pointer"
-                      >
-                        {meta.options?.map((opt) => (
-                          <option key={String(opt)} value={String(opt)}>
-                            {String(opt)}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="space-y-2">
+                        <div className="relative flex items-center">
+                          <input
+                            type="text"
+                            list={`options-${meta.key}`}
+                            value={String(val ?? '')}
+                            onChange={(e) => {
+                              const rawVal = e.target.value;
+                              const isNumericDefault = typeof DEFAULT_APP_CONFIG[meta.key] === 'number';
+                              const parsed = isNumericDefault && rawVal !== '' && !isNaN(Number(rawVal))
+                                ? Number(rawVal)
+                                : rawVal;
+                              handleFieldChange(meta.key, parsed);
+                            }}
+                            placeholder={`Enter custom value or choose preset...`}
+                            className="w-full px-3.5 py-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs font-semibold text-[#16191E] placeholder-[#8A909D] focus:outline-none focus:ring-1 focus:ring-[#2563EB] focus:bg-white transition"
+                          />
+                          <datalist id={`options-${meta.key}`}>
+                            {meta.options?.map((opt) => (
+                              <option key={String(opt)} value={String(opt)} />
+                            ))}
+                          </datalist>
+                        </div>
+
+                        {/* Quick Presets as clickable suggestion tags */}
+                        {meta.options && meta.options.length > 0 && (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] text-[#8A909D] font-medium mr-1">Presets:</span>
+                            {meta.options.map((opt) => {
+                              const strOpt = String(opt);
+                              const isSelected = String(val) === strOpt;
+                              return (
+                                <button
+                                  key={strOpt}
+                                  type="button"
+                                  onClick={() => {
+                                    const isNumericDefault = typeof DEFAULT_APP_CONFIG[meta.key] === 'number';
+                                    const parsed = isNumericDefault && !isNaN(Number(opt)) ? Number(opt) : opt;
+                                    handleFieldChange(meta.key, parsed);
+                                  }}
+                                  className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition cursor-pointer border ${
+                                    isSelected
+                                      ? 'bg-blue-50 text-[#2563EB] border-blue-200 shadow-2xs font-bold'
+                                      : 'bg-white hover:bg-gray-100 text-[#8A909D] hover:text-[#16191E] border-[#ECEEF2]'
+                                  }`}
+                                >
+                                  {strOpt}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     {(meta.uiWidget === 'text' || meta.uiWidget === 'phone') && (

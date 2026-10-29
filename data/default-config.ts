@@ -11,7 +11,7 @@ export interface AppConfig {
   require_doctor_pin: boolean;
   pin_lock_timeout_mins: string;
 
-  queue_sort_order: 'Scheduled Time' | 'Arrival Order' | 'VIP First';
+  queue_sort_order: 'Scheduled Time' | 'Arrival Order' | 'VIP First' | string;
   late_grace_period_mins: number;
   auto_move_unattended: boolean;
   max_advance_booking_days: number;
@@ -31,8 +31,8 @@ export interface AppConfig {
 
   session_timeout_mins: number;
   enable_pwa_offline: boolean;
-  audit_log_level: 'Minimal' | 'Standard' | 'Detailed';
-  rls_enforce_mode: 'Strict' | 'Permissive';
+  audit_log_level: 'Minimal' | 'Standard' | 'Detailed' | string;
+  rls_enforce_mode: 'Strict' | 'Permissive' | string;
 }
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
