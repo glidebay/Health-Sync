@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 export interface EcgActionLoaderProps {
   isLoading?: boolean;
   text?: string;
+  showText?: boolean;
   size?: 'sm' | 'md' | 'lg';
   overlay?: boolean;
   fullscreen?: boolean;
@@ -17,21 +18,20 @@ export interface EcgActionLoaderProps {
 
 /**
  * EcgActionLoader
- * Clean, full-screen centered action loading indicator featuring the signature HealthSync
- * moving ECG heartbeat pulse animation over a transparent backdrop.
- *
- * Utilizes React Portal into `document.body` to guarantee 100% viewport coverage
- * unaffected by parent CSS transforms, overflow restrictions, or scroll positions.
+ * Clean, full-screen centered action loading indicator.
+ * Exclusively displays the moving ECG heartbeat pulse animation in the viewport center
+ * over a transparent backdrop, with all background boxes/capsules and text removed.
  */
 export function EcgActionLoader({
   isLoading = true,
   text,
+  showText = false,
   size = 'md',
   overlay = true,
   fullscreen = true,
   transparent = true,
   className = '',
-  badge = true,
+  badge = false,
 }: EcgActionLoaderProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -42,30 +42,22 @@ export function EcgActionLoader({
   if (!isLoading) return null;
 
   const dims = {
-    sm: { width: 64, height: 32, strokeWidth: 3.5, ring: 'w-14 h-14', padding: 'px-3.5 py-2' },
-    md: { width: 96, height: 48, strokeWidth: 4.5, ring: 'w-20 h-20', padding: 'px-5 py-3' },
-    lg: { width: 128, height: 64, strokeWidth: 5, ring: 'w-28 h-28', padding: 'px-7 py-4.5' },
+    sm: { width: 80, height: 40, strokeWidth: 4 },
+    md: { width: 120, height: 60, strokeWidth: 5 },
+    lg: { width: 160, height: 80, strokeWidth: 6 },
   }[size];
 
   const content = (
     <motion.div
-      initial={{ opacity: 0, scale: 0.92, y: 4 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.92, y: 4 }}
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
-      className={`flex flex-col items-center justify-center p-4 text-center select-none ${className}`}
+      className={`flex flex-col items-center justify-center select-none ${className}`}
     >
       <div className="relative flex items-center justify-center">
-        {/* Soft pulsing heartbeat ring */}
-        <div
-          className={`absolute rounded-full border border-blue-400/35 animate-pulse-ring pointer-events-none ${dims.ring}`}
-        />
-
-        {/* Translucent glass capsule */}
         {badge ? (
-          <div
-            className={`relative rounded-2xl bg-white/95 backdrop-blur-md border border-blue-100 shadow-[0_12px_40px_rgba(37,99,235,0.18)] flex items-center justify-center ${dims.padding}`}
-          >
+          <div className="relative rounded-2xl bg-white/95 backdrop-blur-md border border-blue-100 shadow-[0_12px_40px_rgba(37,99,235,0.18)] flex items-center justify-center px-5 py-3">
             <svg
               className="text-[#2563EB] animate-ecg-glow overflow-visible"
               style={{ width: dims.width, height: dims.height }}
@@ -73,15 +65,6 @@ export function EcgActionLoader({
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >
-              {/* Ghost track */}
-              <path
-                d="M10 40 H45 L55 22 L65 58 L75 10 L88 70 L98 32 L106 44 L114 40 H150"
-                stroke="rgba(37, 99, 235, 0.2)"
-                strokeWidth={dims.strokeWidth}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              {/* Animated pulsating blue heartbeat trace */}
               <path
                 d="M10 40 H45 L55 22 L65 58 L75 10 L88 70 L98 32 L106 44 L114 40 H150"
                 stroke="#2563EB"
@@ -102,13 +85,6 @@ export function EcgActionLoader({
           >
             <path
               d="M10 40 H45 L55 22 L65 58 L75 10 L88 70 L98 32 L106 44 L114 40 H150"
-              stroke="rgba(37, 99, 235, 0.2)"
-              strokeWidth={dims.strokeWidth}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M10 40 H45 L55 22 L65 58 L75 10 L88 70 L98 32 L106 44 L114 40 H150"
               stroke="#2563EB"
               strokeWidth={dims.strokeWidth}
               strokeLinecap="round"
@@ -119,7 +95,7 @@ export function EcgActionLoader({
         )}
       </div>
 
-      {text && (
+      {showText && text && (
         <motion.div
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
