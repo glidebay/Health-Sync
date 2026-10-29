@@ -546,18 +546,10 @@ const loadThreads = useCallback(async (silent: boolean = false) => {
                               Urgent
                             </span>
                           )}
-                          {activeThread.status === 'booked' && (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                              Booked #{formatPatientToken({ tokenNumber: activeThread.tokenNumber })}
-                            </span>
-                          )}
                         </div>
                         <span className="text-[11px] text-[#8A909D] flex items-center gap-1">
                           <Phone className="w-3 h-3" />
                           <span>{activeThread.phoneNumber}</span>
-                          {activeThread.requestedSlot && (
-                            <span>• Wants {activeThread.requestedSlot}</span>
-                          )}
                         </span>
                       </div>
                     </div>
