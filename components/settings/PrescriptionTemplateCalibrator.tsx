@@ -1,20 +1,22 @@
 'use client';
 
-import React, { useState, useRef, useMemo, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import {
   Upload,
   RotateCcw,
-  Printer,
-  Sparkles,
   Move,
   Eye,
   EyeOff,
   Sliders,
-  CheckCircle2,
   Trash2,
   FileImage,
-  Info,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  Keyboard,
+  Check,
 } from 'lucide-react';
 import {
   RxTemplateFields,
@@ -39,52 +41,52 @@ const FIELD_LABELS: Record<FieldKey, { label: string; sample: string; hint: stri
   patientName: {
     label: 'Patient Name',
     sample: 'Praveen John',
-    hint: 'Placed after "Name:" label',
+    hint: 'Position beside "Name:" or patient header',
   },
   patientAge: {
     label: 'Patient Age',
     sample: '29 Yrs',
-    hint: 'Placed after "Age:" label',
+    hint: 'Position beside "Age:" field',
   },
   patientGender: {
     label: 'Gender / Sex',
     sample: 'Male [✓]',
-    hint: 'Checkmark or text for M / F',
+    hint: 'Position beside "Sex:" or demographic box',
   },
   patientPhone: {
-    label: 'Phone / Contact',
+    label: 'Phone Number',
     sample: '+91 98765 43210',
-    hint: 'Contact number for pharmacy/OPD',
+    hint: 'Position for patient contact number',
   },
   tokenNumber: {
-    label: 'OPD Token No',
+    label: 'Queue Token No',
     sample: 'Token: P001',
-    hint: 'Live queue token identifier',
+    hint: 'Position for consultation token ID',
   },
   consultationDate: {
     label: 'Consultation Date',
     sample: '29 Oct 2026',
-    hint: 'Above the "DATE" line',
+    hint: 'Position above or beside "DATE" line',
   },
   diagnostics: {
-    label: 'Diagnosis / Advice (Adv)',
-    sample: 'Mild gingival inflammation. Advised warm saline gargle & oral hygiene.',
-    hint: 'Complaints, clinical findings or "Adv:" notes',
+    label: 'Diagnostics / Notes (Adv)',
+    sample: 'Clinical examination normal. Advised rest & oral hydration.',
+    hint: 'Position beside "Adv:" or clinical findings area',
   },
   medications: {
     label: 'Prescription (Rx Medicines)',
-    sample: '1. Amoxicillin 500mg — Qty: 15 (1-0-1 after food)\n2. Ibuprofen 400mg — Qty: 10 (1-0-1 SOS for pain)\n3. Chlorhexidine Mouthwash — Qty: 1 (10ml twice daily)',
-    hint: 'Central body for prescribed medicine list & dosages',
+    sample: '1. Paracetamol 650mg — Qty: 10 (1-0-1 after meals)\n2. Cetirizine 10mg — Qty: 5 (0-0-1 at bedtime)\n3. Multivitamin Zinc — Qty: 15 (1-0-0 with breakfast)',
+    hint: 'Position in the main body area for prescribed medicines & dosages',
   },
   doctorName: {
     label: 'Doctor Name',
     sample: 'Dr. Sunny, MBBS, MD',
-    hint: 'Name above signature or header',
+    hint: 'Doctor name for signature block',
   },
   doctorSignature: {
     label: 'Doctor Signature',
     sample: 'Dr. Sunny (Authorized Signatory)',
-    hint: 'Above the "SIGNATURE" line',
+    hint: 'Position above "SIGNATURE" line',
   },
 };
 
@@ -131,6 +133,48 @@ export function PrescriptionTemplateCalibrator({
     [fields, onUpdateFields]
   );
 
+  // Arrow Keys Navigation to Nudge Active Field
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = (document.activeElement?.tagName || '').toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') {
+        return;
+      }
+
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        const step = e.shiftKey ? 1.0 : 0.2; // Shift gives larger steps, normal gives fine 0.2% steps
+        const currentCoord = fields[activeField] || DEFAULT_RX_TEMPLATE_FIELDS[activeField];
+        let newX = currentCoord.x;
+        let newY = currentCoord.y;
+
+        if (e.key === 'ArrowLeft') newX = Math.max(0, Math.min(95, newX - step));
+        if (e.key === 'ArrowRight') newX = Math.max(0, Math.min(95, newX + step));
+        if (e.key === 'ArrowUp') newY = Math.max(0, Math.min(95, newY - step));
+        if (e.key === 'ArrowDown') newY = Math.max(0, Math.min(95, newY + step));
+
+        updateSingleField(activeField, {
+          x: Math.round(newX * 10) / 10,
+          y: Math.round(newY * 10) / 10,
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeField, fields, updateSingleField]);
+
+  // Nudge Helper Function
+  const nudgeActiveField = (dx: number, dy: number) => {
+    const currentCoord = fields[activeField] || DEFAULT_RX_TEMPLATE_FIELDS[activeField];
+    const newX = Math.max(0, Math.min(95, currentCoord.x + dx));
+    const newY = Math.max(0, Math.min(95, currentCoord.y + dy));
+    updateSingleField(activeField, {
+      x: Math.round(newX * 10) / 10,
+      y: Math.round(newY * 10) / 10,
+    });
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -145,18 +189,13 @@ export function PrescriptionTemplateCalibrator({
     reader.readAsDataURL(file);
   };
 
-  const handleLoadSample = () => {
-    onUpdateTemplate('/images/sample-prescription-template.jpg');
-    onUpdateEnabled(true);
-    onUpdateFields(JSON.stringify(DEFAULT_RX_TEMPLATE_FIELDS));
-  };
-
   const handleResetFields = () => {
-    if (window.confirm('Reset all field positions to the standard prescription pad layout?')) {
+    if (window.confirm('Reset all field positions to the default layout coordinates?')) {
       onUpdateFields(JSON.stringify(DEFAULT_RX_TEMPLATE_FIELDS));
     }
   };
 
+  // Smooth Dragging with Cursor Offset to Prevent Jumping
   const handlePointerDown = (key: FieldKey, e: React.PointerEvent) => {
     e.stopPropagation();
     setActiveField(key);
@@ -167,10 +206,22 @@ export function PrescriptionTemplateCalibrator({
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
+    const currentCoord = fields[key] || DEFAULT_RX_TEMPLATE_FIELDS[key];
+
+    // Calculate current element position in pixels relative to canvas
+    const initialElemLeftPx = (currentCoord.x / 100) * rect.width;
+    const initialElemTopPx = (currentCoord.y / 100) * rect.height;
+
+    // Offset of cursor relative to element's top-left corner
+    const cursorOffsetX = e.clientX - (rect.left + initialElemLeftPx);
+    const cursorOffsetY = e.clientY - (rect.top + initialElemTopPx);
 
     const onPointerMove = (moveEvt: PointerEvent) => {
-      const xPercent = Math.max(0, Math.min(95, ((moveEvt.clientX - rect.left) / rect.width) * 100));
-      const yPercent = Math.max(0, Math.min(95, ((moveEvt.clientY - rect.top) / rect.height) * 100));
+      const newLeftPx = moveEvt.clientX - rect.left - cursorOffsetX;
+      const newTopPx = moveEvt.clientY - rect.top - cursorOffsetY;
+
+      const xPercent = Math.max(0, Math.min(95, (newLeftPx / rect.width) * 100));
+      const yPercent = Math.max(0, Math.min(95, (newTopPx / rect.height) * 100));
 
       updateSingleField(key, {
         x: Math.round(xPercent * 10) / 10,
@@ -193,7 +244,7 @@ export function PrescriptionTemplateCalibrator({
 
   return (
     <div className="space-y-6">
-      {/* Top Banner & Quick Controls */}
+      {/* Top Banner & Upload Controls */}
       <div className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2.5">
@@ -209,8 +260,8 @@ export function PrescriptionTemplateCalibrator({
             </span>
           </div>
           <p className="text-xs text-[#8A909D] mt-1 max-w-xl">
-            Upload any clinic letterhead or prescription pad design. Calibrate where patient name, age, phone, date,
-            diagnostics, and prescribed medicines print on the page.
+            Upload your clinic's custom prescription pad or letterhead image. Drag or use arrow keys to calibrate where
+            patient details and prescribed medicines print on the page.
           </p>
         </div>
 
@@ -226,20 +277,10 @@ export function PrescriptionTemplateCalibrator({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="px-3.5 py-2 bg-[#2563EB] hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-xs"
+            className="px-4 py-2 bg-[#2563EB] hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-xs"
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>Upload New Pad</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleLoadSample}
-            className="px-3.5 py-2 bg-white border border-[#ECEEF2] hover:bg-blue-50/50 hover:border-blue-200 text-xs font-semibold text-[#16191E] rounded-xl flex items-center space-x-1.5 transition cursor-pointer shadow-2xs"
-            title="Load sample Dental Clinic prescription pad design"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#2563EB]" />
-            <span>Load Dental Pad Sample</span>
+            <span>{templateUrl ? 'Replace Pad Image' : 'Upload Prescription Pad'}</span>
           </button>
 
           {templateUrl && (
@@ -260,14 +301,14 @@ export function PrescriptionTemplateCalibrator({
         </div>
       </div>
 
-      {/* Switches & Settings */}
+      {/* Switches & Print Options */}
       {templateUrl && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex items-center justify-between p-4 rounded-xl bg-white border border-[#ECEEF2] shadow-xs">
             <div>
               <span className="text-xs font-bold text-[#16191E] block">Enable Custom Prescription Template</span>
               <span className="text-[11px] text-[#8A909D] block mt-0.5">
-                Automatically formats consultation prints onto this custom template
+                Automatically formats all consultation prints onto this uploaded template
               </span>
             </div>
             <button
@@ -290,8 +331,8 @@ export function PrescriptionTemplateCalibrator({
               <span className="text-xs font-bold text-[#16191E] block">Print Background Graphic</span>
               <span className="text-[11px] text-[#8A909D] block mt-0.5">
                 {printBg
-                  ? 'Printing graphic background (for blank paper)'
-                  : 'Transparent background (for physical pre-printed pad stationery in printer)'}
+                  ? 'Prints background image (recommended for blank paper)'
+                  : 'Transparent background (for physical pre-printed pad paper in printer)'}
               </span>
             </div>
             <button
@@ -319,8 +360,10 @@ export function PrescriptionTemplateCalibrator({
             <div className="w-full flex items-center justify-between pb-2 mb-2 text-xs text-[#5E6470]">
               <div className="flex items-center space-x-1.5 font-bold text-[#16191E]">
                 <Move className="w-4 h-4 text-[#2563EB]" />
-                <span>Visual Interactive Calibrator</span>
-                <span className="text-[10px] text-[#8A909D] font-normal">(Drag markers directly on pad to reposition)</span>
+                <span>Interactive Pad View</span>
+                <span className="hidden sm:inline text-[10px] text-[#8A909D] font-normal">
+                  (Drag markers or use Arrow keys ↑ ↓ ← → to position)
+                </span>
               </div>
               <button
                 type="button"
@@ -328,7 +371,7 @@ export function PrescriptionTemplateCalibrator({
                 className="text-[11px] font-semibold text-gray-500 hover:text-[#2563EB] flex items-center space-x-1 transition cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" />
-                <span>Reset to Default</span>
+                <span>Reset Coordinates</span>
               </button>
             </div>
 
@@ -336,13 +379,15 @@ export function PrescriptionTemplateCalibrator({
             <div
               ref={canvasRef}
               className="relative w-full max-w-xl aspect-[1/1.414] bg-white rounded-2xl border-2 border-gray-300 shadow-xl overflow-hidden select-none"
-              style={{
-                backgroundImage: `url(${templateUrl})`,
-                backgroundSize: '100% 100%',
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'center',
-              }}
             >
+              {/* Background Image Element */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={templateUrl}
+                alt="Prescription Template Background"
+                className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0"
+              />
+
               {/* Overlay Fields */}
               {(Object.keys(fields) as FieldKey[]).map((key) => {
                 const coord = fields[key];
@@ -364,17 +409,17 @@ export function PrescriptionTemplateCalibrator({
                       textAlign: coord.align || 'left',
                       color: coord.color || '#16191E',
                     }}
-                    className={`absolute cursor-move transition-shadow z-20 group p-1 rounded-md ${
+                    className={`absolute cursor-move transition-all z-20 group p-1 rounded-md ${
                       isSelected
-                        ? 'ring-2 ring-[#2563EB] bg-blue-500/10 shadow-lg'
-                        : 'hover:ring-1 hover:ring-blue-300 hover:bg-blue-50/20'
+                        ? 'ring-2 ring-[#2563EB] bg-blue-500/15 shadow-md backdrop-blur-[1px]'
+                        : 'hover:ring-1 hover:ring-blue-400 hover:bg-blue-50/20'
                     }`}
                   >
                     {/* Badge Pill for Field Identifier */}
                     <div
                       className={`absolute -top-3 left-0 px-1.5 py-0.2 rounded text-[8px] font-bold tracking-tight whitespace-nowrap shadow-xs pointer-events-none ${
                         isSelected
-                          ? 'bg-[#2563EB] text-white'
+                          ? 'bg-[#2563EB] text-white ring-1 ring-white'
                           : 'bg-gray-800/80 text-white opacity-0 group-hover:opacity-100 transition-opacity'
                       }`}
                     >
@@ -389,9 +434,10 @@ export function PrescriptionTemplateCalibrator({
                 );
               })}
 
-              {/* Watermark Helper notice */}
-              <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/60 text-white text-[9px] pointer-events-none">
-                Interactive A4 View
+              {/* Help notification badge */}
+              <div className="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-black/70 text-white text-[10px] pointer-events-none flex items-center space-x-1 shadow-sm">
+                <Keyboard className="w-3 h-3" />
+                <span>Selected: {FIELD_LABELS[activeField].label} (Use Arrow Keys to Nudge)</span>
               </div>
             </div>
           </div>
@@ -404,7 +450,7 @@ export function PrescriptionTemplateCalibrator({
                   <Sliders className="w-4 h-4 text-[#2563EB]" />
                   <h4 className="text-xs font-bold text-[#16191E]">Field Calibrator Controls</h4>
                 </div>
-                <span className="text-[10px] text-[#8A909D] font-mono font-semibold">
+                <span className="text-[10px] text-[#2563EB] font-mono font-bold bg-blue-50 px-2 py-0.5 rounded-md">
                   X: {activeCoord.x}% • Y: {activeCoord.y}%
                 </span>
               </div>
@@ -438,8 +484,55 @@ export function PrescriptionTemplateCalibrator({
                 </p>
               </div>
 
+              {/* Directional Nudge Pad (Arrow Keys) */}
+              <div className="p-3 bg-[#F8F9FB] rounded-xl border border-[#ECEEF2] space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-bold text-[#16191E]">
+                  <span className="flex items-center space-x-1">
+                    <Keyboard className="w-3.5 h-3.5 text-[#2563EB]" />
+                    <span>Nudge Position</span>
+                  </span>
+                  <span className="text-[9px] text-[#8A909D] font-normal">Use Arrow keys (↑ ↓ ← →) or Shift+Arrow</span>
+                </div>
+                <div className="flex items-center justify-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => nudgeActiveField(-0.5, 0)}
+                    title="Nudge Left"
+                    className="w-8 h-8 rounded-lg bg-white border border-[#ECEEF2] hover:bg-gray-100 flex items-center justify-center text-gray-700 transition cursor-pointer shadow-2xs font-bold"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <div className="flex flex-col gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => nudgeActiveField(0, -0.5)}
+                      title="Nudge Up"
+                      className="w-8 h-8 rounded-lg bg-white border border-[#ECEEF2] hover:bg-gray-100 flex items-center justify-center text-gray-700 transition cursor-pointer shadow-2xs font-bold"
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => nudgeActiveField(0, 0.5)}
+                      title="Nudge Down"
+                      className="w-8 h-8 rounded-lg bg-white border border-[#ECEEF2] hover:bg-gray-100 flex items-center justify-center text-gray-700 transition cursor-pointer shadow-2xs font-bold"
+                    >
+                      <ArrowDown className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => nudgeActiveField(0.5, 0)}
+                    title="Nudge Right"
+                    className="w-8 h-8 rounded-lg bg-white border border-[#ECEEF2] hover:bg-gray-100 flex items-center justify-center text-gray-700 transition cursor-pointer shadow-2xs font-bold"
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
               {/* Coordinates Sliders */}
-              <div className="space-y-3 pt-2">
+              <div className="space-y-3 pt-1">
                 <div>
                   <div className="flex justify-between text-[11px] font-semibold text-[#16191E] mb-1">
                     <span>Horizontal Position (X)</span>
@@ -449,7 +542,7 @@ export function PrescriptionTemplateCalibrator({
                     type="range"
                     min="0"
                     max="95"
-                    step="0.5"
+                    step="0.2"
                     value={activeCoord.x}
                     onChange={(e) => updateSingleField(activeField, { x: parseFloat(e.target.value) })}
                     className="w-full accent-[#2563EB] cursor-pointer"
@@ -465,7 +558,7 @@ export function PrescriptionTemplateCalibrator({
                     type="range"
                     min="0"
                     max="95"
-                    step="0.5"
+                    step="0.2"
                     value={activeCoord.y}
                     onChange={(e) => updateSingleField(activeField, { y: parseFloat(e.target.value) })}
                     className="w-full accent-[#2563EB] cursor-pointer"
@@ -588,26 +681,15 @@ export function PrescriptionTemplateCalibrator({
           <h4 className="text-base font-bold text-[#16191E]">Upload Clinic Prescription Pad or Letterhead</h4>
           <p className="text-xs text-[#8A909D] max-w-md mx-auto mt-1 mb-5">
             Upload your clinic's designed prescription pad, letterhead, or stationery image (PNG, JPG). HealthSync
-            will auto-fill each patient's details and medicines onto the page.
+            will auto-fill each patient's details and medicines onto your custom design.
           </p>
-          <div className="flex items-center justify-center space-x-3 flex-wrap gap-y-2">
+          <div className="flex items-center justify-center">
             <button
               type="button"
-              className="px-5 py-2.5 bg-[#2563EB] text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition shadow-xs flex items-center space-x-1.5 pointer-events-none"
+              className="px-6 py-2.5 bg-[#2563EB] text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition shadow-xs flex items-center space-x-2 pointer-events-none"
             >
               <Upload className="w-4 h-4" />
               <span>Choose Image File</span>
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleLoadSample();
-              }}
-              className="px-5 py-2.5 bg-white border border-[#ECEEF2] hover:bg-blue-50/50 hover:border-blue-200 text-[#16191E] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5"
-            >
-              <Sparkles className="w-4 h-4 text-[#2563EB]" />
-              <span>Try Dental Clinic Pad Sample</span>
             </button>
           </div>
         </div>
@@ -617,4 +699,3 @@ export function PrescriptionTemplateCalibrator({
 }
 
 export default PrescriptionTemplateCalibrator;
-

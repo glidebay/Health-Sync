@@ -5,9 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Printer,
   X,
-  FileText,
-  Sparkles,
-  Layers,
   HeartPulse,
 } from 'lucide-react';
 import { PrescriptionItem } from '@/types';
@@ -44,11 +41,7 @@ export function PrescriptionPrintModal({
 }: PrescriptionPrintModalProps) {
   const { config } = useClinic();
 
-  const hasCustomTemplate = Boolean(config?.rx_template_url && config?.rx_template_enabled);
-
-  const [activeLayout, setActiveLayout] = useState<'custom' | 'standard'>(() =>
-    hasCustomTemplate ? 'custom' : 'standard'
-  );
+  const hasCustomTemplate = Boolean(config?.rx_template_url);
 
   const [printBackground, setPrintBackground] = useState<boolean>(() =>
     config?.rx_template_print_bg !== false
@@ -99,45 +92,25 @@ export function PrescriptionPrintModal({
         <div className="max-w-4xl mx-auto w-full my-auto flex flex-col space-y-4">
           {/* Top Control Bar (Hidden on print) */}
           <div className="no-print bg-white rounded-2xl p-4 border border-[#ECEEF2] shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center space-x-2">
-              {hasCustomTemplate && (
-                <div className="flex bg-[#F8F9FB] p-1 rounded-xl border border-[#ECEEF2]">
-                  <button
-                    type="button"
-                    onClick={() => setActiveLayout('custom')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
-                      activeLayout === 'custom'
-                        ? 'bg-[#2563EB] text-white shadow-xs'
-                        : 'text-[#5E6470] hover:text-[#16191E]'
-                    }`}
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Clinic Pad Design</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveLayout('standard')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
-                      activeLayout === 'standard'
-                        ? 'bg-[#2563EB] text-white shadow-xs'
-                        : 'text-[#5E6470] hover:text-[#16191E]'
-                    }`}
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>Standard Slip</span>
-                  </button>
-                </div>
-              )}
+            <div className="flex items-center space-x-3">
+              <span className="text-xs font-bold text-[#16191E] flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>
+                  {hasCustomTemplate
+                    ? 'Custom Clinic Prescription Pad'
+                    : 'Standard Consultation Slip'}
+                </span>
+              </span>
 
-              {activeLayout === 'custom' && (
-                <label className="flex items-center space-x-2 text-xs font-semibold text-[#16191E] cursor-pointer ml-2">
+              {hasCustomTemplate && (
+                <label className="flex items-center space-x-2 text-xs font-medium text-[#5E6470] hover:text-[#16191E] cursor-pointer ml-2 border-l border-gray-200 pl-3">
                   <input
                     type="checkbox"
                     checked={printBackground}
                     onChange={(e) => setPrintBackground(e.target.checked)}
                     className="rounded border-[#ECEEF2] text-[#2563EB] focus:ring-[#2563EB] w-4 h-4 cursor-pointer"
                   />
-                  <span>Print Template Background Image</span>
+                  <span>Print Template Background Graphic</span>
                 </label>
               )}
             </div>
@@ -147,7 +120,7 @@ export function PrescriptionPrintModal({
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={() => window.print()}
-                className="bg-[#2563EB] hover:bg-blue-700 text-white font-bold text-xs px-5 py-2 rounded-xl transition cursor-pointer flex items-center space-x-2 shadow-sm"
+                className="bg-[#2563EB] hover:bg-blue-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer flex items-center space-x-2 shadow-sm"
               >
                 <Printer className="w-4 h-4" />
                 <span>Print Prescription</span>
@@ -169,18 +142,26 @@ export function PrescriptionPrintModal({
             id="print-modal-content"
             className="w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200"
           >
-            {activeLayout === 'custom' && config?.rx_template_url ? (
+            {hasCustomTemplate && config?.rx_template_url ? (
               /* Custom Prescription Pad Layout with Calibrated Coordinates */
               <div
                 id="printable-prescription-pad"
-                className="relative w-full aspect-[1/1.414] min-h-[680px] sm:min-h-[900px] overflow-hidden"
-                style={{
-                  backgroundImage: printBackground ? `url(${config.rx_template_url})` : 'none',
-                  backgroundSize: '100% 100%',
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'center',
-                }}
+                className="relative w-full aspect-[1/1.414] min-h-[680px] sm:min-h-[900px] overflow-hidden select-none bg-white"
               >
+                {/* Background Image rendered as <img> for 100% reliable physical print output */}
+                {printBackground && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={config.rx_template_url}
+                    alt="Prescription Letterhead Background"
+                    className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0"
+                    style={{
+                      WebkitPrintColorAdjust: 'exact',
+                      printColorAdjust: 'exact',
+                    }}
+                  />
+                )}
+
                 {/* 1. Patient Name */}
                 {parsedFields.patientName?.visible !== false && (
                   <div
@@ -370,8 +351,8 @@ export function PrescriptionPrintModal({
                 )}
               </div>
             ) : (
-              /* Standard HealthSync Clinic Prescription Slip */
-              <div className="p-6 sm:p-10 max-w-2xl mx-auto font-sans">
+              /* Standard HealthSync Clinic Prescription Slip (Only if no custom template has been uploaded yet) */
+              <div id="printable-prescription-pad" className="p-6 sm:p-10 max-w-2xl mx-auto font-sans bg-white">
                 {/* Header */}
                 <div className="flex justify-between items-start border-b-2 border-[#16191E] pb-4 mb-6">
                   <div className="flex items-center space-x-3">
