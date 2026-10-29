@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { Patient } from '@/types';
 import { formatPatientToken } from '@/lib/utils';
+import EcgActionLoader from '@/components/loading/EcgActionLoader';
 
 export const CANCELLATION_REASONS = [
   'Patient Requested Cancellation',
@@ -59,9 +60,10 @@ export function CancelModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 6 }}
           transition={{ duration: 0.18 }}
-          className="bg-white rounded-2xl border border-[#ECEEF2] shadow-xl max-w-md w-full overflow-hidden"
+          className="bg-white rounded-2xl border border-[#ECEEF2] shadow-xl max-w-md w-full overflow-hidden relative"
           onClick={(e) => e.stopPropagation()}
         >
+          <EcgActionLoader isLoading={isSubmitting} text="Cancelling appointment..." />
           <div className="px-5 py-4 border-b border-[#ECEEF2] flex items-center justify-between">
             <div>
               <h3 className="text-base font-bold text-[#16191E]">Cancel Appointment</h3>

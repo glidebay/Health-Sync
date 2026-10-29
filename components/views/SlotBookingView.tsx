@@ -28,6 +28,7 @@ import {
 import { Patient, ConfirmedToken } from '@/types';
 import { DbDoctor } from '@/types/database';
 import { AVAILABLE_SLOTS, QUICK_SYMPTOMS } from '@/lib/constants';
+import EcgActionLoader from '@/components/loading/EcgActionLoader';
 import { formatPatientToken } from '@/lib/utils';
 import { validateMobileNumber } from '@/lib/phoneValidation';
 import {
@@ -753,8 +754,9 @@ export function SlotBookingView({
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.3 }}
             onSubmit={handleBookingFormSubmit}
-            className="bg-white rounded-2xl sm:rounded-3xl border border-[#ECEEF2] p-4 sm:p-7 lg:p-8 shadow-sm space-y-4 sm:space-y-6"
+            className="bg-white rounded-2xl sm:rounded-3xl border border-[#ECEEF2] p-4 sm:p-7 lg:p-8 shadow-sm space-y-4 sm:space-y-6 relative overflow-hidden"
           >
+            <EcgActionLoader isLoading={isBookingSubmitting} text="Confirming consultation booking..." />
             <div className="flex items-center justify-between pb-3.5 sm:pb-5 border-b border-[#ECEEF2]">
               <div>
                 <h2 className="text-base sm:text-xl font-bold text-[#16191E]">Book a Consultation Slot</h2>
@@ -973,7 +975,8 @@ export function SlotBookingView({
                 </div>
               )}
 
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 sm:gap-2.5 p-2.5 sm:p-3.5 bg-[#F8F9FB] rounded-xl sm:rounded-2xl border border-[#ECEEF2]">
+              <div className="relative grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 sm:gap-2.5 p-2.5 sm:p-3.5 bg-[#F8F9FB] rounded-xl sm:rounded-2xl border border-[#ECEEF2] min-h-[90px]">
+                <EcgActionLoader isLoading={isLoadingSlots} size="sm" text="Checking live slots..." />
                 {filteredSlots.map((slot) => {
                   const isBooked = Boolean(slot.isBooked);
                   const isPast = Boolean(slot.isPast);

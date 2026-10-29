@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useLiveQueue } from "@/hooks/useLiveQueue";
+import EcgActionLoader from "@/components/loading/EcgActionLoader";
 
 interface LiveQueueBoardProps {
   doctorId?: string;
@@ -13,9 +14,8 @@ export function LiveQueueBoard({ doctorId, date }: LiveQueueBoardProps) {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center text-slate-500">
-        <div className="inline-block w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-2" />
-        <p className="text-sm font-medium">Loading Live Queue...</p>
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center text-slate-500 relative flex items-center justify-center min-h-[220px]">
+        <EcgActionLoader overlay={false} text="Synchronizing Live Queue..." />
       </div>
     );
   }

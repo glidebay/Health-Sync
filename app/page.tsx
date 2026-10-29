@@ -83,6 +83,7 @@ import { InventoryView } from '@/components/views/InventoryView';
 import { AnalyticsView } from '@/components/views/AnalyticsView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { ToastNotification, ToastMessage, ToastType } from '@/components/ui/ToastNotification';
+import { getTodayIST } from '@/lib/utils';
 
 function convertSlotToFutureIso(timeStr: string, dateStr?: string, fallbackDelayMins: number = 20): string {
   if (timeStr && timeStr.includes('T') && timeStr.includes('-')) {
@@ -338,6 +339,7 @@ function DashboardContent() {
   };
 
   const [showWalkinModal, setShowWalkinModal] = useState(false);
+  const [isWalkinSubmitting, setIsWalkinSubmitting] = useState(false);
   const [walkinName, setWalkinName] = useState('');
   const [walkinAge, setWalkinAge] = useState('');
   const [walkinPhone, setWalkinPhone] = useState('');
@@ -548,32 +550,37 @@ function DashboardContent() {
     }
 
     const ageNum = parseInt(walkinAge, 10);
-    const dbPat = await registerWalkinPatientDb({
-      name: walkinName.trim(),
-      age: ageNum,
-      gender: walkinGender,
-      phone: walkinPhone.trim(),
-      priority: 'Normal',
-    });
+    setIsWalkinSubmitting(true);
+    try {
+      const dbPat = await registerWalkinPatientDb({
+        name: walkinName.trim(),
+        age: ageNum,
+        gender: walkinGender,
+        phone: walkinPhone.trim(),
+        priority: 'Normal',
+      });
 
-    if (dbPat) {
-      setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, { ...dbPat, visitType: 'Walk-in' }]));
-      fetchQueueFromDb().then((fresh) => {
-        if (fresh && fresh.length > 0) {
-          setQueue(sortQueueWithCompletedAtEnd(fresh));
-        }
-      });
-      setWalkinName('');
-      setWalkinAge('');
-      setWalkinPhone('');
-      setWalkinGender('Male');
-      setShowWalkinModal(false);
-    } else {
-      showNotification({
-        type: 'error',
-        title: 'Registration Notice',
-        message: 'Could not register walk-in patient. Please ensure patient name has at least 2 characters.',
-      });
+      if (dbPat) {
+        setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, { ...dbPat, visitType: 'Walk-in' }]));
+        fetchQueueFromDb().then((fresh) => {
+          if (fresh && fresh.length > 0) {
+            setQueue(sortQueueWithCompletedAtEnd(fresh));
+          }
+        });
+        setWalkinName('');
+        setWalkinAge('');
+        setWalkinPhone('');
+        setWalkinGender('Male');
+        setShowWalkinModal(false);
+      } else {
+        showNotification({
+          type: 'error',
+          title: 'Registration Notice',
+          message: 'Could not register walk-in patient. Please ensure patient name has at least 2 characters.',
+        });
+      }
+    } finally {
+      setIsWalkinSubmitting(false);
     }
   };
 
@@ -665,7 +672,10 @@ function DashboardContent() {
         visitType: 'Online',
       };
 
-      setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, newPatient]));
+      const todayIST = getTodayIST();
+      if (finalBookingDate === todayIST) {
+        setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, newPatient]));
+      }
 
       fetchQueueFromDb().then((fresh) => {
         if (fresh && fresh.length > 0) {
@@ -1334,7 +1344,7 @@ function DashboardContent() {
 
                 {activeSection === 'assistant' && (
                   <AssistantView
-                    queue={queue.filter((p) => p.status !== 'Cancelled')}
+                    queue={queue}
                     onRegisterWalkin={() => setShowWalkinModal(true)}
                     onReallocate={handleReallocate}
                     onCancelAppointment={handleCancelAppointment}
@@ -1345,7 +1355,11 @@ function DashboardContent() {
 
                 {activeSection === 'queue' && (
                   <QueueView
-                    queue={queue.filter((p) => p.status !== 'Cancelled')}
+                    queue={queue.filter(
+                      (p) =>
+                        p.status !== 'Cancelled' &&
+                        (!p.appointmentDate || p.appointmentDate === getTodayIST())
+                    )}
                     onStartConsultation={startConsultation}
                   />
                 )}
@@ -1437,6 +1451,7 @@ function DashboardContent() {
             walkinGender={walkinGender}
             setWalkinGender={setWalkinGender}
             onSubmit={handleRegisterWalkin}
+            isSubmitting={isWalkinSubmitting}
           />
 
           <PrescriptionPrintModal

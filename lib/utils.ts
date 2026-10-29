@@ -85,3 +85,21 @@ export function formatPatientToken(p?: {
 
   return 'P001';
 }
+
+
+/**
+ * Returns today's date in Indian Standard Time (Asia/Kolkata) as YYYY-MM-DD
+ */
+export function getTodayIST(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+}

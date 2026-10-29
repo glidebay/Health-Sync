@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { Stethoscope, User, Phone } from 'lucide-react';
 import { Patient } from '@/types';
 import { NumberedPagination } from '@/components/ui/pagination';
-import { formatPatientToken } from '@/lib/utils';
+import { formatPatientToken, getTodayIST } from '@/lib/utils';
 
 interface QueueViewProps {
   queue: Patient[];
@@ -21,7 +21,9 @@ export function QueueView({
   const [currentPage, setCurrentPage] = React.useState(1);
 
   const sortedQueue = React.useMemo(() => {
-    const active = queue.filter((p) => p.status !== 'Cancelled');
+    const todayIST = getTodayIST();
+    const todayOnly = queue.filter((p) => !p.appointmentDate || p.appointmentDate === todayIST);
+    const active = todayOnly.filter((p) => p.status !== 'Cancelled');
     const notCompleted = active.filter((p) => p.status !== 'Completed');
     const completed = active.filter((p) => p.status === 'Completed');
     return [...notCompleted, ...completed];

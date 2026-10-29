@@ -4,8 +4,8 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Stethoscope } from 'lucide-react';
 import { Patient } from '@/types';
-import { searchPatientsDb } from '@/lib/supabaseService';
-import { DbPatient } from '@/types/database';
+import { fetchPatientAppointmentsFromDb } from '@/lib/supabaseService';
+import { getTodayIST } from '@/lib/utils';
 
 interface GlobalPatientSearchProps {
   queue: Patient[];
@@ -115,93 +115,67 @@ export function GlobalPatientSearch({
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(0);
-  const [dbPatients, setDbPatients] = useState<DbPatient[]>([]);
+  const [dbAppointments, setDbAppointments] = useState<Patient[]>([]);
   const [isLoadingDb, setIsLoadingDb] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  const todayIST = useMemo(() => getTodayIST(), []);
+
+  // Guarantee search operates strictly on today's patients
+  const todayQueue = useMemo(() => {
+    return queue.filter((p) => !p.appointmentDate || p.appointmentDate === todayIST);
+  }, [queue, todayIST]);
+
   useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed || trimmed.length < 2) {
-      setDbPatients([]);
+      setDbAppointments([]);
       return;
     }
 
     const timer = setTimeout(async () => {
       setIsLoadingDb(true);
       try {
-        const results = await searchPatientsDb(trimmed);
-        setDbPatients(results || []);
+        // Query database appointments strictly anchored to today in IST
+        const results = await fetchPatientAppointmentsFromDb({
+          date: todayIST,
+          search: trimmed,
+          status: 'All',
+        });
+        setDbAppointments(results || []);
+      } catch (err) {
+        console.warn('Error querying today appointments for search:', err);
       } finally {
         setIsLoadingDb(false);
       }
     }, 180);
 
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, todayIST]);
 
   const searchResults: Patient[] = useMemo(() => {
     let combined: Patient[] = [];
 
     if (!query.trim()) {
-      combined = [...queue];
+      combined = [...todayQueue];
     } else {
-      const queueMatches = queue.filter((p) => matchPatientCriteria(p, query));
+      const queueMatches = todayQueue.filter((p) => matchPatientCriteria(p, query));
+      const queueIds = new Set(queueMatches.map((p) => p.id));
 
-      const queuePhoneSet = new Set(queue.map((p) => p.phone).filter(Boolean));
-      const queueIdSet = new Set(queue.map((p) => p.id));
+      const extraMatches = dbAppointments.filter(
+        (p) => !queueIds.has(p.id) && matchPatientCriteria(p, query)
+      );
 
-      const externalMatches: Patient[] = dbPatients
-        .filter((dbp) => {
-          if (queueIdSet.has(dbp.id)) return false;
-          if (dbp.phone_number && queuePhoneSet.has(dbp.phone_number)) return false;
-          const patNum = dbp.patient_number;
-          const rawDispId = dbp.display_id;
-          const displayId = rawDispId
-            ? (rawDispId.startsWith('P') ? rawDispId : `P${rawDispId}`)
-            : (patNum ? `P${String(patNum).padStart(3, '0')}` : undefined);
-
-          return matchPatientCriteria(
-            {
-              name: dbp.full_name,
-              phone: dbp.phone_number || undefined,
-              age: dbp.age,
-              gender: dbp.gender,
-              id: dbp.id,
-              displayId,
-            },
-            query
-          );
-        })
-        .map((dbp) => {
-          const patNum = dbp.patient_number;
-          const rawDispId = dbp.display_id;
-          const displayId = rawDispId
-            ? (rawDispId.startsWith('P') ? rawDispId : `P${rawDispId}`)
-            : (patNum ? `P${String(patNum).padStart(3, '0')}` : undefined);
-
-          return {
-            id: dbp.id,
-            name: dbp.full_name,
-            age: dbp.age,
-            gender: (dbp.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
-            phone: dbp.phone_number || undefined,
-            status: 'Waiting',
-            time: 'Walk-in Today',
-            patientNumber: patNum || undefined,
-            displayId,
-          };
-        });
-
-      combined = [...queueMatches, ...externalMatches];
+      combined = [...queueMatches, ...extraMatches];
     }
 
     const notCompleted = combined.filter((p) => p.status !== 'Completed');
     const completed = combined.filter((p) => p.status === 'Completed');
     return [...notCompleted, ...completed];
-  }, [queue, dbPatients, query]);
+  }, [todayQueue, dbAppointments, query]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

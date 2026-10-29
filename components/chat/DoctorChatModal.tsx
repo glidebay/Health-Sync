@@ -18,6 +18,7 @@ import { DbDoctor } from '@/types/database';
 import { fetchInboundChatThreads, subscribeToChatUpdates } from '@/lib/supabaseService';
 import { formatPatientToken } from '@/lib/utils';
 import { getReadThreadStates, markThreadAsRead, isThreadUnread } from '@/lib/chatStorage';
+import EcgActionLoader from '@/components/loading/EcgActionLoader';
 
 /**
  * Playable WhatsApp Audio Voice Note Player Component
@@ -459,7 +460,8 @@ const loadThreads = useCallback(async (silent: boolean = false) => {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto divide-y divide-[#ECEEF2]">
+              <div className="flex-1 overflow-y-auto divide-y divide-[#ECEEF2] relative">
+                <EcgActionLoader isLoading={isLoadingThreads} size="sm" text="Syncing WhatsApp chats..." />
                 {filteredThreads.length === 0 ? (
                   <div className="p-8 text-center text-xs text-[#8A909D]">
                     No patient booking requests found

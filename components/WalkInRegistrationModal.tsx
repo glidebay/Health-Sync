@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import EcgActionLoader from "@/components/loading/EcgActionLoader";
 
 interface WalkInRegistrationModalProps {
   doctorId?: string;
@@ -62,7 +63,8 @@ export function WalkInRegistrationModal({ doctorId, onClose, onSuccess }: WalkIn
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+      <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 relative overflow-hidden">
+        <EcgActionLoader isLoading={loading} text="Registering walk-in patient..." />
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-slate-900">Register Walk-in Patient</h2>
           <button 

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import EcgActionLoader from "@/components/loading/EcgActionLoader";
 
 interface DoctorCabinConsoleProps {
   doctorId?: string;
@@ -119,7 +120,8 @@ export function DoctorCabinConsole({ doctorId, currentPatient, onRefresh }: Doct
   };
 
   return (
-    <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl border border-slate-800">
+    <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl border border-slate-800 relative overflow-hidden">
+      <EcgActionLoader isLoading={loading} text="Processing cabin action..." />
       <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
         <div>
           <h3 className="text-xl font-bold">Doctor Cabin Console</h3>

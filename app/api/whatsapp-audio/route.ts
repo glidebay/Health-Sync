@@ -1,10 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-
-
-
-
+import { NextRequest, NextResponse, connection } from 'next/server';
 
 export async function GET(req: NextRequest) {
+  await connection();
   try {
     const { searchParams } = new URL(req.url);
     const mediaId = searchParams.get('media_id');
@@ -29,6 +26,7 @@ export async function GET(req: NextRequest) {
       process.env.WHATSAPP_TOKEN ||
       process.env.META_ACCESS_TOKEN;
 
+    // 1. If WhatsApp permanent access token is configured, try direct Meta Cloud API download
     if (mediaId && whatsappToken) {
       try {
         const metaRes = await fetch(`https://graph.facebook.com/v19.0/${mediaId}`, {
@@ -65,6 +63,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // 2. Try fetching from Supabase Edge Function whatsapp-webhook
     if (mediaId) {
       const edgeFunctionUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?media_id=${mediaId}`;
       try {
@@ -152,7 +151,13 @@ export async function GET(req: NextRequest) {
       }
     );
   } catch (err: unknown) {
-    if (err && typeof err === 'object' && 'digest' in err) {
+    if (
+      err &&
+      typeof err === 'object' &&
+      'digest' in err &&
+      typeof (err as { digest: unknown }).digest === 'string' &&
+      (err as { digest: string }).digest.startsWith('NEXT_')
+    ) {
       throw err;
     }
     console.error('[WhatsApp Audio Proxy] Internal error:', err);
