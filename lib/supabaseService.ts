@@ -2421,12 +2421,21 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
           const isFromDoctor = rawPayload?.sender === 'doctor';
 
           // Detect WhatsApp Audio Voice Message
+          const rawText = typeof req.message_text === 'string' ? req.message_text.trim() : '';
+          const looksLikeMediaId =
+            /^FA[A-Za-z0-9_-]{20,}$/.test(rawText) ||
+            (rawText.startsWith('FA') && rawText.length > 25);
+
           const isAudio =
             incomingMsg?.type === 'audio' ||
             Boolean(incomingMsg?.audio) ||
             Boolean(rawPayload?.audio) ||
             Boolean(rawPayload?.audio_id) ||
-            (typeof req.message_text === 'string' && req.message_text.includes('Voice message'));
+            Boolean(rawPayload?.media_id) ||
+            Boolean(rawPayload?.type === 'audio') ||
+            rawText.toLowerCase().includes('voice message') ||
+            rawText.toLowerCase().includes('audio') ||
+            looksLikeMediaId;
 
           let audioUrl: string | undefined = undefined;
           let mediaId: string | undefined = undefined;
@@ -2434,13 +2443,15 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
           if (isAudio) {
             mediaId =
               rawPayload?.audio_id ||
+              rawPayload?.media_id ||
               incomingMsg?.audio?.id ||
               rawPayload?.audio?.id ||
+              (looksLikeMediaId ? rawText : undefined) ||
               (typeof rawPayload?.audio_url === 'string' && rawPayload.audio_url.includes('media_id=')
                 ? rawPayload.audio_url.split('media_id=')[1].split('&')[0]
                 : undefined);
 
-            const directMetaUrl = incomingMsg?.audio?.url;
+            const directMetaUrl = incomingMsg?.audio?.url || rawPayload?.audio?.url;
             const rawAudioUrl = typeof rawPayload?.audio_url === 'string' ? rawPayload.audio_url : undefined;
 
             if (mediaId) {
@@ -2469,7 +2480,7 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
             messages.push({
               id: `msg-${req.id}`,
               sender: 'patient',
-              text: req.message_text || '🎙️ Voice note',
+              text: looksLikeMediaId ? '🎙️ Voice note' : (req.message_text || '🎙️ Voice note'),
               timestamp: msgTime,
               messageType: 'audio',
               audioUrl,

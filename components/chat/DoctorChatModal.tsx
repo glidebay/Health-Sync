@@ -385,13 +385,6 @@ const loadThreads = useCallback(async (silent: boolean = false) => {
             </div>
 
             <div className="flex items-center gap-2.5">
-              {/* WhatsApp Live Real-time Indicator */}
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200/70 rounded-full text-[11px] font-bold shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="hidden sm:inline">WhatsApp Live</span>
-                <span className="sm:hidden">Live</span>
-              </div>
-
               <button
                 type="button"
                 onClick={onClose}
@@ -557,10 +550,14 @@ const loadThreads = useCallback(async (silent: boolean = false) => {
 
 <div
                     ref={messagesContainerRef}
-                    className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3"
+                    className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-5 pb-6 space-y-3"
                   >
                     {activeThread.messages.map((msg) => {
                       const isDoctor = msg.sender === 'doctor';
+                      const rawMsgText = typeof msg.text === 'string' ? msg.text.trim() : '';
+                      const isMediaIdString =
+                        /^FA[A-Za-z0-9_-]{20,}$/.test(rawMsgText) ||
+                        (rawMsgText.startsWith('FA') && rawMsgText.length > 25);
 
                       if (msg.isBookingReceipt) {
                         return (
@@ -588,14 +585,17 @@ const loadThreads = useCallback(async (silent: boolean = false) => {
                         );
                       }
 
-                      if (msg.messageType === 'audio' || msg.audioUrl || msg.isVoiceNote) {
+                      if (msg.messageType === 'audio' || msg.audioUrl || msg.isVoiceNote || isMediaIdString) {
+                        const voiceUrl =
+                          msg.audioUrl ||
+                          (isMediaIdString ? `/api/whatsapp-audio?media_id=${encodeURIComponent(rawMsgText)}` : undefined);
                         return (
                           <div
                             key={msg.id}
                             className={`flex ${isDoctor ? 'justify-end' : 'justify-start'}`}
                           >
                             <AudioVoiceMessagePlayer
-                              audioUrl={msg.audioUrl}
+                              audioUrl={voiceUrl}
                               isDoctor={isDoctor}
                               timestamp={msg.timestamp}
                             />
@@ -609,12 +609,12 @@ const loadThreads = useCallback(async (silent: boolean = false) => {
                           className={`flex ${isDoctor ? 'justify-end' : 'justify-start'}`}
                         >
                           <div
-                            className={`max-w-[75%] p-3.5 rounded-2xl text-xs leading-relaxed ${isDoctor
-                              ? 'bg-[#2563EB] text-white rounded-tr-xs'
+                            className={`max-w-[85%] sm:max-w-[75%] p-3.5 rounded-2xl text-xs leading-relaxed break-words [overflow-wrap:anywhere] ${isDoctor
+                              ? 'bg-[#2563EB] text-white rounded-tr-xs shadow-2xs'
                               : 'bg-white text-[#16191E] border border-[#ECEEF2] rounded-tl-xs shadow-2xs'
                               }`}
                           >
-                            <p className="whitespace-pre-wrap">{msg.text}</p>
+                            <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] break-all">{msg.text}</p>
                             <span
                               className={`text-[9px] block text-right mt-1.5 ${isDoctor ? 'text-blue-100' : 'text-[#8A909D]'
                                 }`}
