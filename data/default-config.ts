@@ -1,9 +1,51 @@
+export interface RxFieldCoord {
+  x: number;
+  y: number;
+  width?: number;
+  fontSize?: number;
+  fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+  color?: string;
+  align?: 'left' | 'center' | 'right';
+  visible: boolean;
+}
+
+export interface RxTemplateFields {
+  patientName: RxFieldCoord;
+  patientAge: RxFieldCoord;
+  patientGender: RxFieldCoord;
+  patientPhone: RxFieldCoord;
+  consultationDate: RxFieldCoord;
+  tokenNumber: RxFieldCoord;
+  diagnostics: RxFieldCoord;
+  medications: RxFieldCoord;
+  doctorName: RxFieldCoord;
+  doctorSignature: RxFieldCoord;
+}
+
+export const DEFAULT_RX_TEMPLATE_FIELDS: RxTemplateFields = {
+  patientName: { x: 19, y: 26.2, fontSize: 13, fontWeight: 'bold', visible: true, align: 'left' },
+  patientAge: { x: 17, y: 29.3, fontSize: 13, fontWeight: 'bold', visible: true, align: 'left' },
+  patientGender: { x: 19, y: 32.3, fontSize: 13, fontWeight: 'bold', visible: true, align: 'left' },
+  patientPhone: { x: 42, y: 29.3, fontSize: 12, fontWeight: 'medium', visible: true, align: 'left' },
+  consultationDate: { x: 15, y: 82.5, width: 25, fontSize: 12, fontWeight: 'bold', visible: true, align: 'center' },
+  tokenNumber: { x: 75, y: 26.2, fontSize: 12, fontWeight: 'bold', visible: true, align: 'right' },
+  diagnostics: { x: 18, y: 35.5, width: 72, fontSize: 12, fontWeight: 'normal', visible: true, align: 'left' },
+  medications: { x: 15, y: 44, width: 72, fontSize: 12, fontWeight: 'normal', visible: true, align: 'left' },
+  doctorName: { x: 65, y: 80, width: 30, fontSize: 12, fontWeight: 'bold', visible: true, align: 'center' },
+  doctorSignature: { x: 65, y: 82.5, width: 30, fontSize: 12, fontWeight: 'semibold', visible: true, align: 'center' },
+};
+
 export interface AppConfig {
   clinic_name: string;
   clinic_phone: string;
   clinic_address: string;
   logo_url: string;
   rx_footer_text: string;
+
+  rx_template_url: string;
+  rx_template_enabled: boolean;
+  rx_template_print_bg: boolean;
+  rx_template_fields: string;
 
   daily_quota: number;
   slot_duration_mins: number;
@@ -41,6 +83,11 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   clinic_address: '123 Main St, Kochi, Kerala',
   logo_url: '/assets/logo.png',
   rx_footer_text: 'Get well soon! Contact clinic for emergencies.',
+
+  rx_template_url: '',
+  rx_template_enabled: false,
+  rx_template_print_bg: true,
+  rx_template_fields: JSON.stringify(DEFAULT_RX_TEMPLATE_FIELDS),
 
   daily_quota: 30,
   slot_duration_mins: 15,

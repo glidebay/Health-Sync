@@ -31,6 +31,7 @@ import {
 } from '@/data/default-config';
 import { AnimatedCounter } from '@/components/common/AnimatedCounter';
 import { staggerContainer, fadeScale } from '@/lib/constants';
+import { PrescriptionTemplateCalibrator } from '@/components/settings/PrescriptionTemplateCalibrator';
 
 interface SettingsViewProps {
   isMobile?: boolean;
@@ -661,6 +662,29 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
           })
         )}
       </div>
+
+      {/* Custom Prescription Pad & Calibrator Section */}
+      {(activeCategory === 'Clinic Identity & Branding' ||
+        ['prescription', 'template', 'rx', 'pad', 'letterhead'].some((k) =>
+          searchFilter.toLowerCase().includes(k)
+        )) && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="pt-2"
+        >
+          <PrescriptionTemplateCalibrator
+            templateUrl={formData.rx_template_url || ''}
+            enabled={Boolean(formData.rx_template_enabled)}
+            printBg={formData.rx_template_print_bg !== false}
+            fieldsJson={formData.rx_template_fields || ''}
+            onUpdateTemplate={(url) => handleFieldChange('rx_template_url', url)}
+            onUpdateEnabled={(en) => handleFieldChange('rx_template_enabled', en)}
+            onUpdatePrintBg={(bg) => handleFieldChange('rx_template_print_bg', bg)}
+            onUpdateFields={(json) => handleFieldChange('rx_template_fields', json)}
+          />
+        </motion.div>
+      )}
 
       {onLogout && (
         <motion.div

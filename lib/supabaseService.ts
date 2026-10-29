@@ -1364,6 +1364,8 @@ export async function fetchAppConfigDb(): Promise<AppConfig> {
       'restrict_out_of_stock_rx',
       'auto_deduct_inventory',
       'enable_pwa_offline',
+      'rx_template_enabled',
+      'rx_template_print_bg',
     ];
     booleanKeys.forEach((k) => {
       if (merged[k] !== undefined) {

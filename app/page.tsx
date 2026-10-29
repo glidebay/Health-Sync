@@ -364,6 +364,7 @@ function DashboardContent() {
 
   const [selectedMedId, setSelectedMedId] = useState('');
   const [rxQty, setRxQty] = useState('');
+  const [rxDosage, setRxDosage] = useState('');
 
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printRecord, setPrintRecord] = useState<{
@@ -373,6 +374,9 @@ function DashboardContent() {
     demographics: string;
     diagnostics: string;
     items: PrescriptionItem[];
+    patientAge?: number | string;
+    patientGender?: string;
+    tokenNumber?: string | number;
   } | null>(null);
 
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
@@ -962,14 +966,22 @@ function DashboardContent() {
         return;
       }
       setCurrentPrescription((prev) =>
-        prev.map((p) => (String(p.med.id) === String(med.id) ? { ...p, qty: p.qty + qtyNum } : p))
+        prev.map((p) =>
+          String(p.med.id) === String(med.id)
+            ? { ...p, qty: p.qty + qtyNum, dosage: rxDosage.trim() || p.dosage }
+            : p
+        )
       );
     } else {
-      setCurrentPrescription((prev) => [...prev, { med, qty: qtyNum }]);
+      setCurrentPrescription((prev) => [
+        ...prev,
+        { med, qty: qtyNum, dosage: rxDosage.trim() || undefined },
+      ]);
     }
 
     setSelectedMedId('');
     setRxQty('');
+    setRxDosage('');
   };
 
   const removeRx = (index: number) => {
@@ -1016,6 +1028,13 @@ function DashboardContent() {
       patientName: activePatient.name,
       patientPhone: activePatient.phone,
       demographics: `${activePatient.age} Yrs / ${activePatient.gender}`,
+      patientAge: activePatient.age,
+      patientGender: activePatient.gender,
+      tokenNumber:
+        activePatient.tokenNumber ||
+        activePatient.displayId ||
+        activePatient.patientNumber ||
+        `P${activePatient.queueTokenNo || ''}`,
       diagnostics: diagnosticNotes || 'Clinical examination normal. Prescription issued.',
       items: [...currentPrescription],
     });
@@ -1385,6 +1404,8 @@ function DashboardContent() {
                     setSelectedMedId={setSelectedMedId}
                     rxQty={rxQty}
                     setRxQty={setRxQty}
+                    rxDosage={rxDosage}
+                    setRxDosage={setRxDosage}
                     inventory={inventory}
                     currentPrescription={currentPrescription}
                     onAddMedicineToRx={addMedicineToRx}
