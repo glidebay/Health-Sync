@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import {
   Users,
   TrendingUp,
+  MessageSquare,
   CheckCircle2,
   CalendarX,
   Pill,
@@ -49,6 +50,16 @@ export function AnalyticsView({
     });
   }, [queue]);
   const walkinCount = walkinList.length;
+
+  const whatsappList = useMemo(() => {
+    if (!queue) return [];
+    return queue.filter((p) => {
+      if (p.status === 'Cancelled') return false;
+      const vt = (p.visitType || '').toLowerCase();
+      return vt.includes('whatsapp') || vt.includes('online');
+    });
+  }, [queue]);
+  const whatsappCount = whatsappList.length;
 
   const completedList = useMemo(() => {
     if (!queue) return [];
@@ -136,7 +147,7 @@ export function AnalyticsView({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Walking Patients */}
         <motion.div
           whileHover={{ y: -3 }}
@@ -155,13 +166,37 @@ export function AnalyticsView({
               {walkinCount}
             </span>
             <span className="text-[10px] text-blue-600 font-bold flex items-center gap-1 mt-0.5">
-              <span>{activeCount > 0 ? `${Math.round((walkinCount / activeCount) * 100)}%` : '100%'}</span>
+              <span>{activeCount > 0 ? `${Math.round((walkinCount / activeCount) * 100)}%` : '0%'}</span>
               <span className="text-[#8A909D] font-normal">of active queue walk-ins</span>
             </span>
           </div>
         </motion.div>
 
-        {/* 2. Completed Patients */}
+        {/* 2. WhatsApp Booking Patients */}
+        <motion.div
+          whileHover={{ y: -3 }}
+          className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
+              WhatsApp Bookings
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+              <MessageSquare className="w-4 h-4 stroke-[2.2]" />
+            </div>
+          </div>
+          <div>
+            <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600 block">
+              {whatsappCount}
+            </span>
+            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 mt-0.5">
+              <span>{activeCount > 0 ? `${Math.round((whatsappCount / activeCount) * 100)}%` : '0%'}</span>
+              <span className="text-[#8A909D] font-normal">digital self-service</span>
+            </span>
+          </div>
+        </motion.div>
+
+        {/* 3. Completed Patients */}
         <motion.div
           whileHover={{ y: -3 }}
           className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
@@ -170,22 +205,22 @@ export function AnalyticsView({
             <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
               Completed Patients
             </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
               <CheckCircle2 className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600 block">
+            <span className="text-2xl sm:text-3xl font-extrabold text-indigo-600 block">
               {completedCount}
             </span>
-            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 mt-0.5">
+            <span className="text-[10px] text-indigo-600 font-bold flex items-center gap-1 mt-0.5">
               <span>{activeCount > 0 ? `${Math.round((completedCount / activeCount) * 100)}%` : '0%'}</span>
               <span className="text-[#8A909D] font-normal">consultations concluded</span>
             </span>
           </div>
         </motion.div>
 
-        {/* 3. Cancelled Patients */}
+        {/* 4. Cancelled Patients */}
         <motion.div
           whileHover={{ y: -3 }}
           className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
