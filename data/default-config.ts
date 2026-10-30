@@ -178,16 +178,6 @@ export const SETTINGS_METADATA: ParameterMetadata[] = [
     role: 'Admin',
   },
   {
-    key: 'prescription_page_url',
-    name: 'Prescription Printed Page Template',
-    category: 'Clinic Identity & Branding',
-    paramType: 'Functional Parameter',
-    description: 'Upload pre-printed prescription pad, clinic letterhead, or custom printed page background for prescriptions.',
-    uiWidget: 'file',
-    target: 'app_config.prescription_page_url',
-    role: 'Admin',
-  },
-  {
     key: 'rx_footer_text',
     name: 'Prescription Footer Notice',
     category: 'Clinic Identity & Branding',
