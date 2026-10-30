@@ -147,7 +147,7 @@ export function AppHeader({
               </motion.div>
             )}
 
-            {activeSection !== 'inventory' ? (
+            {!['inventory', 'analytics'].includes(activeSection) ? (
               isLoggedIn || !requireDoctorPin ? (
                 <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
                   <span
