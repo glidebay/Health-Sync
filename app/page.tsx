@@ -1361,8 +1361,11 @@ function DashboardContent() {
                     transition={{ delay: 0.2 }}
                     className={`font-bold text-[#16191E] leading-snug truncate ${isMobile ? 'text-base' : 'text-xl'}`}
                   >
-                    Welcome Back {isDoctorUnlocked ? effectiveDoctorProfile.name : 'Jack (Assistant)'}
+                    {activeSection === 'assistant'
+                      ? 'Welcome Back'
+                      : `Welcome Back ${isDoctorUnlocked ? effectiveDoctorProfile.name : 'Jack (Assistant)'}`}
                   </motion.h1>
+                  {activeSection !== 'assistant' && (
                   <motion.p
                     initial={{ opacity: 0, x: -16 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -1373,6 +1376,7 @@ function DashboardContent() {
                       ? 'Clinical Chamber • OPD consultation worklist & stock link'
                       : "Here is an overview of today's patient queue & triage"}
                   </motion.p>
+                  )}
                 </div>
               </motion.section>
               )}
