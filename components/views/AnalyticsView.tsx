@@ -113,6 +113,15 @@ export function AnalyticsView({
       transition={{ duration: 0.25 }}
       className="space-y-5 sm:space-y-6"
     >
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
+        <div>
+          <h2 className="text-base sm:text-lg font-bold text-[#16191E]">Clinic Analytics & Practice Insights</h2>
+          <p className="text-xs text-[#8A909D] font-medium">
+            Monitor patient volume trends, consultation dynamics, digital adoption, and pharmacy metrics
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         <motion.div
           whileHover={{ y: -3 }}
