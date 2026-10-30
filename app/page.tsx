@@ -1339,21 +1339,23 @@ function DashboardContent() {
                 transition={{ delay: 0.1, duration: 0.45 }}
                 className={`flex items-center mb-6 sm:mb-8 min-w-0 ${isMobile ? 'space-x-3' : 'space-x-4'}`}
               >
-                <motion.div
-                  whileHover={{ scale: 1.08 }}
-                  transition={{ type: 'spring', damping: 15 }}
-                  className={`rounded-full overflow-hidden bg-gray-200 border-2 border-white shadow-sm flex-shrink-0 cursor-pointer ${isMobile ? 'w-11 h-11' : 'w-14 h-14'
-                    }`}
-                >
-                  <Image
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAlmuC30xuMIZpBDfxi6DcXHu_Ks41P52MELsRuS7q4xgQhHJsRyIAU26SoUhZQ_v01dlHDlWrAAkh3wSZl04MBQqPlT6ErIF8M2Z-BxbP_LDZJwq1ggudaa_bfRN8YDWwtyWd28KCfQfIF40q_rF1P8xus-qeymY-ar5CmL4wz4tzlH8FI1FP7WZ-0sJDAW-0YLEq8Icg9Yn18bC_VJLV-Tv4XaPLEQViv7w4vOCY"
-                    alt="Profile"
-                    width={56}
-                    height={56}
-                    unoptimized
-                    className="w-full h-full object-cover"
-                  />
-                </motion.div>
+                {activeSection !== 'assistant' && (
+                  <motion.div
+                    whileHover={{ scale: 1.08 }}
+                    transition={{ type: 'spring', damping: 15 }}
+                    className={`rounded-full overflow-hidden bg-gray-200 border-2 border-white shadow-sm flex-shrink-0 cursor-pointer ${isMobile ? 'w-11 h-11' : 'w-14 h-14'
+                      }`}
+                  >
+                    <Image
+                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAlmuC30xuMIZpBDfxi6DcXHu_Ks41P52MELsRuS7q4xgQhHJsRyIAU26SoUhZQ_v01dlHDlWrAAkh3wSZl04MBQqPlT6ErIF8M2Z-BxbP_LDZJwq1ggudaa_bfRN8YDWwtyWd28KCfQfIF40q_rF1P8xus-qeymY-ar5CmL4wz4tzlH8FI1FP7WZ-0sJDAW-0YLEq8Icg9Yn18bC_VJLV-Tv4XaPLEQViv7w4vOCY"
+                      alt="Profile"
+                      width={56}
+                      height={56}
+                      unoptimized
+                      className="w-full h-full object-cover"
+                    />
+                  </motion.div>
+                )}
                 <div className="min-w-0 flex-1">
                   <motion.h1
                     initial={{ opacity: 0, x: -16 }}
