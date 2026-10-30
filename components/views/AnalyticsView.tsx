@@ -4,12 +4,10 @@ import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Users,
-  Clock,
   TrendingUp,
-  MessageSquare,
-  Activity,
-  Pill,
+  CheckCircle2,
   CalendarX,
+  Pill,
 } from 'lucide-react';
 import { ChartLine } from '@/components/ui/chart-line';
 import { RankBarChart, type RankBarItem } from '@/components/ui/rank-bars';
@@ -41,6 +39,22 @@ export function AnalyticsView({
     totalBookingsToday > 0
       ? ((cancelledCount / totalBookingsToday) * 100).toFixed(1)
       : '0.0';
+
+  const walkinList = useMemo(() => {
+    if (!queue) return [];
+    return queue.filter((p) => {
+      if (p.status === 'Cancelled') return false;
+      const vt = (p.visitType || '').toLowerCase();
+      return !vt.includes('whatsapp') && !vt.includes('online');
+    });
+  }, [queue]);
+  const walkinCount = walkinList.length;
+
+  const completedList = useMemo(() => {
+    if (!queue) return [];
+    return queue.filter((p) => p.status === 'Completed');
+  }, [queue]);
+  const completedCount = completedList.length;
 
   const patientVolumeData = [
     { month: 'Jan', walkins: 420, whatsapp: 180 },
@@ -122,116 +136,75 @@ export function AnalyticsView({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        {/* 1. Walking Patients */}
         <motion.div
           whileHover={{ y: -3 }}
           className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
-              Today's Patients
+              Walking Patients
             </span>
-            <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB]">
-              <Users className="w-3.5 h-3.5" />
+            <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB]">
+              <Users className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
             <span className="text-2xl sm:text-3xl font-extrabold text-[#16191E] block">
-              {activeCount}
+              {walkinCount}
             </span>
-            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5 mt-0.5">
-              <span>↑ +12%</span>
-              <span className="text-[#8A909D] font-normal">attending today</span>
+            <span className="text-[10px] text-blue-600 font-bold flex items-center gap-1 mt-0.5">
+              <span>{activeCount > 0 ? `${Math.round((walkinCount / activeCount) * 100)}%` : '100%'}</span>
+              <span className="text-[#8A909D] font-normal">of active queue walk-ins</span>
             </span>
           </div>
         </motion.div>
 
+        {/* 2. Completed Patients */}
         <motion.div
           whileHover={{ y: -3 }}
           className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
-              Avg Consult Time
+              Completed Patients
             </span>
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-              <Clock className="w-3.5 h-3.5" />
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+              <CheckCircle2 className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <span className="text-2xl sm:text-3xl font-extrabold text-[#16191E] block">
-              14m
+            <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600 block">
+              {completedCount}
             </span>
-            <span className="text-[10px] text-[#8A909D] block mt-0.5">
-              Target: &lt; 15 mins/opd
+            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 mt-0.5">
+              <span>{activeCount > 0 ? `${Math.round((completedCount / activeCount) * 100)}%` : '0%'}</span>
+              <span className="text-[#8A909D] font-normal">consultations concluded</span>
             </span>
           </div>
         </motion.div>
 
+        {/* 3. Cancelled Patients */}
         <motion.div
           whileHover={{ y: -3 }}
           className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
-              WhatsApp Bookings
+              Cancelled Patients
             </span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
-              <MessageSquare className="w-3.5 h-3.5" />
+            <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
+              <CalendarX className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <span className="text-2xl sm:text-3xl font-extrabold text-[#16191E] block">
-              50.3%
-            </span>
-            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5 mt-0.5">
-              <span>↑ +28%</span>
-              <span className="text-[#8A909D] font-normal">digital adoption</span>
-            </span>
-          </div>
-        </motion.div>
-
-        <motion.div
-          whileHover={{ y: -3 }}
-          className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
-              Cancelled Bookings
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
-              <CalendarX className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div>
-            <span className="text-2xl sm:text-3xl font-extrabold text-[#16191E] block">
+            <span className="text-2xl sm:text-3xl font-extrabold text-rose-600 block">
               {cancelledCount}
             </span>
-            <span className="text-[10px] text-[#8A909D] block mt-0.5">
-              {cancelledCount > 0 ? `${cancellationRate}% cancellation rate` : '0% cancellation rate'}
-            </span>
-          </div>
-        </motion.div>
-
-        <motion.div
-          whileHover={{ y: -3 }}
-          className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between col-span-2 sm:col-span-1"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
-              Yearly Footfall
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
-              <Activity className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div>
-            <span className="text-2xl sm:text-3xl font-extrabold text-[#16191E] block">
-              11,850
-            </span>
-            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5 mt-0.5">
-              <span>↑ +21.4%</span>
-              <span className="text-[#8A909D] font-normal">annual growth</span>
+            <span className="text-[10px] text-rose-600 font-bold flex items-center gap-1 mt-0.5">
+              <span>{cancelledCount > 0 ? `${cancellationRate}%` : '0%'}</span>
+              <span className="text-[#8A909D] font-normal">cancellation rate today</span>
             </span>
           </div>
         </motion.div>
