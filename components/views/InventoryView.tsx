@@ -63,6 +63,15 @@ export function InventoryView({
       transition={{ duration: 0.25 }}
       className="space-y-4 sm:space-y-6"
     >
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
+        <div>
+          <h2 className="text-base sm:text-lg font-bold text-[#16191E]">Pharmacy Stock & Inventory</h2>
+          <p className="text-xs text-[#8A909D] font-medium">
+            Monitor molecule stock levels, record new procurements, and manage pharmacy dispensary
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
         <motion.div
           whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(37,99,235,0.12)' }}

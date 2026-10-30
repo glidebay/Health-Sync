@@ -25,6 +25,7 @@ interface AppHeaderProps {
 
 export function AppHeader({
   isMobile,
+  activeSection,
   activeSectionLabel,
   searchQuery,
   setSearchQuery,
@@ -146,44 +147,61 @@ export function AppHeader({
               </motion.div>
             )}
 
-            {isLoggedIn || !requireDoctorPin ? (
-              <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
-                <span
-                  className={`font-bold bg-[#EBECEF] text-[#16191E] rounded-xl border border-[#ECEEF2] flex items-center whitespace-nowrap ${isMobile ? 'h-9 text-[10px] px-2 max-w-[105px] truncate' : 'h-10 text-xs px-3 sm:px-3.5'
-                    }`}
-                >
-                  <span className="hidden xl:inline">
-                    {doctorProfile.name} ({doctorProfile.title})
-                  </span>
-                  <span className="xl:hidden truncate">{doctorProfile.name}</span>
-                </span>
-                {requireDoctorPin && (
-                  <motion.button
-                    whileHover={{ scale: 1.04 }}
-                    whileTap={{ scale: 0.96 }}
-                    onClick={onLogout}
-                    className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
-                      isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
-                    }`}
-                    title="Lock Doctor Session"
+            {activeSection !== 'inventory' ? (
+              isLoggedIn || !requireDoctorPin ? (
+                <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
+                  <span
+                    className={`font-bold bg-[#EBECEF] text-[#16191E] rounded-xl border border-[#ECEEF2] flex items-center whitespace-nowrap ${isMobile ? 'h-9 text-[10px] px-2 max-w-[105px] truncate' : 'h-10 text-xs px-3 sm:px-3.5'
+                      }`}
                   >
-                    <Lock className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
-                    <span>Exit</span>
-                  </motion.button>
-                )}
-              </div>
+                    <span className="hidden xl:inline">
+                      {doctorProfile.name} ({doctorProfile.title})
+                    </span>
+                    <span className="xl:hidden truncate">{doctorProfile.name}</span>
+                  </span>
+                  {requireDoctorPin && (
+                    <motion.button
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.96 }}
+                      onClick={onLogout}
+                      className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
+                        isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
+                      }`}
+                      title="Lock Doctor Session"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
+                      <span>Exit</span>
+                    </motion.button>
+                  )}
+                </div>
+              ) : (
+                <motion.button
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={onOpenPinModal}
+                  className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
+                    isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
+                  }`}
+                >
+                  <LogIn className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
+                  <span className="whitespace-nowrap">Sign In</span>
+                </motion.button>
+              )
             ) : (
-              <motion.button
-                whileHover={{ scale: 1.04 }}
-                whileTap={{ scale: 0.96 }}
-                onClick={onOpenPinModal}
-                className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
-                  isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
-                }`}
-              >
-                <LogIn className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
-                <span className="whitespace-nowrap">Sign In</span>
-              </motion.button>
+              isLoggedIn && requireDoctorPin ? (
+                <motion.button
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={onLogout}
+                  className={`bg-[#ECEEF2] hover:bg-red-50 hover:text-red-600 text-gray-600 font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
+                    isMobile ? 'h-9 text-[11px] px-2.5 space-x-1' : 'h-10 text-xs px-3.5 space-x-1.5'
+                  }`}
+                  title="Lock Doctor Session"
+                >
+                  <Lock className="w-3.5 h-3.5 text-gray-400 group-hover:text-red-500 stroke-[2.2] flex-shrink-0" />
+                  <span>Exit Doctor Mode</span>
+                </motion.button>
+              ) : null
             )}
           </div>
         </>

@@ -415,7 +415,7 @@ function DashboardContent() {
     { id: 'assistant', label: 'Assistant Desk', icon: ClipboardList, reqAuth: false },
     { id: 'queue', label: 'Doctor Queue', icon: Users, reqAuth: true },
     { id: 'consult', label: 'Consultation', icon: Stethoscope, reqAuth: true },
-    { id: 'inventory', label: 'Pharmacy Stock', icon: Boxes, reqAuth: true },
+    { id: 'inventory', label: 'Pharmacy Stock', icon: Boxes, reqAuth: false },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, reqAuth: true },
     { id: 'settings', label: 'Settings', icon: SlidersHorizontal, reqAuth: true },
   ];
@@ -512,7 +512,7 @@ function DashboardContent() {
     try {
       logoutDoctor();
     } catch { }
-    if (['queue', 'consult', 'inventory', 'analytics', 'settings'].includes(activeSection)) {
+    if (['queue', 'consult', 'analytics', 'settings'].includes(activeSection)) {
       setActiveSection('dashboard');
     }
     if (savedDoc?.doctorId) {
@@ -1238,7 +1238,8 @@ function DashboardContent() {
               className={`flex-1 overflow-y-auto no-print ${isMobile ? 'px-3.5 sm:px-6 pt-3 pb-28' : 'px-4 sm:px-6 lg:px-8 xl:px-10 pt-4 sm:pt-6 pb-12'
                 }`}
             >
-              <motion.section
+              {activeSection !== 'inventory' && (
+                <motion.section
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1, duration: 0.45 }}
@@ -1280,8 +1281,9 @@ function DashboardContent() {
                   </motion.p>
                 </div>
               </motion.section>
+              )}
 
-              {isMobile && (
+              {isMobile && activeSection !== 'inventory' && (
                 <motion.div
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
