@@ -70,4 +70,9 @@ export interface ConfirmedToken {
   doctorName: string;
   priority: string;
   channel?: string;
+  appointmentId?: string;
+  dailyQuotaStatus?: string;
+  assignedSlot?: string;
+  message?: string;
+  status?: string;
 }

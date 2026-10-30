@@ -108,21 +108,27 @@ function BookSlotInnerClient() {
         return;
       }
 
-      const newTokNum = String(
-        bookingRes.displayId ||
+      const finalSlotTime = bookingRes.assignedSlot || bookSlotTime || 'Now';
+      const confirmedDate = bookingRes.scheduledDate || finalBookingDate;
+      const finalTokenNo = String(
         bookingRes.tokenNumber ||
-        `P${String(queue.length + 1).padStart(3, '0')}`
+        bookingRes.displayId ||
+        `P${String(bookingRes.queueTokenNo || queue.length + 1).padStart(3, '0')}`
       );
 
       setConfirmedToken({
-        tokenNumber: newTokNum,
+        tokenNumber: finalTokenNo,
         name: bookName.trim(),
-        time: bookSlotTime,
-        date: finalBookingDate,
+        time: finalSlotTime,
+        date: confirmedDate,
         phone: bookPhone.trim(),
         doctorName: docName,
-        priority: bookPriority,
+        priority: bookingRes.priority || bookPriority,
         channel: 'Online',
+        dailyQuotaStatus: bookingRes.dailyQuotaStatus,
+        appointmentId: bookingRes.appointmentId,
+        message: bookingRes.message,
+        status: bookingRes.status || 'Waiting',
       });
 
       setBookName('');

@@ -53,11 +53,38 @@ export function WalkInRegistrationModal({ doctorId, onClose, onSuccess }: WalkIn
       return;
     }
 
-    const tokenNo = data?.queue_token_no || data?.fifo_token_no || "1";
-    const slot = data?.allocated_slot || data?.assigned_slot || "Immediate";
+    let tokenNo = data?.queue_token_no || data?.fifo_token_no || "1";
+    let slot = data?.allocated_slot || data?.assigned_slot || "Immediate";
 
-    alert(`✅ Walk-in Registered! Token #${tokenNo} at ${slot}`);
-    onSuccess(data);
+    if (data?.appointment_id) {
+      try {
+        const { data: realAppt } = await supabase
+          .from('appointments')
+          .select('queue_token_no, scheduled_time')
+          .eq('id', data.appointment_id)
+          .maybeSingle();
+
+        if (realAppt) {
+          if (typeof realAppt.queue_token_no === 'number') {
+            tokenNo = String(realAppt.queue_token_no);
+          }
+          if (realAppt.scheduled_time) {
+            slot = new Date(realAppt.scheduled_time).toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+              timeZone: 'Asia/Kolkata',
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Could not retrieve created appointment record:', err);
+      }
+    }
+
+    const tokenDisplay = tokenNo.toUpperCase().startsWith('P') ? tokenNo : `P${tokenNo.padStart(3, '0')}`;
+    alert(`✅ Walk-in Registered! Token #${tokenDisplay} at ${slot}`);
+    onSuccess({ ...data, queue_token_no: tokenNo, tokenDisplay });
     onClose();
   };
 

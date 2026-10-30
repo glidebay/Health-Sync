@@ -1892,7 +1892,12 @@ export interface BookAppointmentSlotResult {
   patientNumber?: number;
   displayId?: string;
   visitType?: string;
+  assignedSlot?: string;
+  scheduledDate?: string;
+  dailyQuotaStatus?: string;
   message?: string;
+  status?: string;
+  priority?: string;
   error?: string;
 }
 
@@ -2003,32 +2008,81 @@ export async function bookAppointmentSlotDb(
       }
 
       const fifoNo = rpcData.queue_token_no || rpcData.fifo_token_no || 1;
-      const tokenNumber = `P${String(fifoNo).padStart(3, '0')}`;
+      let actualQueueTokenNo = fifoNo;
+      let actualSlot = rpcData.assigned_slot || params.slotTime;
+      let actualDate = params.date;
       let patNumber: number | undefined = undefined;
-      const patDbId = rpcData.patient_id || rpcData.unique_patient_id;
+      let patDbId = rpcData.patient_id || rpcData.unique_patient_id;
+      let apptStatus = rpcData.status || 'Waiting';
+      let apptPriority = rpcData.priority || params.priority;
 
-      if (patDbId) {
-        const { data: pRec } = await supabase
-          .from('patients')
-          .select('patient_number, display_id')
-          .eq('id', patDbId)
+      if (apptId) {
+        // Query the authoritative record from appointments table (after triggers calculate fixed slot tokens)
+        const { data: realAppt } = await supabase
+          .from('appointments')
+          .select(`
+            id,
+            queue_token_no,
+            scheduled_time,
+            patient_id,
+            status,
+            priority,
+            patient:patients(id, patient_number, display_id)
+          `)
+          .eq('id', apptId)
           .maybeSingle();
 
-        if (pRec) {
-          patNumber = pRec.patient_number || undefined;
+        if (realAppt) {
+          if (typeof realAppt.queue_token_no === 'number') {
+            actualQueueTokenNo = realAppt.queue_token_no;
+          }
+          if (realAppt.patient_id) {
+            patDbId = realAppt.patient_id;
+          }
+          if (realAppt.status) {
+            apptStatus = realAppt.status;
+          }
+          if (realAppt.priority) {
+            apptPriority = realAppt.priority;
+          }
+          const patientData = Array.isArray(realAppt.patient) ? realAppt.patient[0] : realAppt.patient;
+          if (patientData) {
+            patNumber = patientData.patient_number || undefined;
+          }
+          if (realAppt.scheduled_time) {
+            try {
+              const dt = new Date(realAppt.scheduled_time);
+              actualDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(dt);
+              actualSlot = dt.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true,
+                timeZone: 'Asia/Kolkata',
+              });
+            } catch {
+              // fallback
+            }
+          }
         }
       }
+
+      const tokenNumber = `P${String(actualQueueTokenNo).padStart(3, '0')}`;
 
       return {
         success: true,
         tokenNumber,
-        queueTokenNo: fifoNo,
+        queueTokenNo: actualQueueTokenNo,
         patientNumber: patNumber,
         displayId: tokenNumber,
         appointmentId: apptId,
         patientId: patDbId,
         visitType: 'Online',
-        message: 'Online appointment slot confirmed successfully!',
+        assignedSlot: actualSlot,
+        scheduledDate: actualDate,
+        dailyQuotaStatus: rpcData.daily_quota_status,
+        message: rpcData.message || 'Online appointment slot confirmed successfully!',
+        status: apptStatus,
+        priority: apptPriority,
       };
     }
 
@@ -2099,15 +2153,36 @@ export async function bookAppointmentSlotDb(
       .single();
 
     if (fallbackAppt) {
+      const actualQueueTokenNo = typeof fallbackAppt.queue_token_no === 'number' ? fallbackAppt.queue_token_no : nextQueueTokenNo;
+      const finalTokenDisplay = `P${String(actualQueueTokenNo).padStart(3, '0')}`;
+      let actualSlot = params.slotTime;
+      let actualDate = targetDate;
+      if (fallbackAppt.scheduled_time) {
+        try {
+          const dt = new Date(fallbackAppt.scheduled_time);
+          actualDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(dt);
+          actualSlot = dt.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+            timeZone: 'Asia/Kolkata',
+          });
+        } catch { }
+      }
+
       return {
         success: true,
-        tokenNumber: tokenDisplay,
-        queueTokenNo: nextQueueTokenNo,
+        tokenNumber: finalTokenDisplay,
+        queueTokenNo: actualQueueTokenNo,
         patientNumber,
-        displayId: tokenDisplay,
+        displayId: finalTokenDisplay,
         appointmentId: fallbackAppt.id,
         patientId: patientId || undefined,
         visitType: 'Online',
+        assignedSlot: actualSlot,
+        scheduledDate: actualDate,
+        status: fallbackAppt.status || 'Waiting',
+        priority: fallbackAppt.priority || params.priority,
         message: 'Online appointment slot booked successfully',
       };
     }

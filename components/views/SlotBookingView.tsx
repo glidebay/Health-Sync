@@ -665,7 +665,9 @@ export function SlotBookingView({
               Slot Confirmed & Token Generated
             </div>
             <h3 className="text-lg sm:text-2xl font-bold text-[#16191E] mb-1">Appointment Successfully Booked</h3>
-            <p className="text-xs sm:text-sm text-[#8A909D] mb-5">Present this token at reception or clinical waiting lounge</p>
+            <p className="text-xs sm:text-sm text-[#8A909D] mb-5">
+              {confirmedToken.message || 'Present this token at reception or clinical waiting lounge'}
+            </p>
 
             <div className="bg-[#F8F9FB] rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] max-w-md mx-auto mb-5 text-left">
               {/* Clinic Header on Slip */}
@@ -696,15 +698,23 @@ export function SlotBookingView({
                   <span className="text-2xl sm:text-3xl font-black text-[#2563EB]">
                     {formatPatientToken({ tokenNumber: confirmedToken.tokenNumber })}
                   </span>
+
                 </div>
-                <span
-                  className={`px-2.5 sm:px-3 py-1 rounded-full text-xs font-bold ${confirmedToken.priority === 'Urgent'
-                    ? 'bg-red-50 text-red-600 border border-red-200'
-                    : 'bg-blue-50 text-[#2563EB] border border-blue-100'
-                    }`}
-                >
-                  {confirmedToken.priority} Visit
-                </span>
+                <div className="flex flex-col items-end gap-1.5">
+                  <span
+                    className={`px-2.5 sm:px-3 py-1 rounded-full text-xs font-bold ${confirmedToken.priority === 'Urgent'
+                      ? 'bg-red-50 text-red-600 border border-red-200'
+                      : 'bg-blue-50 text-[#2563EB] border border-blue-100'
+                      }`}
+                  >
+                    {confirmedToken.priority} Visit
+                  </span>
+                  {confirmedToken.status && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Status: {confirmedToken.status}
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 pt-3.5 text-xs sm:text-sm">
