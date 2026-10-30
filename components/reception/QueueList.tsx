@@ -232,7 +232,7 @@ export function QueueList({
 
       {/* Patient Cards Grid with Scoped ECG Action Loader */}
       <div className="relative min-h-[180px]">
-        <EcgActionLoader isLoading={isLoading} text="Syncing appointments..." />
+        <EcgActionLoader isLoading={isLoading} fullscreen={false} text="Syncing appointments..." />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
           {paginatedQueue.length === 0 ? (
             <div className="col-span-full bg-white rounded-2xl p-10 border border-[#ECEEF2] text-center shadow-xs">

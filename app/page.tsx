@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -677,10 +677,12 @@ function DashboardContent() {
         return;
       }
 
-      const newTokNum = String(
-        bookingRes.displayId ||
+      const finalSlotTime = bookingRes.assignedSlot || bookSlotTime || 'Now';
+      const confirmedDate = bookingRes.scheduledDate || finalBookingDate;
+      const finalTokenNo = String(
         bookingRes.tokenNumber ||
-        `P${String(queue.length + 1).padStart(3, '0')}`
+        bookingRes.displayId ||
+        `P${String(bookingRes.queueTokenNo || queue.length + 1).padStart(3, '0')}`
       );
 
       const newPatient: Patient = {
@@ -689,20 +691,26 @@ function DashboardContent() {
         age: parseInt(bookAge, 10) || 28,
         gender: bookGender,
         phone: bookPhone.trim(),
-        status: 'Waiting',
-        time: bookSlotTime || 'Now',
-        appointmentDate: finalBookingDate,
-        tokenNumber: newTokNum,
+        status: (bookingRes.status as PatientStatus) || 'Waiting',
+        time: finalSlotTime,
+        appointmentDate: confirmedDate,
+        tokenNumber: finalTokenNo,
         queueTokenNo: bookingRes.queueTokenNo,
-        displayId: bookingRes.displayId || newTokNum,
+        displayId: finalTokenNo,
         patientNumber: bookingRes.patientNumber,
-        priority: bookPriority,
+        priority: (bookingRes.priority as 'Normal' | 'Urgent') || bookPriority,
         visitType: 'Online',
       };
 
       const todayIST = getTodayIST();
-      if (finalBookingDate === todayIST) {
-        setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, newPatient]));
+      if (confirmedDate === todayIST) {
+        setQueue((prev) => {
+          const exists = prev.some((p) => p.id === newPatient.id);
+          if (exists) {
+            return prev.map((p) => (p.id === newPatient.id ? newPatient : p));
+          }
+          return sortQueueWithCompletedAtEnd([...prev, newPatient]);
+        });
       }
 
       fetchQueueFromDb().then((fresh) => {
@@ -712,14 +720,18 @@ function DashboardContent() {
       });
 
       setConfirmedToken({
-        tokenNumber: newTokNum,
+        tokenNumber: finalTokenNo,
         name: bookName.trim(),
-        time: bookSlotTime,
-        date: finalBookingDate,
+        time: finalSlotTime,
+        date: confirmedDate,
         phone: bookPhone.trim(),
         doctorName: docName,
-        priority: bookPriority,
+        priority: bookingRes.priority || bookPriority,
         channel: 'Online',
+        dailyQuotaStatus: bookingRes.dailyQuotaStatus,
+        appointmentId: bookingRes.appointmentId,
+        message: bookingRes.message,
+        status: bookingRes.status || 'Waiting',
       });
 
       setBookName('');
@@ -899,8 +911,8 @@ function DashboardContent() {
     );
   };
 
-  const startConsultation = async (patientId: string) => {
-    const patient = queue.find((p) => p.id === patientId);
+  const startConsultation = async (patientId: string, patientObj?: Patient) => {
+    const patient = queue.find((p) => p.id === patientId) || patientObj;
     if (!patient) return;
 
     setActivePatient(patient);
@@ -911,12 +923,28 @@ function DashboardContent() {
 
     await updateAppointmentStatusDb(patientId, 'In Progress');
 
-    setQueue((prev) =>
-      prev.map((p) => (p.id === patientId ? { ...p, status: 'In Progress' } : p))
-    );
+    setQueue((prev) => {
+      const exists = prev.some((p) => p.id === patientId);
+      if (exists) {
+        return prev.map((p) => (p.id === patientId ? { ...p, status: 'In Progress' } : p));
+      } else {
+        return [{ ...patient, status: 'In Progress' }, ...prev];
+      }
+    });
 
     setActiveSection('consult');
   };
+
+  const handleRefreshDoctorQueue = useCallback(async () => {
+    try {
+      const fresh = await fetchQueueFromDb();
+      if (fresh && fresh.length > 0) {
+        setQueue(sortQueueWithCompletedAtEnd(fresh));
+      }
+    } catch (e) {
+      console.warn('Error refreshing doctor queue in page:', e);
+    }
+  }, []);
 
   const handleConsultFromSearch = async (patient: Patient) => {
     if (config.require_doctor_pin && !isLoggedIn) {
@@ -1379,6 +1407,7 @@ function DashboardContent() {
                         (!p.appointmentDate || p.appointmentDate === getTodayIST())
                     )}
                     onStartConsultation={startConsultation}
+                    onRefresh={handleRefreshDoctorQueue}
                   />
                 )}
 
