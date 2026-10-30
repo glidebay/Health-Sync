@@ -283,10 +283,45 @@ function DashboardContent() {
     return doctorProfile;
   }, [isLoggedIn, config.require_doctor_pin, availableDoctors, doctorProfile]);
 
+  const syncQueueOnly = useCallback(async () => {
+    try {
+      const dbQueue = await fetchQueueFromDb();
+      if (dbQueue && Array.isArray(dbQueue)) {
+        setQueue(sortQueueWithCompletedAtEnd(dbQueue));
+      }
+    } catch (err) {
+      console.warn('Queue live sync error:', err);
+    }
+  }, []);
+
+  const syncClinicData = useCallback(async (silent: boolean = true) => {
+    try {
+      const [dbQueue, dbInventory, dbDoctors] = await Promise.all([
+        fetchQueueFromDb(),
+        fetchInventoryFromDb(),
+        getDoctors(),
+      ]);
+
+      if (dbQueue) {
+        setQueue(sortQueueWithCompletedAtEnd(dbQueue));
+      }
+      if (dbInventory) {
+        setInventory(dbInventory);
+      }
+      if (dbDoctors && dbDoctors.length > 0) {
+        setAvailableDoctors(dbDoctors);
+        setBookDoctorId((prev) => prev || dbDoctors[0].id);
+      }
+      setIsDbSynced(true);
+    } catch (err) {
+      if (!silent) console.warn('Failed to sync Supabase data:', err);
+    }
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
 
-    async function loadData() {
+    async function initialLoad() {
       try {
         const [dbQueue, dbInventory, dbDoctors] = await Promise.all([
           fetchQueueFromDb(),
@@ -295,8 +330,12 @@ function DashboardContent() {
         ]);
 
         if (isMounted) {
-          setQueue(sortQueueWithCompletedAtEnd(dbQueue || []));
-          setInventory(dbInventory || []);
+          if (dbQueue) {
+            setQueue(sortQueueWithCompletedAtEnd(dbQueue));
+          }
+          if (dbInventory) {
+            setInventory(dbInventory);
+          }
           if (dbDoctors && dbDoctors.length > 0) {
             setAvailableDoctors(dbDoctors);
             setBookDoctorId((prev) => prev || dbDoctors[0].id);
@@ -330,17 +369,44 @@ function DashboardContent() {
       }
     }
 
-    loadData();
+    initialLoad();
 
+    // 1. Supabase Realtime channel subscription for immediate socket events
     const unsubscribe = subscribeToClinicUpdates(() => {
-      loadData();
+      syncQueueOnly();
     });
+
+    // 2. High-performance live heartbeat polling every 2.5 seconds for instant queue reflection
+    const queueInterval = setInterval(() => {
+      syncQueueOnly();
+    }, 2500);
+
+    // Full clinic sync (inventory, doctors, config) every 20 seconds
+    const fullInterval = setInterval(() => {
+      syncClinicData(true);
+    }, 20000);
+
+    // 3. Immediate sync on document visibility or window focus
+    const handleVisibilityOrFocus = () => {
+      syncQueueOnly();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
 
     return () => {
       isMounted = false;
       unsubscribe();
+      clearInterval(queueInterval);
+      clearInterval(fullInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
     };
-  }, []);
+  }, [syncClinicData, syncQueueOnly]);
+
+  // Synchronize immediately whenever navigating or changing tabs
+  useEffect(() => {
+    syncClinicData(true);
+  }, [activeSection, syncClinicData]);
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -1387,6 +1453,10 @@ function DashboardContent() {
                         setActiveSection('queue');
                       }
                     }}
+                    onQueueUpdated={(updatedPatients) => {
+                      setQueue(sortQueueWithCompletedAtEnd(updatedPatients));
+                    }}
+                    onRefresh={syncClinicData}
                   />
                 )}
 

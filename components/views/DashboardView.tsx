@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Eye,
@@ -12,9 +12,9 @@ import {
   Users,
   Pill,
   CheckCircle2,
-  PlusCircle,
   User,
   Phone,
+  RefreshCw,
 } from 'lucide-react';
 import { Patient } from '@/types';
 import { AnimatedCounter } from '@/components/common/AnimatedCounter';
@@ -22,7 +22,10 @@ import { AnimatedProgress } from '@/components/common/AnimatedProgress';
 import { staggerContainer, fadeScale } from '@/lib/constants';
 import { RescheduleModal, ReallocateStrategy } from '@/components/reception/RescheduleModal';
 import { CancelModal } from '@/components/reception/CancelModal';
-import { formatPatientToken } from '@/lib/utils';
+import { NumberedPagination } from '@/components/ui/pagination';
+import { formatPatientToken, getTodayIST } from '@/lib/utils';
+import { fetchPatientAppointmentsFromDb } from '@/lib/supabaseService';
+import { supabase } from '@/lib/supabaseClient';
 
 interface DashboardViewProps {
   totalPatientsCount: number;
@@ -50,6 +53,8 @@ interface DashboardViewProps {
   }) => Promise<void> | void;
   onStartConsultation: (id: string) => void;
   onRequireLogin: () => void;
+  onQueueUpdated?: (patients: Patient[]) => void;
+  onRefresh?: () => Promise<void> | void;
 }
 
 export function DashboardView({
@@ -69,9 +74,104 @@ export function DashboardView({
   onReschedulePatient,
   onStartConsultation,
   onRequireLogin,
+  onQueueUpdated,
+  onRefresh,
 }: DashboardViewProps) {
   const [selectedPatientForReschedule, setSelectedPatientForReschedule] = useState<Patient | null>(null);
   const [selectedPatientForCancel, setSelectedPatientForCancel] = useState<Patient | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [dbPatients, setDbPatients] = useState<Patient[] | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  const itemsPerPage = 8;
+
+  // Autonomous real-time loader for Dashboard live queue
+  const loadData = useCallback(
+    async (silent: boolean = true) => {
+      if (!silent) setIsRefreshing(true);
+      try {
+        const fetched = await fetchPatientAppointmentsFromDb({
+          date: getTodayIST(),
+          status: 'All',
+        });
+        if (Array.isArray(fetched)) {
+          setDbPatients(fetched);
+          if (onQueueUpdated) {
+            onQueueUpdated(fetched);
+          }
+        }
+      } catch (err) {
+        console.warn('Dashboard live queue fetch error:', err);
+      } finally {
+        if (!silent) setIsRefreshing(false);
+      }
+    },
+    [onQueueUpdated]
+  );
+
+  // Live continuous polling every 2.5 seconds + focus and visibility sync
+  useEffect(() => {
+    loadData(true);
+
+    const interval = setInterval(() => {
+      loadData(true);
+    }, 2500);
+
+    const handleSync = () => {
+      loadData(true);
+    };
+
+    document.addEventListener('visibilitychange', handleSync);
+    window.addEventListener('focus', handleSync);
+
+    const channel = supabase
+      .channel(`realtime-dashboard-${Date.now()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
+        loadData(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'patients' }, () => {
+        loadData(true);
+      })
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleSync);
+      window.removeEventListener('focus', handleSync);
+      supabase.removeChannel(channel);
+    };
+  }, [loadData]);
+
+  // Merge live fetched patients with fallback
+  const effectiveQueue = useMemo(() => {
+    const list = dbPatients !== null ? dbPatients : filteredQueue;
+    const active = list.filter((p) => p.status !== 'Cancelled');
+    const notCompleted = active.filter((p) => p.status !== 'Completed');
+    const completed = active.filter((p) => p.status === 'Completed');
+    return [...notCompleted, ...completed];
+  }, [dbPatients, filteredQueue]);
+
+  const activePatientsList = useMemo(() => {
+    return (dbPatients !== null ? dbPatients : queue).filter((p) => p.status !== 'Cancelled');
+  }, [dbPatients, queue]);
+
+  const effectiveTotalCount = dbPatients !== null ? activePatientsList.length : totalPatientsCount;
+  const effectiveWaitingCount = dbPatients !== null ? activePatientsList.filter((p) => p.status === 'Waiting').length : waitingPatientsCount;
+  const effectiveCompletedCount = dbPatients !== null ? activePatientsList.filter((p) => p.status === 'Completed').length : completedPatientsCount;
+  const effectiveInChamber = dbPatients !== null ? activePatientsList.find((p) => p.status === 'In Progress') : inChamberPatient;
+  const effectiveNextWaiting = dbPatients !== null ? activePatientsList.find((p) => p.status === 'Waiting') : nextWaitingPatient;
+
+  const totalPages = Math.max(1, Math.ceil(effectiveQueue.length / itemsPerPage));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const paginatedQueue = useMemo(() => {
+    return effectiveQueue.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  }, [effectiveQueue, currentPage, itemsPerPage]);
   return (
     <motion.div
       key="dashboard"
@@ -97,7 +197,7 @@ export function DashboardView({
               Total Patients Today
             </span>
             <span className="text-xl sm:text-2xl font-bold text-[#16191E] tracking-tight block">
-              <AnimatedCounter target={totalPatientsCount} />
+              <AnimatedCounter target={effectiveTotalCount} />
             </span>
           </div>
           <motion.div
@@ -119,7 +219,7 @@ export function DashboardView({
               Completed Consults
             </span>
             <span className="text-xl sm:text-2xl font-bold text-[#16191E] tracking-tight block">
-              <AnimatedCounter target={completedPatientsCount} />
+              <AnimatedCounter target={effectiveCompletedCount} />
             </span>
           </div>
           <motion.div
@@ -185,15 +285,15 @@ export function DashboardView({
               <Stethoscope className="w-5 h-5 stroke-[1.8]" />
             </motion.div>
             <div className="min-w-0">
-              <h3 className="text-sm font-bold text-[#16191E] mb-3 truncate" title={inChamberPatient ? `${inChamberPatient.name} (In Chamber)` : undefined}>
-                {inChamberPatient ? `${inChamberPatient.name} (In Chamber)` : 'No Patient in Chamber'}
+              <h3 className="text-sm font-bold text-[#16191E] mb-3 truncate" title={effectiveInChamber ? `${effectiveInChamber.name} (In Chamber)` : undefined}>
+                {effectiveInChamber ? `${effectiveInChamber.name} (In Chamber)` : 'No Patient in Chamber'}
               </h3>
               <div className="flex items-center justify-between gap-2.5 min-w-0">
-                <AnimatedProgress percent={inChamberPatient ? 85 : 0} delay={0.1} className="flex-1 min-w-[36px] max-w-[120px]" />
+                <AnimatedProgress percent={effectiveInChamber ? 85 : 0} delay={0.1} className="flex-1 min-w-[36px] max-w-[120px]" />
                 <span className="text-xs font-semibold text-[#8A909D] flex-shrink-0 whitespace-nowrap">
-                  {inChamberPatient ? (
+                  {effectiveInChamber ? (
                     <>
-                      <strong className="text-[#16191E]">{inChamberPatient.age}</strong> Yrs • {inChamberPatient.gender}
+                      <strong className="text-[#16191E]">{effectiveInChamber.age}</strong> Yrs • {effectiveInChamber.gender}
                     </>
                   ) : (
                     'Chamber Available'
@@ -217,15 +317,15 @@ export function DashboardView({
               <Clock className="w-5 h-5 stroke-[1.8]" />
             </motion.div>
             <div className="min-w-0">
-              <h3 className="text-sm font-bold text-[#16191E] mb-3 truncate" title={nextWaitingPatient ? `${nextWaitingPatient.name} (Next)` : undefined}>
-                {nextWaitingPatient ? `${nextWaitingPatient.name} (Next)` : 'No Waiting Patients'}
+              <h3 className="text-sm font-bold text-[#16191E] mb-3 truncate" title={effectiveNextWaiting ? `${effectiveNextWaiting.name} (Next)` : undefined}>
+                {effectiveNextWaiting ? `${effectiveNextWaiting.name} (Next)` : 'No Waiting Patients'}
               </h3>
               <div className="flex items-center justify-between gap-2.5 min-w-0">
-                <AnimatedProgress percent={nextWaitingPatient ? 50 : 0} delay={0.2} className="flex-1 min-w-[36px] max-w-[120px]" />
+                <AnimatedProgress percent={effectiveNextWaiting ? 50 : 0} delay={0.2} className="flex-1 min-w-[36px] max-w-[120px]" />
                 <span className="text-xs font-semibold text-[#8A909D] flex-shrink-0 whitespace-nowrap">
-                  {nextWaitingPatient ? (
+                  {effectiveNextWaiting ? (
                     <>
-                      <strong className="text-[#16191E]">{nextWaitingPatient.time}</strong> Slot
+                      <strong className="text-[#16191E]">{effectiveNextWaiting.time}</strong> Slot
                     </>
                   ) : (
                     'Queue Clear'
@@ -247,7 +347,7 @@ export function DashboardView({
               <motion.div whileHover={{ scale: 1.03, x: 2 }} transition={{ type: 'spring', damping: 20 }}>
                 <span className="inline-flex items-center space-x-2 bg-[#EAECEF] px-3.5 py-1.5 rounded-lg text-xs font-semibold text-[#16191E] cursor-pointer">
                   <Users className="w-4 h-4 text-[#2563EB] stroke-[2]" />
-                  <span>{waitingPatientsCount} Waiting in Queue</span>
+                  <span>{effectiveWaitingCount} Waiting in Queue</span>
                 </span>
               </motion.div>
               <motion.div whileHover={{ scale: 1.03, x: 2 }} transition={{ type: 'spring', damping: 20 }}>
@@ -267,177 +367,198 @@ export function DashboardView({
         </div>
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-12 gap-6 sm:gap-8">
-        <div className="xl:col-span-7 flex flex-col min-w-0">
-          <div className="flex items-center justify-between mb-4 sm:mb-5">
-            <h2 className="text-base font-bold text-[#16191E]">Live Queue Oversight</h2>
-            <div className="flex items-center space-x-3.5">
-              <motion.span
-                whileHover={{ scale: 1.06 }}
-                onClick={onViewAllQueue}
-                className="text-sm font-semibold text-[#16191E] cursor-pointer hover:underline"
-              >
-                All
-              </motion.span>
-              <motion.button
-                whileHover={{ scale: 1.15, rotate: 90 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={onRegisterWalkin}
-                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-blue-50 transition text-[#2563EB] cursor-pointer"
-                title="Add Walk-in"
-              >
-                <PlusCircle className="w-4 h-4 stroke-[2.2]" />
-              </motion.button>
-            </div>
+      <section className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div>
+            <h2 className="text-base sm:text-lg font-bold text-[#16191E]">Live Queue Oversight</h2>
+            <p className="text-xs text-[#8A909D]">
+              Real-time patient triage, token coordination, and active consultation flow
+            </p>
           </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200/50">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Live Queue Sync</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-[#2563EB] text-xs font-semibold border border-blue-100/60">
+              <Users className="w-3.5 h-3.5" />
+              <span>{effectiveWaitingCount} Waiting</span>
+            </span>
+            <button
+              onClick={async () => {
+                await loadData(false);
+                if (onRefresh) await onRefresh();
+              }}
+              disabled={isRefreshing}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold border border-gray-200 shadow-2xs transition cursor-pointer"
+              title="Refresh live queue"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-gray-500 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+          </div>
+        </div>
 
-          <div className="space-y-3 sm:space-y-4">
-            {filteredQueue.length === 0 ? (
-              <div className="bg-white rounded-2xl p-8 border border-[#ECEEF2] text-center shadow-xs">
-                <Users className="w-8 h-8 text-gray-300 mx-auto mb-2 stroke-[1.5]" />
-                <p className="text-sm font-semibold text-gray-700">No Patients in Database Queue</p>
-                <p className="text-xs text-gray-400 mt-1">Register walk-in patients from Assistant Desk to populate live queue.</p>
-              </div>
-            ) : (
-              filteredQueue.slice(0, 3).map((p) => {
-                const isWaiting = p.status === 'Waiting';
-                const tokenDisplay = formatPatientToken(p);
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+          {effectiveQueue.length === 0 ? (
+            <div className="col-span-full bg-white rounded-2xl p-8 border border-[#ECEEF2] text-center shadow-xs">
+              <Users className="w-8 h-8 text-gray-300 mx-auto mb-2 stroke-[1.5]" />
+              <p className="text-sm font-semibold text-gray-700">No Patients in Database Queue</p>
+              <p className="text-xs text-gray-400 mt-1">Register walk-in patients from Assistant Desk to populate live queue.</p>
+            </div>
+          ) : (
+            paginatedQueue.map((p) => {
+              const isWaiting = p.status === 'Waiting';
+              const isInProgress = p.status === 'In Progress';
+              const isCompleted = p.status === 'Completed';
+              const tokenDisplay = formatPatientToken(p);
 
-                return (
-                  <motion.div
-                    key={p.id}
-                    whileHover={{
-                      y: -2,
-                      boxShadow: '0 10px 24px -6px rgba(0,0,0,0.07)',
-                    }}
-                    className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0"
-                  >
-                    <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
-                      <motion.div
-                        whileHover={{ rotate: 10 }}
-                        className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0 text-[#2563EB]"
-                      >
-                        <User className="w-5 h-5 stroke-[2]" />
-                      </motion.div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <h3 className="text-sm font-bold text-[#16191E] truncate">{p.name}</h3>
-                          <span className="text-xs text-[#8A909D] font-medium flex-shrink-0">
-                            ({tokenDisplay})
+              return (
+                <motion.div
+                  key={p.id}
+                  whileHover={{
+                    y: -2,
+                    boxShadow: '0 10px 24px -6px rgba(0,0,0,0.07)',
+                  }}
+                  className={`bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between gap-3 min-w-0 transition-colors ${
+                    isCompleted ? 'opacity-65' : ''
+                  }`}
+                >
+                  <div className="flex items-start space-x-3 sm:space-x-4 min-w-0">
+                    <motion.div
+                      whileHover={{ rotate: 10 }}
+                      className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        isInProgress
+                          ? 'bg-emerald-50 text-emerald-600'
+                          : isCompleted
+                          ? 'bg-gray-100 text-gray-500'
+                          : 'bg-blue-50 text-[#2563EB]'
+                      }`}
+                    >
+                      <User className="w-5 h-5 stroke-[2]" />
+                    </motion.div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center space-x-2 mb-1 flex-wrap">
+                        <h3 className="text-sm font-bold text-[#16191E] truncate">{p.name}</h3>
+                        <span className="text-xs text-[#8A909D] font-medium flex-shrink-0">
+                          ({tokenDisplay})
+                        </span>
+                        {p.priority === 'Urgent' && (
+                          <span className="bg-amber-100 text-amber-800 text-[9px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0">
+                            Urgent
                           </span>
-                        </div>
-                        <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 text-xs text-[#5E6470] font-medium">
-                          <span>
-                            {p.age} Yrs • {p.gender}
-                          </span>
-                          {p.phone && (
-                            <>
-                              <span className="text-gray-300">•</span>
-                              <span className="inline-flex items-center gap-1 text-[#5E6470]">
-                                <Phone className="w-3 h-3 text-[#2563EB]" />
-                                {p.phone}
-                              </span>
-                            </>
-                          )}
-                          <span className="text-gray-300">•</span>
-                          <span className="inline-flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5 text-[#2563EB] stroke-[2]" />
-                            Slot: {p.time}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-2">
+                        )}
+                      </div>
+                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 text-xs text-[#5E6470] font-medium">
+                        <span>
+                          {p.age} Yrs • {p.gender}
+                        </span>
+                        {p.phone && (
+                          <>
+                            <span className="text-gray-300">•</span>
+                            <span className="inline-flex items-center gap-1 text-[#5E6470]">
+                              <Phone className="w-3 h-3 text-[#2563EB]" />
+                              {p.phone}
+                            </span>
+                          </>
+                        )}
+                        <span className="text-gray-300">•</span>
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-[#2563EB] stroke-[2]" />
+                          Slot: {p.time}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
+                            isCompleted
+                              ? 'bg-gray-100 text-gray-600'
+                              : isInProgress
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : p.status === 'Cancelled'
+                              ? 'bg-rose-50 text-rose-700'
+                              : 'bg-blue-50 text-blue-700'
+                          }`}
+                        >
+                          {p.status}
+                        </span>
+                        {p.visitType && (
                           <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
-                              p.status === 'Completed'
-                                ? 'bg-gray-100 text-gray-600'
-                                : p.status === 'In Progress'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : p.status === 'Cancelled'
-                                ? 'bg-rose-50 text-rose-700'
-                                : 'bg-blue-50 text-blue-700'
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1 ${
+                              p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online')
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                             }`}
                           >
-                            {p.status}
+                            {p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online') ? 'Online' : 'Walk-in'}
                           </span>
-                          {p.visitType && (
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1 ${
-                                p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online')
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                              }`}
-                            >
-                              {p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online') ? 'Online' : 'Walk-in'}
-                            </span>
-                          )}
-                        </div>
+                        )}
                       </div>
                     </div>
+                  </div>
 
+                  <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#ECEEF2]/80 flex-wrap gap-y-1.5">
                     {isWaiting && (
-                      <div className="flex items-center space-x-2 flex-shrink-0 self-end sm:self-center">
+                      <>
                         <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
+                          whileHover={{ scale: 1.04 }}
+                          whileTap={{ scale: 0.96 }}
                           onClick={() => setSelectedPatientForCancel(p)}
-                          className="text-xs font-semibold px-3 py-1.5 border border-rose-200 text-rose-600 rounded-xl hover:bg-rose-50 transition cursor-pointer"
+                          className="text-xs font-semibold px-2.5 py-1.5 border border-rose-200 text-rose-600 rounded-xl hover:bg-rose-50 transition cursor-pointer"
                         >
                           Cancel
                         </motion.button>
                         <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
+                          whileHover={{ scale: 1.04 }}
+                          whileTap={{ scale: 0.96 }}
                           onClick={() => setSelectedPatientForReschedule(p)}
-                          className="text-xs font-semibold px-3 py-1.5 border border-blue-200 text-[#2563EB] rounded-xl hover:bg-blue-50 transition cursor-pointer"
+                          className="text-xs font-semibold px-2.5 py-1.5 border border-blue-200 text-[#2563EB] rounded-xl hover:bg-blue-50 transition cursor-pointer"
                         >
                           Reschedule
                         </motion.button>
-                      </div>
+                        <motion.button
+                          whileHover={{ scale: 1.04 }}
+                          whileTap={{ scale: 0.96 }}
+                          onClick={() => {
+                            if (isLoggedIn) onStartConsultation(p.id);
+                            else onRequireLogin();
+                          }}
+                          className="text-xs font-semibold px-3 py-1.5 bg-[#2563EB] text-white hover:bg-blue-700 rounded-xl transition cursor-pointer shadow-2xs whitespace-nowrap"
+                        >
+                          Consult &rarr;
+                        </motion.button>
+                      </>
                     )}
-                  </motion.div>
-                );
-              })
-            )}
-          </div>
+                    {isInProgress && (
+                      <motion.button
+                        whileHover={{ scale: 1.04 }}
+                        whileTap={{ scale: 0.96 }}
+                        onClick={() => {
+                          if (isLoggedIn) onStartConsultation(p.id);
+                          else onRequireLogin();
+                        }}
+                        className="text-xs font-semibold px-3 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-xl transition cursor-pointer shadow-2xs whitespace-nowrap"
+                      >
+                        Resume Consult &rarr;
+                      </motion.button>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })
+          )}
         </div>
 
-        <div className="xl:col-span-5 flex flex-col min-w-0">
-          <h2 className="text-base font-bold text-[#16191E] mb-4 sm:mb-5">Upcoming Consultations</h2>
-          <div className="space-y-3 sm:space-y-4">
-            {queue.slice(2, 5).map((p) => (
-              <motion.div
-                key={p.id}
-                whileHover={{
-                  y: -3,
-                  x: 4,
-                  boxShadow: '0 10px 24px -6px rgba(0,0,0,0.07)',
-                }}
-                className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex items-center space-x-3 sm:space-x-4 cursor-pointer min-w-0"
-                onClick={() => {
-                  if (isLoggedIn) onStartConsultation(p.id);
-                  else onRequireLogin();
-                }}
-              >
-                <motion.div
-                  whileHover={{ scale: 1.1 }}
-                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0 text-[#2563EB]"
-                >
-                  <Stethoscope className="w-5 h-5 sm:w-6 sm:h-6 stroke-[1.8]" />
-                </motion.div>
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-bold text-[#16191E] mb-0.5 truncate">{p.name}</h3>
-                  <motion.span
-                    animate={{ opacity: [0.6, 1, 0.6] }}
-                    transition={{ repeat: Infinity, duration: 2.5 }}
-                    className="text-xs text-[#8A909D] font-medium block truncate"
-                  >
-                    Slot: {p.time} • {p.age} Yrs
-                  </motion.span>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
+        {effectiveQueue.length > itemsPerPage && (
+          <NumberedPagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            totalItems={effectiveQueue.length}
+            itemsPerPage={itemsPerPage}
+            itemName="patients"
+          />
+        )}
       </section>
 
       <CancelModal

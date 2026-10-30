@@ -123,6 +123,24 @@ export function QueueList({
 
   useEffect(() => {
     loadData();
+
+    // High-performance continuous live polling every 2.5s
+    const interval = setInterval(() => {
+      loadData(true);
+    }, 2500);
+
+    const handleSync = () => {
+      loadData(true);
+    };
+
+    document.addEventListener('visibilitychange', handleSync);
+    window.addEventListener('focus', handleSync);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleSync);
+      window.removeEventListener('focus', handleSync);
+    };
   }, [loadData]);
 
   // Real-time synchronization: listen for appointment changes
