@@ -1266,7 +1266,7 @@ function DashboardContent() {
               className={`flex-1 overflow-y-auto no-print ${isMobile ? 'px-3.5 sm:px-6 pt-3 pb-28' : 'px-4 sm:px-6 lg:px-8 xl:px-10 pt-4 sm:pt-6 pb-12'
                 }`}
             >
-              {!['inventory', 'analytics'].includes(activeSection) && (
+              {activeSection !== 'inventory' && (
                 <motion.section
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1311,7 +1311,7 @@ function DashboardContent() {
               </motion.section>
               )}
 
-              {isMobile && !['inventory', 'analytics'].includes(activeSection) && (
+              {isMobile && activeSection !== 'inventory' && (
                 <motion.div
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
