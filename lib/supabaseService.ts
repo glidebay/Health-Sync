@@ -62,6 +62,44 @@ export async function getDoctors(): Promise<DbDoctor[]> {
   }
 }
 
+export async function updateDoctorProfileDb(
+  doctorId: string,
+  updates: {
+    full_name?: string;
+    specialization?: string;
+    reg_no?: string;
+    daily_quota?: number;
+    pin_code?: string;
+  }
+): Promise<{ success: boolean; doctor?: DbDoctor; error?: string }> {
+  try {
+    const payload: Record<string, unknown> = {};
+    if (updates.full_name !== undefined) payload.full_name = updates.full_name.trim();
+    if (updates.specialization !== undefined) payload.specialization = updates.specialization.trim();
+    if (updates.reg_no !== undefined) payload.reg_no = updates.reg_no.trim();
+    if (updates.daily_quota !== undefined) payload.daily_quota = Number(updates.daily_quota);
+    if (updates.pin_code && updates.pin_code.trim()) {
+      payload.pin_code = bcrypt.hashSync(updates.pin_code.trim(), 10);
+    }
+
+    const { data, error } = await supabase
+      .from('doctors')
+      .update(payload)
+      .eq('id', doctorId)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.warn('Error updating doctor profile:', error.message);
+      return { success: false, error: error.message };
+    }
+    return { success: true, doctor: data as DbDoctor };
+  } catch (err: any) {
+    console.warn('updateDoctorProfileDb exception:', err);
+    return { success: false, error: err.message || 'Failed to update doctor profile' };
+  }
+}
+
 export interface VerifyDoctorPinResult {
   success: boolean;
   doctor?: DbDoctor;
@@ -1354,8 +1392,18 @@ export function saveAppConfigLocal(config: AppConfig): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(APP_CONFIG_STORAGE_KEY, JSON.stringify(config));
-  } catch (e) {
-    console.warn('Failed saving app config locally:', e);
+  } catch {
+    try {
+      localStorage.removeItem(APP_CONFIG_STORAGE_KEY);
+      const sanitized: Record<string, unknown> = { ...config };
+      if (typeof sanitized.rx_template_url === 'string' && sanitized.rx_template_url.length > 50000) {
+        delete sanitized.rx_template_url;
+      }
+      if (typeof sanitized.logo_url === 'string' && sanitized.logo_url.length > 50000) {
+        delete sanitized.logo_url;
+      }
+      localStorage.setItem(APP_CONFIG_STORAGE_KEY, JSON.stringify(sanitized));
+    } catch {}
   }
 }
 
@@ -1372,15 +1420,15 @@ export async function fetchAppConfigDb(): Promise<AppConfig> {
       return localConfig;
     }
 
+    const validConfigKeys = new Set(Object.keys(DEFAULT_APP_CONFIG));
     const merged: Record<string, unknown> = { ...localConfig };
     rows.forEach((row) => {
+      if (!validConfigKeys.has(row.key)) return;
       let val: unknown = row.value;
       if (typeof val === 'string') {
         try {
           val = JSON.parse(val);
-        } catch {
-          // keep as string
-        }
+        } catch {}
       }
       merged[row.key] = val;
     });

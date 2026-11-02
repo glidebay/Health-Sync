@@ -13,6 +13,7 @@ import {
   Search,
   SlidersHorizontal,
   Lock,
+  UserCog,
 } from 'lucide-react';
 
 import { ClinicProvider, useClinic } from '@/context/ClinicContext';
@@ -65,6 +66,7 @@ import { GlobalPatientSearch } from '@/components/common/GlobalPatientSearch';
 import { NavigationDock } from '@/components/layout/NavigationDock';
 import { DoctorAuthModal } from '@/components/auth/DoctorAuthModal';
 import { WalkinRegisterModal } from '@/components/modals/WalkinRegisterModal';
+import { DoctorProfileEditModal } from '@/components/modals/DoctorProfileEditModal';
 import { PrescriptionPrintModal } from '@/components/modals/PrescriptionPrintModal';
 import { NotificationModal, NotificationState } from '@/components/modals/NotificationModal';
 import { FloatingChatButton } from '@/components/chat/FloatingChatButton';
@@ -188,7 +190,6 @@ function DashboardContent() {
   const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
   const [confirmedToken, setConfirmedToken] = useState<ConfirmedToken | null>(null);
 
-  // Initialize date client-side to prevent Next.js prerender timing evaluation issues
   useEffect(() => {
     const today = new Date();
     const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -371,22 +372,18 @@ function DashboardContent() {
 
     initialLoad();
 
-    // 1. Supabase Realtime channel subscription for immediate socket events
     const unsubscribe = subscribeToClinicUpdates(() => {
       syncQueueOnly();
     });
 
-    // 2. High-performance live heartbeat polling every 2.5 seconds for instant queue reflection
     const queueInterval = setInterval(() => {
       syncQueueOnly();
     }, 2500);
 
-    // Full clinic sync (inventory, doctors, config) every 20 seconds
     const fullInterval = setInterval(() => {
       syncClinicData(true);
     }, 20000);
 
-    // 3. Immediate sync on document visibility or window focus
     const handleVisibilityOrFocus = () => {
       syncQueueOnly();
     };
@@ -403,7 +400,6 @@ function DashboardContent() {
     };
   }, [syncClinicData, syncQueueOnly]);
 
-  // Synchronize immediately whenever navigating or changing tabs
   useEffect(() => {
     syncClinicData(true);
   }, [activeSection, syncClinicData]);
@@ -417,6 +413,7 @@ function DashboardContent() {
   };
 
   const [showWalkinModal, setShowWalkinModal] = useState(false);
+  const [showDoctorEditModal, setShowDoctorEditModal] = useState(false);
   const [isWalkinSubmitting, setIsWalkinSubmitting] = useState(false);
   const [walkinName, setWalkinName] = useState('');
   const [walkinAge, setWalkinAge] = useState('');
@@ -449,7 +446,6 @@ function DashboardContent() {
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
 
-  // Real-time WhatsApp unread count tracking for floating button
   useEffect(() => {
     const updateUnread = async () => {
       try {
@@ -481,7 +477,7 @@ function DashboardContent() {
     { id: 'assistant', label: 'Assistant Desk', icon: ClipboardList, reqAuth: false },
     { id: 'queue', label: 'Doctor Queue', icon: Users, reqAuth: true },
     { id: 'consult', label: 'Consultation', icon: Stethoscope, reqAuth: true },
-    { id: 'inventory', label: 'Pharmacy Stock', icon: Boxes, reqAuth: false },
+    { id: 'inventory', label: 'Pharmacy Stock', icon: Boxes, reqAuth: true },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, reqAuth: true },
     { id: 'settings', label: 'Settings', icon: SlidersHorizontal, reqAuth: true },
   ];
@@ -578,7 +574,7 @@ function DashboardContent() {
     try {
       logoutDoctor();
     } catch { }
-    if (['queue', 'consult', 'analytics', 'settings'].includes(activeSection)) {
+    if (['queue', 'consult', 'inventory', 'analytics', 'settings'].includes(activeSection)) {
       setActiveSection('dashboard');
     }
     if (savedDoc?.doctorId) {
@@ -1332,58 +1328,64 @@ function DashboardContent() {
               className={`flex-1 overflow-y-auto no-print ${isMobile ? 'px-3.5 sm:px-6 pt-3 pb-28' : 'px-4 sm:px-6 lg:px-8 xl:px-10 pt-4 sm:pt-6 pb-12'
                 }`}
             >
-              {!['inventory', 'analytics'].includes(activeSection) && (
+              {activeSection === 'settings' && (
                 <motion.section
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1, duration: 0.45 }}
-                className={`flex items-center mb-6 sm:mb-8 min-w-0 ${isMobile ? 'space-x-3' : 'space-x-4'}`}
-              >
-                {activeSection !== 'assistant' && (
-                  <motion.div
-                    whileHover={{ scale: 1.08 }}
-                    transition={{ type: 'spring', damping: 15 }}
-                    className={`rounded-full overflow-hidden bg-gray-200 border-2 border-white shadow-sm flex-shrink-0 cursor-pointer ${isMobile ? 'w-11 h-11' : 'w-14 h-14'
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1, duration: 0.35 }}
+                  className="flex items-center justify-between mb-6 sm:mb-8 min-w-0 bg-white p-4 sm:p-5 rounded-2xl border border-[#ECEEF2] shadow-2xs gap-3 flex-wrap"
+                >
+                  <div className="flex items-center space-x-3 sm:space-x-4 min-w-0">
+                    <motion.div
+                      whileHover={{ scale: 1.05 }}
+                      transition={{ type: 'spring', damping: 15 }}
+                      className={`rounded-full overflow-hidden bg-blue-50 border-2 border-white shadow-sm flex-shrink-0 cursor-pointer ${
+                        isMobile ? 'w-11 h-11' : 'w-14 h-14'
                       }`}
+                    >
+                      <Image
+                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAlmuC30xuMIZpBDfxi6DcXHu_Ks41P52MELsRuS7q4xgQhHJsRyIAU26SoUhZQ_v01dlHDlWrAAkh3wSZl04MBQqPlT6ErIF8M2Z-BxbP_LDZJwq1ggudaa_bfRN8YDWwtyWd28KCfQfIF40q_rF1P8xus-qeymY-ar5CmL4wz4tzlH8FI1FP7WZ-0sJDAW-0YLEq8Icg9Yn18bC_VJLV-Tv4XaPLEQViv7w4vOCY"
+                        alt="Profile"
+                        width={56}
+                        height={56}
+                        unoptimized
+                        className="w-full h-full object-cover"
+                      />
+                    </motion.div>
+                    <div className="min-w-0 flex-1">
+                      <motion.h1
+                        initial={{ opacity: 0, x: -12 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.15 }}
+                        className={`font-bold text-[#16191E] leading-snug truncate ${isMobile ? 'text-base' : 'text-xl'}`}
+                      >
+                        {effectiveDoctorProfile.name}
+                      </motion.h1>
+                      <motion.p
+                        initial={{ opacity: 0, x: -12 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="text-xs text-[#8A909D] font-medium truncate"
+                      >
+                        {effectiveDoctorProfile.title}
+                      </motion.p>
+                    </div>
+                  </div>
+
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    type="button"
+                    onClick={() => setShowDoctorEditModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#2563EB] border border-blue-200 text-xs font-bold transition shadow-2xs cursor-pointer"
                   >
-                    <Image
-                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAlmuC30xuMIZpBDfxi6DcXHu_Ks41P52MELsRuS7q4xgQhHJsRyIAU26SoUhZQ_v01dlHDlWrAAkh3wSZl04MBQqPlT6ErIF8M2Z-BxbP_LDZJwq1ggudaa_bfRN8YDWwtyWd28KCfQfIF40q_rF1P8xus-qeymY-ar5CmL4wz4tzlH8FI1FP7WZ-0sJDAW-0YLEq8Icg9Yn18bC_VJLV-Tv4XaPLEQViv7w4vOCY"
-                      alt="Profile"
-                      width={56}
-                      height={56}
-                      unoptimized
-                      className="w-full h-full object-cover"
-                    />
-                  </motion.div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <motion.h1
-                    initial={{ opacity: 0, x: -16 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className={`font-bold text-[#16191E] leading-snug truncate ${isMobile ? 'text-base' : 'text-xl'}`}
-                  >
-                    {activeSection === 'assistant'
-                      ? 'Welcome Back'
-                      : `Welcome Back ${isDoctorUnlocked ? effectiveDoctorProfile.name : 'Jack (Assistant)'}`}
-                  </motion.h1>
-                  {activeSection !== 'assistant' && (
-                  <motion.p
-                    initial={{ opacity: 0, x: -16 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.28 }}
-                    className="text-xs text-[#8A909D] font-medium truncate"
-                  >
-                    {isDoctorUnlocked
-                      ? 'Clinical Chamber • OPD consultation worklist & stock link'
-                      : "Here is an overview of today's patient queue & triage"}
-                  </motion.p>
-                  )}
-                </div>
-              </motion.section>
+                    <UserCog className="w-4 h-4 stroke-[2]" />
+                    <span>Edit Profile</span>
+                  </motion.button>
+                </motion.section>
               )}
 
-              {isMobile && !['inventory', 'analytics'].includes(activeSection) && (
+              {isMobile && (
                 <motion.div
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -1581,6 +1583,28 @@ function DashboardContent() {
             setWalkinPriority={setWalkinPriority}
             onSubmit={handleRegisterWalkin}
             isSubmitting={isWalkinSubmitting}
+          />
+
+          <DoctorProfileEditModal
+            isOpen={showDoctorEditModal}
+            onClose={() => setShowDoctorEditModal(false)}
+            doctor={availableDoctors.find((d) => d.id === bookDoctorId) || availableDoctors[0] || null}
+            onSave={(updatedDoc) => {
+              setAvailableDoctors((prev) =>
+                prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d))
+              );
+              setDoctorProfile({
+                name: updatedDoc.full_name,
+                title: updatedDoc.specialization || 'General Medicine',
+              });
+              saveDoctorSessionLocal({
+                doctorId: updatedDoc.id,
+                name: updatedDoc.full_name,
+                title: updatedDoc.specialization || 'General Medicine',
+                expiresAt: Date.now() + 30 * 60 * 1000,
+              });
+              showToast('success', 'Profile Updated', `${updatedDoc.full_name} details updated successfully.`);
+            }}
           />
 
           <PrescriptionPrintModal

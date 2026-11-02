@@ -216,7 +216,7 @@ function DoctorSearchCombobox({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.15 }}
-            className="absolute left-0 right-0 top-full mt-1.5 z-40 bg-white border border-[#ECEEF2] rounded-xl shadow-xl overflow-hidden"
+            className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-[#ECEEF2] rounded-xl shadow-xl overflow-hidden"
           >
             <ul ref={listRef} className="max-h-56 sm:max-h-60 overflow-y-auto divide-y divide-[#F1F3F6] p-1">
               {filteredDoctors.length === 0 ? (
@@ -567,6 +567,12 @@ export function SlotBookingView({
     }
   }, [confirmedToken, loadDoctorSlots]);
 
+  useEffect(() => {
+    if (!bookDoctorId && availableDoctors.length > 0) {
+      setBookDoctorId(availableDoctors[0].id);
+    }
+  }, [bookDoctorId, availableDoctors, setBookDoctorId]);
+
   const currentSlots = useMemo(() => {
     if (!activeDate) return [];
     if (slots.length > 0) {
@@ -598,7 +604,6 @@ export function SlotBookingView({
     };
   }, [currentSlots]);
 
-  // If the active filter has 0 slots (e.g. Morning passed for today), auto-switch to All
   useEffect(() => {
     if (selectedPeriod !== 'All' && periodCounts[selectedPeriod] === 0) {
       setSelectedPeriod('All');
@@ -670,11 +675,11 @@ export function SlotBookingView({
             </p>
 
             <div className="bg-[#F8F9FB] rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] max-w-md mx-auto mb-5 text-left">
-              {/* Clinic Header on Slip */}
+
               <div className="flex items-center gap-2.5 pb-3.5 mb-3.5 border-b border-[#ECEEF2]">
                 {config?.logo_url ? (
                   <div className="w-8 h-8 rounded-lg border border-[#ECEEF2] bg-white overflow-hidden flex items-center justify-center p-0.5 flex-shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
+
                     <img src={config.logo_url} alt={config.clinic_name || 'Clinic Logo'} className="w-full h-full object-contain" />
                   </div>
                 ) : (
@@ -800,7 +805,21 @@ export function SlotBookingView({
               </p>
             </div>
 
-            <div className="space-y-2.5 sm:space-y-3">
+            {availableDoctors.length > 0 && (
+              <div className="space-y-1.5 sm:space-y-2 relative z-20">
+                <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-2">
+                  <Stethoscope className="w-4 h-4 text-[#2563EB]" />
+                  <span>Consulting Physician</span>
+                </label>
+                <DoctorSearchCombobox
+                  doctors={availableDoctors}
+                  selectedDoctorId={bookDoctorId}
+                  onSelectDoctorId={setBookDoctorId}
+                />
+              </div>
+            )}
+
+            <div className="space-y-2.5 sm:space-y-3 pt-1 border-t border-[#ECEEF2]">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-1.5 sm:gap-2">
                   <Calendar className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
@@ -1047,20 +1066,6 @@ export function SlotBookingView({
               </div>
             </div>
 
-            {availableDoctors.length > 0 && (
-              <div className="space-y-1.5 sm:space-y-2 pt-1 border-t border-[#ECEEF2]">
-                <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-2">
-                  <Stethoscope className="w-4 h-4 text-[#2563EB]" />
-                  <span>Consulting Physician</span>
-                </label>
-                <DoctorSearchCombobox
-                  doctors={availableDoctors}
-                  selectedDoctorId={bookDoctorId}
-                  onSelectDoctorId={setBookDoctorId}
-                />
-              </div>
-            )}
-
             <div className="space-y-3 sm:space-y-4 pt-1 border-t border-[#ECEEF2]">
               <label className="text-xs sm:text-sm font-bold text-[#16191E] flex items-center gap-2">
                 <User className="w-4 h-4 text-[#2563EB]" />
@@ -1258,7 +1263,7 @@ export function SlotBookingView({
           <div className="flex items-center space-x-2.5 sm:space-x-3.5 min-w-0">
             {config?.logo_url ? (
               <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl border border-[#ECEEF2] bg-white overflow-hidden flex items-center justify-center p-1 shadow-2xs flex-shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+
                 <img
                   src={config.logo_url}
                   alt={config.clinic_name || 'Clinic Logo'}
