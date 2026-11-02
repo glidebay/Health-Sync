@@ -85,7 +85,6 @@ export function DashboardView({
 
   const itemsPerPage = 8;
 
-  // Autonomous real-time loader for Dashboard live queue
   const loadData = useCallback(
     async (silent: boolean = true) => {
       if (!silent) setIsRefreshing(true);
@@ -109,7 +108,6 @@ export function DashboardView({
     [onQueueUpdated]
   );
 
-  // Live continuous polling every 2.5 seconds + focus and visibility sync
   useEffect(() => {
     loadData(true);
 
@@ -142,7 +140,6 @@ export function DashboardView({
     };
   }, [loadData]);
 
-  // Merge live fetched patients with fallback
   const effectiveQueue = useMemo(() => {
     const list = dbPatients !== null ? dbPatients : filteredQueue;
     const active = list.filter((p) => p.status !== 'Cancelled');
@@ -375,28 +372,7 @@ export function DashboardView({
               Real-time patient triage, token coordination, and active consultation flow
             </p>
           </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200/50">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Live Queue Sync</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-[#2563EB] text-xs font-semibold border border-blue-100/60">
-              <Users className="w-3.5 h-3.5" />
-              <span>{effectiveWaitingCount} Waiting</span>
-            </span>
-            <button
-              onClick={async () => {
-                await loadData(false);
-                if (onRefresh) await onRefresh();
-              }}
-              disabled={isRefreshing}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold border border-gray-200 shadow-2xs transition cursor-pointer"
-              title="Refresh live queue"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-gray-500 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Refresh</span>
-            </button>
-          </div>
+
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
@@ -420,20 +396,18 @@ export function DashboardView({
                     y: -2,
                     boxShadow: '0 10px 24px -6px rgba(0,0,0,0.07)',
                   }}
-                  className={`bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between gap-3 min-w-0 transition-colors ${
-                    isCompleted ? 'opacity-65' : ''
-                  }`}
+                  className={`bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between gap-3 min-w-0 transition-colors ${isCompleted ? 'opacity-65' : ''
+                    }`}
                 >
                   <div className="flex items-start space-x-3 sm:space-x-4 min-w-0">
                     <motion.div
                       whileHover={{ rotate: 10 }}
-                      className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        isInProgress
-                          ? 'bg-emerald-50 text-emerald-600'
-                          : isCompleted
+                      className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${isInProgress
+                        ? 'bg-emerald-50 text-emerald-600'
+                        : isCompleted
                           ? 'bg-gray-100 text-gray-500'
                           : 'bg-blue-50 text-[#2563EB]'
-                      }`}
+                        }`}
                     >
                       <User className="w-5 h-5 stroke-[2]" />
                     </motion.div>
@@ -470,25 +444,23 @@ export function DashboardView({
                       </div>
                       <div className="flex items-center gap-2 mt-2">
                         <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
-                            isCompleted
-                              ? 'bg-gray-100 text-gray-600'
-                              : isInProgress
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${isCompleted
+                            ? 'bg-gray-100 text-gray-600'
+                            : isInProgress
                               ? 'bg-emerald-100 text-emerald-800'
                               : p.status === 'Cancelled'
-                              ? 'bg-rose-50 text-rose-700'
-                              : 'bg-blue-50 text-blue-700'
-                          }`}
+                                ? 'bg-rose-50 text-rose-700'
+                                : 'bg-blue-50 text-blue-700'
+                            }`}
                         >
                           {p.status}
                         </span>
                         {p.visitType && (
                           <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1 ${
-                              p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online')
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                            }`}
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1 ${p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online')
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                              }`}
                           >
                             {p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online') ? 'Online' : 'Walk-in'}
                           </span>
@@ -516,17 +488,7 @@ export function DashboardView({
                         >
                           Reschedule
                         </motion.button>
-                        <motion.button
-                          whileHover={{ scale: 1.04 }}
-                          whileTap={{ scale: 0.96 }}
-                          onClick={() => {
-                            if (isLoggedIn) onStartConsultation(p.id);
-                            else onRequireLogin();
-                          }}
-                          className="text-xs font-semibold px-3 py-1.5 bg-[#2563EB] text-white hover:bg-blue-700 rounded-xl transition cursor-pointer shadow-2xs whitespace-nowrap"
-                        >
-                          Consult &rarr;
-                        </motion.button>
+
                       </>
                     )}
                     {isInProgress && (
@@ -565,7 +527,7 @@ export function DashboardView({
         isOpen={!!selectedPatientForCancel}
         patient={selectedPatientForCancel}
         onClose={() => setSelectedPatientForCancel(null)}
-        onConfirmCancel={onCancelAppointment || (async () => {})}
+        onConfirmCancel={onCancelAppointment || (async () => { })}
       />
 
       <RescheduleModal
@@ -573,7 +535,7 @@ export function DashboardView({
         patient={selectedPatientForReschedule}
         queue={queue}
         onClose={() => setSelectedPatientForReschedule(null)}
-        onReschedulePatient={onReschedulePatient || (async () => {})}
+        onReschedulePatient={onReschedulePatient || (async () => { })}
       />
     </motion.div>
   );
