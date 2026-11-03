@@ -21,6 +21,7 @@ import {
   LogOut,
   ChevronDown,
   Check,
+  X,
 } from 'lucide-react';
 import { useClinic } from '@/context/ClinicContext';
 import EcgActionLoader from '@/components/loading/EcgActionLoader';
@@ -36,6 +37,8 @@ import { PrescriptionTemplateCalibrator } from '@/components/settings/Prescripti
 interface SettingsViewProps {
   isMobile?: boolean;
   onLogout?: () => void;
+  searchQuery?: string;
+  onSearchChange?: (q: string) => void;
 }
 
 interface CategoryConfig {
@@ -165,12 +168,21 @@ function CustomDropdownInput({
   );
 }
 
-export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) {
+export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onSearchChange }: SettingsViewProps) {
   const { config, updateAllConfigs, resetConfigToDefaults } = useClinic();
 
   const [edits, setEdits] = useState<Partial<AppConfig>>({});
   const [activeCategory, setActiveCategory] = useState<string>(CATEGORIES[0].id);
-  const [searchFilter, setSearchFilter] = useState('');
+  const [searchFilter, setSearchFilter] = useState(searchQuery);
+
+  useEffect(() => {
+    setSearchFilter(searchQuery);
+  }, [searchQuery]);
+
+  const handleSearchChange = (val: string) => {
+    setSearchFilter(val);
+    onSearchChange?.(val);
+  };
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -191,12 +203,15 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
 
   const filteredParameters = useMemo(() => {
     return SETTINGS_METADATA.filter((meta) => {
+      const q = searchFilter.trim().toLowerCase();
       const matchesSearch =
-        searchFilter.trim() === '' ||
-        meta.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
-        meta.description.toLowerCase().includes(searchFilter.toLowerCase());
+        q === '' ||
+        (meta.name || '').toLowerCase().includes(q) ||
+        (meta.description || '').toLowerCase().includes(q) ||
+        (meta.key || '').toLowerCase().includes(q) ||
+        (meta.category || '').toLowerCase().includes(q);
 
-      if (searchFilter.trim() !== '') {
+      if (q !== '') {
         return matchesSearch;
       }
       return meta.category === activeCategory;
@@ -405,9 +420,19 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
             type="text"
             placeholder="Search parameter..."
             value={searchFilter}
-            onChange={(e) => setSearchFilter(e.target.value)}
-            className="w-full h-10 pl-10 pr-4 bg-white border border-[#ECEEF2] rounded-xl text-xs placeholder-gray-400 text-gray-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="w-full h-10 pl-10 pr-9 bg-white border border-[#ECEEF2] rounded-xl text-xs placeholder-gray-400 text-gray-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
           />
+          {searchFilter && (
+            <button
+              type="button"
+              onClick={() => handleSearchChange('')}
+              className="absolute right-2.5 inset-y-0 flex items-center text-gray-400 hover:text-gray-600 transition cursor-pointer"
+              title="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {!searchFilter && (

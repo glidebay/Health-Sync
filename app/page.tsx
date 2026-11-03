@@ -64,6 +64,8 @@ import { SideMenu, NavItemConfig } from '@/components/layout/SideMenu';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { GlobalPatientSearch } from '@/components/common/GlobalPatientSearch';
 import { GlobalPharmacySearch } from '@/components/common/GlobalPharmacySearch';
+import { GlobalSettingsSearch } from '@/components/common/GlobalSettingsSearch';
+import { GlobalAnalyticsSearch } from '@/components/common/GlobalAnalyticsSearch';
 import { NavigationDock } from '@/components/layout/NavigationDock';
 import { DoctorAuthModal } from '@/components/auth/DoctorAuthModal';
 import { WalkinRegisterModal } from '@/components/modals/WalkinRegisterModal';
@@ -489,6 +491,7 @@ function DashboardContent() {
       setShowPinModal(true);
       return;
     }
+    setSearchQuery('');
     setActiveSection(section);
   };
 
@@ -1400,6 +1403,22 @@ function DashboardContent() {
                       inventory={inventory}
                       placeholder="Search medicines..."
                     />
+                  ) : activeSection === 'settings' ? (
+                    <GlobalSettingsSearch
+                      isMobile
+                      placeholder="Search settings..."
+                      onSelectSetting={(key) => {
+                        setSearchQuery(key);
+                      }}
+                    />
+                  ) : activeSection === 'analytics' ? (
+                    <GlobalAnalyticsSearch
+                      isMobile
+                      placeholder="Search analytics & insights..."
+                      onSelectItem={(_id, title) => {
+                        setSearchQuery(title);
+                      }}
+                    />
                   ) : (
                     <GlobalPatientSearch
                       isMobile
@@ -1544,12 +1563,19 @@ function DashboardContent() {
                     totalPatientsCount={totalPatientsCount}
                     queue={queue}
                     cancelledAppointments={queue.filter((p) => p.status === 'Cancelled')}
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
                   />
                 )}
 
                 {activeSection === 'settings' && (
                   isDoctorUnlocked ? (
-                    <SettingsView isMobile={isMobile} onLogout={handleFullLogout} />
+                    <SettingsView
+                      isMobile={isMobile}
+                      onLogout={handleFullLogout}
+                      searchQuery={searchQuery}
+                      onSearchChange={setSearchQuery}
+                    />
                   ) : (
                     <motion.div
                       initial={{ opacity: 0, scale: 0.96 }}

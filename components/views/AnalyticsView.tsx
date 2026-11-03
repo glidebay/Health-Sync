@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   CalendarX,
   Pill,
+  Search,
+  X,
 } from 'lucide-react';
 import { ChartLine } from '@/components/ui/chart-line';
 import { RankBarChart, type RankBarItem } from '@/components/ui/rank-bars';
@@ -19,13 +21,27 @@ interface AnalyticsViewProps {
   totalPatientsCount: number;
   queue?: Patient[];
   cancelledAppointments?: Patient[];
+  searchQuery?: string;
+  onSearchChange?: (q: string) => void;
 }
 
 export function AnalyticsView({
   totalPatientsCount,
   queue,
   cancelledAppointments,
+  searchQuery = '',
+  onSearchChange,
 }: AnalyticsViewProps) {
+  const [internalSearch, setInternalSearch] = React.useState(searchQuery);
+
+  React.useEffect(() => {
+    setInternalSearch(searchQuery);
+  }, [searchQuery]);
+
+  const handleSearchChange = (val: string) => {
+    setInternalSearch(val);
+    onSearchChange?.(val);
+  };
   const cancelledList = useMemo(() => {
     if (cancelledAppointments !== undefined) {
       return cancelledAppointments;
@@ -129,6 +145,31 @@ export function AnalyticsView({
     { label: 'Orthopedic / Joints', pct: '5%', color: 'bg-[#BFDBFE]' },
   ];
 
+  const filteredMedicines = useMemo(() => {
+    const q = internalSearch.trim().toLowerCase();
+    if (!q) return topSellingMedicines;
+    return topSellingMedicines.filter(
+      (m) => (m.label || '').toLowerCase().includes(q) || (m.sub || '').toLowerCase().includes(q)
+    );
+  }, [internalSearch, topSellingMedicines]);
+
+  const filteredCases = useMemo(() => {
+    const q = internalSearch.trim().toLowerCase();
+    if (!q) return casesData;
+    return casesData.filter((c) => (c.label || '').toLowerCase().includes(q));
+  }, [internalSearch, casesData]);
+
+  const filteredCancelled = useMemo(() => {
+    const q = internalSearch.trim().toLowerCase();
+    if (!q) return cancelledList;
+    return cancelledList.filter(
+      (p) =>
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.phone || '').toLowerCase().includes(q) ||
+        (p.cancellationReason || '').toLowerCase().includes(q)
+    );
+  }, [internalSearch, cancelledList]);
+
   return (
     <motion.section
       key="analytics"
@@ -138,12 +179,35 @@ export function AnalyticsView({
       transition={{ duration: 0.25 }}
       className="space-y-5 sm:space-y-6"
     >
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
         <div>
           <h2 className="text-base sm:text-lg font-bold text-[#16191E]">Clinic Analytics & Practice Insights</h2>
           <p className="text-xs text-[#8A909D] font-medium">
             Monitor patient volume trends, consultation dynamics, digital adoption, and pharmacy metrics
           </p>
+        </div>
+
+        <div className="relative w-full sm:w-72">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+            <Search className="w-3.5 h-3.5" />
+          </span>
+          <input
+            type="text"
+            value={internalSearch}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Search analytics & insights..."
+            className="w-full pl-9 pr-8 py-2 bg-white border border-[#ECEEF2] rounded-xl text-xs text-[#16191E] placeholder:text-gray-400 outline-none focus:border-[#2563EB] shadow-2xs transition"
+          />
+          {internalSearch && (
+            <button
+              type="button"
+              onClick={() => handleSearchChange('')}
+              className="absolute right-2.5 inset-y-0 flex items-center text-gray-400 hover:text-gray-600 transition cursor-pointer"
+              title="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -290,7 +354,7 @@ export function AnalyticsView({
           <div className="flex-1 flex flex-col justify-center">
             <RankBarChart
               unit=" strips"
-              items={topSellingMedicines}
+              items={filteredMedicines}
               highlightColor="#2563EB"
             />
           </div>
@@ -370,7 +434,7 @@ export function AnalyticsView({
             </div>
 
             <div className="space-y-2 text-xs font-medium w-full sm:w-auto">
-              {casesData.map((item) => (
+              {filteredCases.map((item) => (
                 <div
                   key={item.label}
                   className="flex items-center justify-between sm:justify-start space-x-3"
@@ -410,7 +474,7 @@ export function AnalyticsView({
           </div>
         ) : (
           <div className="divide-y divide-[#ECEEF2]">
-            {cancelledList.map((p) => {
+            {filteredCancelled.map((p) => {
               const tokenDisplay = formatPatientToken(p);
               const visitTypeDisplay =
                 p.visitType && (p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online'))
