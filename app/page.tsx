@@ -64,6 +64,9 @@ import EcgLoadingScreen from '@/components/loading/EcgLoadingScreen';
 import { SideMenu, NavItemConfig } from '@/components/layout/SideMenu';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { GlobalPatientSearch } from '@/components/common/GlobalPatientSearch';
+import { GlobalPharmacySearch } from '@/components/common/GlobalPharmacySearch';
+import { GlobalSettingsSearch } from '@/components/common/GlobalSettingsSearch';
+import { GlobalAnalyticsSearch } from '@/components/common/GlobalAnalyticsSearch';
 import { NavigationDock } from '@/components/layout/NavigationDock';
 import { DoctorAuthModal } from '@/components/auth/DoctorAuthModal';
 import { WalkinRegisterModal } from '@/components/modals/WalkinRegisterModal';
@@ -491,6 +494,7 @@ function DashboardContent() {
       setShowPinModal(true);
       return;
     }
+    setSearchQuery('');
     setActiveSection(section);
   };
 
@@ -1325,6 +1329,7 @@ function DashboardContent() {
               requireDoctorPin={config.require_doctor_pin}
               queue={queue}
               onSelectConsult={handleConsultFromSearch}
+              inventory={inventory}
             />
 
             <main
@@ -1395,12 +1400,36 @@ function DashboardContent() {
                   transition={{ delay: 0.15 }}
                   className="relative w-full mb-6"
                 >
-                  <GlobalPatientSearch
-                    isMobile
-                    queue={queue}
-                    onSelectConsult={handleConsultFromSearch}
-                    placeholder="Search patient, phone, age, gender (e.g. Menon, 90000, 20-50)..."
-                  />
+                  {activeSection === 'inventory' ? (
+                    <GlobalPharmacySearch
+                      isMobile
+                      inventory={inventory}
+                      placeholder="Search medicines..."
+                    />
+                  ) : activeSection === 'settings' ? (
+                    <GlobalSettingsSearch
+                      isMobile
+                      placeholder="Search settings..."
+                      onSelectSetting={(key) => {
+                        setSearchQuery(key);
+                      }}
+                    />
+                  ) : activeSection === 'analytics' ? (
+                    <GlobalAnalyticsSearch
+                      isMobile
+                      placeholder="Search analytics & insights..."
+                      onSelectItem={(_id, title) => {
+                        setSearchQuery(title);
+                      }}
+                    />
+                  ) : (
+                    <GlobalPatientSearch
+                      isMobile
+                      queue={queue}
+                      onSelectConsult={handleConsultFromSearch}
+                      placeholder="Search patient, phone, age, gender (e.g. Menon, 90000, 20-50)..."
+                    />
+                  )}
                 </motion.div>
               )}
 
@@ -1551,6 +1580,8 @@ function DashboardContent() {
                     setStockUpdates={setStockUpdates}
                     onAddNewProcurement={handleAddNewProcurement}
                     onUpdateStock={handleUpdateStock}
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
                   />
                 )}
 
@@ -1559,12 +1590,19 @@ function DashboardContent() {
                     totalPatientsCount={totalPatientsCount}
                     queue={queue}
                     cancelledAppointments={queue.filter((p) => p.status === 'Cancelled')}
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
                   />
                 )}
 
                 {activeSection === 'settings' && (
                   isDoctorUnlocked ? (
-                    <SettingsView isMobile={isMobile} onLogout={handleFullLogout} />
+                    <SettingsView
+                      isMobile={isMobile}
+                      onLogout={handleFullLogout}
+                      searchQuery={searchQuery}
+                      onSearchChange={setSearchQuery}
+                    />
                   ) : (
                     <motion.div
                       initial={{ opacity: 0, scale: 0.96 }}

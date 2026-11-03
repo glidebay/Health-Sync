@@ -40,6 +40,7 @@ export interface AppConfig {
   clinic_phone: string;
   clinic_address: string;
   logo_url: string;
+  prescription_page_url: string;
   rx_footer_text: string;
 
   rx_template_url: string;
@@ -82,6 +83,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   clinic_phone: '+91 98765 43210',
   clinic_address: '123 Main St, Kochi, Kerala',
   logo_url: '/assets/logo.png',
+  prescription_page_url: '',
   rx_footer_text: 'Get well soon! Contact clinic for emergencies.',
 
   rx_template_url: '',

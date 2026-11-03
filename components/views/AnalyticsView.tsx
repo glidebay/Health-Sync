@@ -4,12 +4,13 @@ import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Users,
-  Clock,
   TrendingUp,
   MessageSquare,
-  Activity,
-  Pill,
+  CheckCircle2,
   CalendarX,
+  Pill,
+  Search,
+  X,
 } from 'lucide-react';
 import { ChartLine } from '@/components/ui/chart-line';
 import { RankBarChart, type RankBarItem } from '@/components/ui/rank-bars';
@@ -20,13 +21,27 @@ interface AnalyticsViewProps {
   totalPatientsCount: number;
   queue?: Patient[];
   cancelledAppointments?: Patient[];
+  searchQuery?: string;
+  onSearchChange?: (q: string) => void;
 }
 
 export function AnalyticsView({
   totalPatientsCount,
   queue,
   cancelledAppointments,
+  searchQuery = '',
+  onSearchChange,
 }: AnalyticsViewProps) {
+  const [internalSearch, setInternalSearch] = React.useState(searchQuery);
+
+  React.useEffect(() => {
+    setInternalSearch(searchQuery);
+  }, [searchQuery]);
+
+  const handleSearchChange = (val: string) => {
+    setInternalSearch(val);
+    onSearchChange?.(val);
+  };
   const cancelledList = useMemo(() => {
     if (cancelledAppointments !== undefined) {
       return cancelledAppointments;
@@ -41,6 +56,32 @@ export function AnalyticsView({
     totalBookingsToday > 0
       ? ((cancelledCount / totalBookingsToday) * 100).toFixed(1)
       : '0.0';
+
+  const walkinList = useMemo(() => {
+    if (!queue) return [];
+    return queue.filter((p) => {
+      if (p.status === 'Cancelled') return false;
+      const vt = (p.visitType || '').toLowerCase();
+      return !vt.includes('whatsapp') && !vt.includes('online');
+    });
+  }, [queue]);
+  const walkinCount = walkinList.length;
+
+  const whatsappList = useMemo(() => {
+    if (!queue) return [];
+    return queue.filter((p) => {
+      if (p.status === 'Cancelled') return false;
+      const vt = (p.visitType || '').toLowerCase();
+      return vt.includes('whatsapp') || vt.includes('online');
+    });
+  }, [queue]);
+  const whatsappCount = whatsappList.length;
+
+  const completedList = useMemo(() => {
+    if (!queue) return [];
+    return queue.filter((p) => p.status === 'Completed');
+  }, [queue]);
+  const completedCount = completedList.length;
 
   const patientVolumeData = [
     { month: 'Jan', walkins: 420, whatsapp: 180 },
@@ -104,6 +145,31 @@ export function AnalyticsView({
     { label: 'Orthopedic / Joints', pct: '5%', color: 'bg-[#BFDBFE]' },
   ];
 
+  const filteredMedicines = useMemo(() => {
+    const q = internalSearch.trim().toLowerCase();
+    if (!q) return topSellingMedicines;
+    return topSellingMedicines.filter(
+      (m) => (m.label || '').toLowerCase().includes(q) || (m.sub || '').toLowerCase().includes(q)
+    );
+  }, [internalSearch, topSellingMedicines]);
+
+  const filteredCases = useMemo(() => {
+    const q = internalSearch.trim().toLowerCase();
+    if (!q) return casesData;
+    return casesData.filter((c) => (c.label || '').toLowerCase().includes(q));
+  }, [internalSearch, casesData]);
+
+  const filteredCancelled = useMemo(() => {
+    const q = internalSearch.trim().toLowerCase();
+    if (!q) return cancelledList;
+    return cancelledList.filter(
+      (p) =>
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.phone || '').toLowerCase().includes(q) ||
+        (p.cancellationReason || '').toLowerCase().includes(q)
+    );
+  }, [internalSearch, cancelledList]);
+
   return (
     <motion.section
       key="analytics"
@@ -113,52 +179,64 @@ export function AnalyticsView({
       transition={{ duration: 0.25 }}
       className="space-y-5 sm:space-y-6"
     >
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
+        <div>
+          <h2 className="text-base sm:text-lg font-bold text-[#16191E]">Clinic Analytics & Practice Insights</h2>
+          <p className="text-xs text-[#8A909D] font-medium">
+            Monitor patient volume trends, consultation dynamics, digital adoption, and pharmacy metrics
+          </p>
+        </div>
+
+        <div className="relative w-full sm:w-72">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+            <Search className="w-3.5 h-3.5" />
+          </span>
+          <input
+            type="text"
+            value={internalSearch}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Search analytics & insights..."
+            className="w-full pl-9 pr-8 py-2 bg-white border border-[#ECEEF2] rounded-xl text-xs text-[#16191E] placeholder:text-gray-400 outline-none focus:border-[#2563EB] shadow-2xs transition"
+          />
+          {internalSearch && (
+            <button
+              type="button"
+              onClick={() => handleSearchChange('')}
+              className="absolute right-2.5 inset-y-0 flex items-center text-gray-400 hover:text-gray-600 transition cursor-pointer"
+              title="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* 1. Walking Patients */}
         <motion.div
           whileHover={{ y: -3 }}
           className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
-              Today's Patients
+              Walking Patients
             </span>
-            <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB]">
-              <Users className="w-3.5 h-3.5" />
+            <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB]">
+              <Users className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
             <span className="text-2xl sm:text-3xl font-extrabold text-[#16191E] block">
-              {activeCount}
+              {walkinCount}
             </span>
-            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5 mt-0.5">
-              <span>↑ +12%</span>
-              <span className="text-[#8A909D] font-normal">attending today</span>
-            </span>
-          </div>
-        </motion.div>
-
-        <motion.div
-          whileHover={{ y: -3 }}
-          className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
-              Avg Consult Time
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-              <Clock className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div>
-            <span className="text-2xl sm:text-3xl font-extrabold text-[#16191E] block">
-              14m
-            </span>
-            <span className="text-[10px] text-[#8A909D] block mt-0.5">
-              Target: &lt; 15 mins/opd
+            <span className="text-[10px] text-blue-600 font-bold flex items-center gap-1 mt-0.5">
+              <span>{activeCount > 0 ? `${Math.round((walkinCount / activeCount) * 100)}%` : '0%'}</span>
+              <span className="text-[#8A909D] font-normal">of active queue walk-ins</span>
             </span>
           </div>
         </motion.div>
 
+        {/* 2. WhatsApp Booking Patients */}
         <motion.div
           whileHover={{ y: -3 }}
           className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
@@ -167,62 +245,65 @@ export function AnalyticsView({
             <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
               WhatsApp Bookings
             </span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
-              <MessageSquare className="w-3.5 h-3.5" />
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+              <MessageSquare className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <span className="text-2xl sm:text-3xl font-extrabold text-[#16191E] block">
-              50.3%
+            <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600 block">
+              {whatsappCount}
             </span>
-            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5 mt-0.5">
-              <span>↑ +28%</span>
-              <span className="text-[#8A909D] font-normal">digital adoption</span>
+            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 mt-0.5">
+              <span>{activeCount > 0 ? `${Math.round((whatsappCount / activeCount) * 100)}%` : '0%'}</span>
+              <span className="text-[#8A909D] font-normal">digital self-service</span>
             </span>
           </div>
         </motion.div>
 
+        {/* 3. Completed Patients */}
         <motion.div
           whileHover={{ y: -3 }}
           className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
-              Cancelled Bookings
+              Completed Patients
             </span>
-            <div className="w-7 h-7 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
-              <CalendarX className="w-3.5 h-3.5" />
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+              <CheckCircle2 className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <span className="text-2xl sm:text-3xl font-extrabold text-[#16191E] block">
-              {cancelledCount}
+            <span className="text-2xl sm:text-3xl font-extrabold text-indigo-600 block">
+              {completedCount}
             </span>
-            <span className="text-[10px] text-[#8A909D] block mt-0.5">
-              {cancelledCount > 0 ? `${cancellationRate}% cancellation rate` : '0% cancellation rate'}
+            <span className="text-[10px] text-indigo-600 font-bold flex items-center gap-1 mt-0.5">
+              <span>{activeCount > 0 ? `${Math.round((completedCount / activeCount) * 100)}%` : '0%'}</span>
+              <span className="text-[#8A909D] font-normal">consultations concluded</span>
             </span>
           </div>
         </motion.div>
 
+        {/* 4. Cancelled Patients */}
         <motion.div
           whileHover={{ y: -3 }}
-          className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between col-span-2 sm:col-span-1"
+          className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
-              Yearly Footfall
+              Cancelled Patients
             </span>
-            <div className="w-7 h-7 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
-              <Activity className="w-3.5 h-3.5" />
+            <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
+              <CalendarX className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <span className="text-2xl sm:text-3xl font-extrabold text-[#16191E] block">
-              11,850
+            <span className="text-2xl sm:text-3xl font-extrabold text-rose-600 block">
+              {cancelledCount}
             </span>
-            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5 mt-0.5">
-              <span>↑ +21.4%</span>
-              <span className="text-[#8A909D] font-normal">annual growth</span>
+            <span className="text-[10px] text-rose-600 font-bold flex items-center gap-1 mt-0.5">
+              <span>{cancelledCount > 0 ? `${cancellationRate}%` : '0%'}</span>
+              <span className="text-[#8A909D] font-normal">cancellation rate today</span>
             </span>
           </div>
         </motion.div>
@@ -273,7 +354,7 @@ export function AnalyticsView({
           <div className="flex-1 flex flex-col justify-center">
             <RankBarChart
               unit=" strips"
-              items={topSellingMedicines}
+              items={filteredMedicines}
               highlightColor="#2563EB"
             />
           </div>
@@ -353,7 +434,7 @@ export function AnalyticsView({
             </div>
 
             <div className="space-y-2 text-xs font-medium w-full sm:w-auto">
-              {casesData.map((item) => (
+              {filteredCases.map((item) => (
                 <div
                   key={item.label}
                   className="flex items-center justify-between sm:justify-start space-x-3"
@@ -393,7 +474,7 @@ export function AnalyticsView({
           </div>
         ) : (
           <div className="divide-y divide-[#ECEEF2]">
-            {cancelledList.map((p) => {
+            {filteredCancelled.map((p) => {
               const tokenDisplay = formatPatientToken(p);
               const visitTypeDisplay =
                 p.visitType && (p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online'))

@@ -21,6 +21,7 @@ import {
   LogOut,
   ChevronDown,
   Check,
+  X,
 } from 'lucide-react';
 import { useClinic } from '@/context/ClinicContext';
 import EcgActionLoader from '@/components/loading/EcgActionLoader';
@@ -36,6 +37,8 @@ import { PrescriptionTemplateCalibrator } from '@/components/settings/Prescripti
 interface SettingsViewProps {
   isMobile?: boolean;
   onLogout?: () => void;
+  searchQuery?: string;
+  onSearchChange?: (q: string) => void;
 }
 
 interface CategoryConfig {
@@ -165,15 +168,24 @@ function CustomDropdownInput({
   );
 }
 
-export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) {
+export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onSearchChange }: SettingsViewProps) {
   const { config, updateAllConfigs, resetConfigToDefaults } = useClinic();
 
   const [edits, setEdits] = useState<Partial<AppConfig>>({});
   const [activeCategory, setActiveCategory] = useState<string>(CATEGORIES[0].id);
-  const [searchFilter, setSearchFilter] = useState('');
+  const [searchFilter, setSearchFilter] = useState(searchQuery);
+
+  useEffect(() => {
+    setSearchFilter(searchQuery);
+  }, [searchQuery]);
+
+  const handleSearchChange = (val: string) => {
+    setSearchFilter(val);
+    onSearchChange?.(val);
+  };
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const formData = useMemo(() => ({ ...config, ...edits }), [config, edits]);
 
@@ -191,12 +203,15 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
 
   const filteredParameters = useMemo(() => {
     return SETTINGS_METADATA.filter((meta) => {
+      const q = searchFilter.trim().toLowerCase();
       const matchesSearch =
-        searchFilter.trim() === '' ||
-        meta.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
-        meta.description.toLowerCase().includes(searchFilter.toLowerCase());
+        q === '' ||
+        (meta.name || '').toLowerCase().includes(q) ||
+        (meta.description || '').toLowerCase().includes(q) ||
+        (meta.key || '').toLowerCase().includes(q) ||
+        (meta.category || '').toLowerCase().includes(q);
 
-      if (searchFilter.trim() !== '') {
+      if (q !== '') {
         return matchesSearch;
       }
       return meta.category === activeCategory;
@@ -208,17 +223,18 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
     setIsSaved(false);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (key: keyof AppConfig, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        handleFieldChange('logo_url', reader.result);
+        handleFieldChange(key, reader.result);
       }
     };
     reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const handleSave = async () => {
@@ -404,9 +420,19 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
             type="text"
             placeholder="Search parameter..."
             value={searchFilter}
-            onChange={(e) => setSearchFilter(e.target.value)}
-            className="w-full h-10 pl-10 pr-4 bg-white border border-[#ECEEF2] rounded-xl text-xs placeholder-gray-400 text-gray-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="w-full h-10 pl-10 pr-9 bg-white border border-[#ECEEF2] rounded-xl text-xs placeholder-gray-400 text-gray-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
           />
+          {searchFilter && (
+            <button
+              type="button"
+              onClick={() => handleSearchChange('')}
+              className="absolute right-2.5 inset-y-0 flex items-center text-gray-400 hover:text-gray-600 transition cursor-pointer"
+              title="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {!searchFilter && (
@@ -594,10 +620,12 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                     {meta.uiWidget === 'file' && (
                       <div className="space-y-3">
                         <input
-                          ref={fileInputRef}
+                          ref={(el) => {
+                            fileInputRefs.current[meta.key] = el;
+                          }}
                           type="file"
                           accept="image/*"
-                          onChange={handleFileUpload}
+                          onChange={(e) => handleFileUpload(meta.key, e)}
                           className="hidden"
                         />
 
@@ -607,22 +635,26 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={String(val)}
-                                alt="Clinic Logo"
+                                alt={meta.name}
                                 className="w-full h-full object-contain"
                               />
                             </div>
                             <div className="flex-1 min-w-0">
                               <span className="text-xs font-bold text-[#16191E] block truncate">
-                                Logo Uploaded
+                                {meta.key === 'prescription_page_url'
+                                  ? 'Prescription Page Uploaded'
+                                  : 'Logo Uploaded'}
                               </span>
                               <span className="text-[11px] text-[#8A909D]">
-                                Used on header & prescription prints
+                                {meta.key === 'prescription_page_url'
+                                  ? 'Used on prescription print layout & letterhead'
+                                  : 'Used on header & prescription prints'}
                               </span>
                             </div>
                             <div className="flex items-center space-x-1.5">
                               <button
                                 type="button"
-                                onClick={() => fileInputRef.current?.click()}
+                                onClick={() => fileInputRefs.current[meta.key]?.click()}
                                 className="px-3 py-1.5 bg-white border border-[#ECEEF2] hover:bg-gray-100 rounded-lg text-xs font-semibold text-[#16191E] transition cursor-pointer"
                               >
                                 Change
@@ -639,21 +671,26 @@ export function SettingsView({ isMobile = false, onLogout }: SettingsViewProps) 
                           </div>
                         ) : (
                           <div
-                            onClick={() => fileInputRef.current?.click()}
+                            onClick={() => fileInputRefs.current[meta.key]?.click()}
                             className="border-2 border-dashed border-[#ECEEF2] hover:border-[#2563EB] rounded-xl p-4 text-center cursor-pointer transition-colors bg-[#F8F9FB] hover:bg-blue-50/20"
                           >
                             <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#2563EB] flex items-center justify-center mx-auto mb-2">
                               <Upload className="w-4 h-4 stroke-[2]" />
                             </div>
                             <span className="text-xs font-bold text-[#16191E] block">
-                              Choose Clinic Logo
+                              {meta.key === 'prescription_page_url'
+                                ? 'Choose Prescription Printed Page'
+                                : 'Choose Clinic Logo'}
                             </span>
                             <span className="text-[11px] text-[#8A909D] mt-0.5 block">
-                              PNG, JPG, SVG or WebP from your device
+                              {meta.key === 'prescription_page_url'
+                                ? 'PNG, JPG, SVG or WebP letterhead or prescription pad'
+                                : 'PNG, JPG, SVG or WebP from your device'}
                             </span>
                           </div>
                         )}
                       </div>
+
                     )}
                   </div>
                 </div>

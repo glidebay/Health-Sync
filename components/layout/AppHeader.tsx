@@ -3,8 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { PanelLeft, HeartPulse, Search, LogIn, Lock } from 'lucide-react';
-import { NavSection, Patient } from '@/types';
+import { NavSection, Patient, InventoryItem } from '@/types';
 import { GlobalPatientSearch } from '@/components/common/GlobalPatientSearch';
+import { GlobalPharmacySearch } from '@/components/common/GlobalPharmacySearch';
+import { GlobalSettingsSearch } from '@/components/common/GlobalSettingsSearch';
+import { GlobalAnalyticsSearch } from '@/components/common/GlobalAnalyticsSearch';
 
 interface AppHeaderProps {
   isMobile: boolean;
@@ -21,10 +24,12 @@ interface AppHeaderProps {
   requireDoctorPin?: boolean;
   queue?: Patient[];
   onSelectConsult?: (patient: Patient) => void;
+  inventory?: InventoryItem[];
 }
 
 export function AppHeader({
   isMobile,
+  activeSection,
   activeSectionLabel,
   searchQuery,
   setSearchQuery,
@@ -37,8 +42,12 @@ export function AppHeader({
   requireDoctorPin = true,
   queue = [],
   onSelectConsult,
+  inventory = [],
 }: AppHeaderProps) {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const isPharmacyStock = activeSection === 'inventory';
+  const isSettings = activeSection === 'settings';
+  const isAnalytics = activeSection === 'analytics';
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -67,16 +76,45 @@ export function AppHeader({
     >
       {isSearchExpanded ? (
         <div className="w-full flex items-center">
-          <GlobalPatientSearch
-            isExpanded={true}
-            onClose={() => setIsSearchExpanded(false)}
-            queue={queue}
-            onSelectConsult={(patient) => {
-              setIsSearchExpanded(false);
-              onSelectConsult?.(patient);
-            }}
-            placeholder="Search patient by name, phone, age, gender (e.g. Menon, 90000, Female, 20-50)..."
-          />
+          {isPharmacyStock ? (
+            <GlobalPharmacySearch
+              isExpanded={true}
+              onClose={() => setIsSearchExpanded(false)}
+              inventory={inventory}
+              placeholder="Search medicines by brand or molecule..."
+            />
+          ) : isSettings ? (
+            <GlobalSettingsSearch
+              isExpanded={true}
+              onClose={() => setIsSearchExpanded(false)}
+              placeholder="Search settings..."
+              onSelectSetting={(key) => {
+                setIsSearchExpanded(false);
+                setSearchQuery(key);
+              }}
+            />
+          ) : isAnalytics ? (
+            <GlobalAnalyticsSearch
+              isExpanded={true}
+              onClose={() => setIsSearchExpanded(false)}
+              placeholder="Search analytics & insights..."
+              onSelectItem={(_id, title) => {
+                setIsSearchExpanded(false);
+                setSearchQuery(title);
+              }}
+            />
+          ) : (
+            <GlobalPatientSearch
+              isExpanded={true}
+              onClose={() => setIsSearchExpanded(false)}
+              queue={queue}
+              onSelectConsult={(patient) => {
+                setIsSearchExpanded(false);
+                onSelectConsult?.(patient);
+              }}
+              placeholder="Search patient by name, phone, age, gender (e.g. Menon, 90000, Female, 20-50)..."
+            />
+          )}
         </div>
       ) : (
         <>
@@ -118,7 +156,15 @@ export function AppHeader({
                 type="button"
                 onClick={() => setIsSearchExpanded(true)}
                 className="w-9 h-9 rounded-xl bg-white border border-[#ECEEF2] flex items-center justify-center text-[#2563EB] shadow-2xs hover:bg-blue-50 transition cursor-pointer flex-shrink-0"
-                title="Search patients"
+                title={
+                  isPharmacyStock
+                    ? 'Search medicines'
+                    : isSettings
+                    ? 'Search settings'
+                    : isAnalytics
+                    ? 'Search analytics'
+                    : 'Search patients'
+                }
               >
                 <Search className="w-4 h-4 stroke-[2.2]" />
               </button>
@@ -134,56 +180,87 @@ export function AppHeader({
                 <div
                   onClick={() => setIsSearchExpanded(true)}
                   className="relative flex items-center cursor-pointer w-44 sm:w-56 md:w-64 lg:w-72 xl:w-80 h-10 pl-10 pr-3.5 bg-[#ECEEF2] hover:bg-[#E6E8ED] border border-transparent rounded-xl text-xs text-gray-500 transition-all duration-200 group"
-                  title="Search patients (press / or click)"
+                  title={
+                    isPharmacyStock
+                      ? 'Search medicines'
+                      : isSettings
+                      ? 'Search settings'
+                      : isAnalytics
+                      ? 'Search analytics'
+                      : 'Search patients (press / or click)'
+                  }
                 >
                   <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[#2563EB] group-hover:scale-105 transition-transform">
                     <Search className="w-4 h-4 stroke-[2]" />
                   </span>
                   <span className="truncate text-gray-500 group-hover:text-gray-700">
-                    Search patient, phone, age...
+                    {isPharmacyStock
+                      ? 'Search medicines...'
+                      : isSettings
+                      ? 'Search settings...'
+                      : isAnalytics
+                      ? 'Search analytics & insights...'
+                      : 'Search patient, phone, age...'}
                   </span>
                 </div>
               </motion.div>
             )}
 
-            {isLoggedIn || !requireDoctorPin ? (
-              <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
-                <span
-                  className={`font-bold bg-[#EBECEF] text-[#16191E] rounded-xl border border-[#ECEEF2] flex items-center whitespace-nowrap ${isMobile ? 'h-9 text-[10px] px-2 max-w-[105px] truncate' : 'h-10 text-xs px-3 sm:px-3.5'
-                    }`}
-                >
-                  <span className="hidden xl:inline">
-                    {doctorProfile.name} ({doctorProfile.title})
-                  </span>
-                  <span className="xl:hidden truncate">{doctorProfile.name}</span>
-                </span>
-                {requireDoctorPin && (
-                  <motion.button
-                    whileHover={{ scale: 1.04 }}
-                    whileTap={{ scale: 0.96 }}
-                    onClick={onLogout}
-                    className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
-                      isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
-                    }`}
-                    title="Lock Doctor Session"
+            {!['inventory', 'analytics', 'assistant'].includes(activeSection) ? (
+              isLoggedIn || !requireDoctorPin ? (
+                <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
+                  <span
+                    className={`font-bold bg-[#EBECEF] text-[#16191E] rounded-xl border border-[#ECEEF2] flex items-center whitespace-nowrap ${isMobile ? 'h-9 text-[10px] px-2 max-w-[105px] truncate' : 'h-10 text-xs px-3 sm:px-3.5'
+                      }`}
                   >
-                    <Lock className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
-                    <span>Exit</span>
-                  </motion.button>
-                )}
-              </div>
+                    <span className="hidden xl:inline">
+                      {doctorProfile.name} ({doctorProfile.title})
+                    </span>
+                    <span className="xl:hidden truncate">{doctorProfile.name}</span>
+                  </span>
+                  {requireDoctorPin && (
+                    <motion.button
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.96 }}
+                      onClick={onLogout}
+                      className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
+                        isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
+                      }`}
+                      title="Lock Doctor Session"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
+                      <span>Exit</span>
+                    </motion.button>
+                  )}
+                </div>
+              ) : (
+                <motion.button
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={onOpenPinModal}
+                  className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
+                    isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
+                  }`}
+                >
+                  <LogIn className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
+                  <span className="whitespace-nowrap">Sign In</span>
+                </motion.button>
+              )
             ) : (
-              <motion.button
-                whileHover={{ scale: 1.04 }}
-                whileTap={{ scale: 0.96 }}
-                onClick={onOpenPinModal}
-                className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
-                  isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
-                }`}
-              >
-                <LogIn className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
-                <span className="whitespace-nowrap">Sign In</span>
-              </motion.button>
+              isLoggedIn && requireDoctorPin ? (
+                <motion.button
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={onLogout}
+                  className={`bg-[#ECEEF2] hover:bg-red-50 hover:text-red-600 text-gray-600 font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
+                    isMobile ? 'h-9 text-[11px] px-2.5 space-x-1' : 'h-10 text-xs px-3.5 space-x-1.5'
+                  }`}
+                  title="Lock Doctor Session"
+                >
+                  <Lock className="w-3.5 h-3.5 text-gray-400 group-hover:text-red-500 stroke-[2.2] flex-shrink-0" />
+                  <span>Exit Doctor Mode</span>
+                </motion.button>
+              ) : null
             )}
           </div>
         </>

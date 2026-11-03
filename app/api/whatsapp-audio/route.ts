@@ -151,7 +151,13 @@ export async function GET(req: NextRequest) {
       }
     );
   } catch (err: unknown) {
-    if (err && typeof err === 'object' && 'digest' in err && typeof (err as { digest: unknown }).digest === 'string' && (err as { digest: string }).digest.startsWith('NEXT_')) {
+    if (
+      err &&
+      typeof err === 'object' &&
+      'digest' in err &&
+      typeof (err as { digest: unknown }).digest === 'string' &&
+      (err as { digest: string }).digest.startsWith('NEXT_')
+    ) {
       throw err;
     }
     console.error('[WhatsApp Audio Proxy] Internal error:', err);

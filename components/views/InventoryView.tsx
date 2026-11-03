@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Boxes } from 'lucide-react';
+import { Boxes, Search, X } from 'lucide-react';
 import { InventoryItem } from '@/types';
 import { NumberedPagination } from '@/components/ui/pagination';
 
@@ -18,9 +18,11 @@ interface InventoryViewProps {
   setStockUpdates: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   onAddNewProcurement: (e: React.FormEvent) => void;
   onUpdateStock: (id: string | number) => void;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 8;
 
 export function InventoryView({
   inventory,
@@ -34,25 +36,51 @@ export function InventoryView({
   setStockUpdates,
   onAddNewProcurement,
   onUpdateStock,
+  searchQuery = '',
+  onSearchChange,
 }: InventoryViewProps) {
-  const [currentPage, setCurrentPage] = React.useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [internalSearch, setInternalSearch] = useState(searchQuery);
+
+  useEffect(() => {
+    setInternalSearch(searchQuery);
+  }, [searchQuery]);
+
+  const handleSearchChange = (value: string) => {
+    setInternalSearch(value);
+    setCurrentPage(1);
+    onSearchChange?.(value);
+  };
+
   const totalMolecules = inventory.length;
   const adequateStocks = inventory.filter((m) => m.stock > 20).length;
   const lowStockAlerts = inventory.filter((m) => m.stock > 0 && m.stock <= 20).length;
   const stockDepleted = inventory.filter((m) => m.stock === 0).length;
 
-  const totalPages = Math.max(1, Math.ceil(inventory.length / ITEMS_PER_PAGE));
+  // Simple, direct filtering by brand or generic name
+  const filteredInventory = useMemo(() => {
+    const q = internalSearch.trim().toLowerCase();
+    if (!q) return inventory;
 
-  React.useEffect(() => {
+    return inventory.filter((item) => {
+      const brandMatch = (item.brand || '').toLowerCase().includes(q);
+      const genericMatch = (item.generic || '').toLowerCase().includes(q);
+      return brandMatch || genericMatch;
+    });
+  }, [inventory, internalSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredInventory.length / ITEMS_PER_PAGE));
+
+  useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(totalPages);
     }
   }, [currentPage, totalPages]);
 
-  const paginatedInventory = React.useMemo(() => {
+  const paginatedInventory = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return inventory.slice(start, start + ITEMS_PER_PAGE);
-  }, [inventory, currentPage]);
+    return filteredInventory.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredInventory, currentPage]);
 
   return (
     <motion.section
@@ -63,12 +91,18 @@ export function InventoryView({
       transition={{ duration: 0.25 }}
       className="space-y-4 sm:space-y-6"
     >
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
+        <div>
+          <h2 className="text-base sm:text-lg font-bold text-[#16191E]">Pharmacy Stock & Inventory</h2>
+          <p className="text-xs text-[#8A909D] font-medium">
+            Monitor molecule stock levels, record new procurements, and manage pharmacy dispensary
+          </p>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-        <motion.div
-          whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(37,99,235,0.12)' }}
-          transition={{ type: 'spring', damping: 18, stiffness: 300 }}
-          className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3 cursor-default"
-        >
+        <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3">
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-50 flex items-center justify-center text-[#2563EB]">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18" /></svg>
           </div>
@@ -76,13 +110,9 @@ export function InventoryView({
             <p className="text-xl sm:text-2xl font-extrabold text-[#16191E]">{totalMolecules}</p>
             <p className="text-[11px] sm:text-xs font-semibold text-[#8A909D] mt-0.5">Total Molecules</p>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(5,150,105,0.12)' }}
-          transition={{ type: 'spring', damping: 18, stiffness: 300 }}
-          className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3 cursor-default"
-        >
+        <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3">
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
           </div>
@@ -90,13 +120,9 @@ export function InventoryView({
             <p className="text-xl sm:text-2xl font-extrabold text-emerald-600">{adequateStocks}</p>
             <p className="text-[11px] sm:text-xs font-semibold text-[#8A909D] mt-0.5">Adequate Stocks</p>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(217,119,6,0.12)' }}
-          transition={{ type: 'spring', damping: 18, stiffness: 300 }}
-          className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3 cursor-default"
-        >
+        <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3">
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><line x1="12" x2="12" y1="9" y2="13" /><line x1="12" x2="12.01" y1="17" y2="17" /></svg>
           </div>
@@ -104,13 +130,9 @@ export function InventoryView({
             <p className="text-xl sm:text-2xl font-extrabold text-amber-600">{lowStockAlerts}</p>
             <p className="text-[11px] sm:text-xs font-semibold text-[#8A909D] mt-0.5">Low Stock Alert</p>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(220,38,38,0.12)' }}
-          transition={{ type: 'spring', damping: 18, stiffness: 300 }}
-          className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3 cursor-default"
-        >
+        <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3">
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-red-50 flex items-center justify-center text-red-600">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="15" x2="9" y1="9" y2="15" /><line x1="9" x2="15" y1="9" y2="15" /></svg>
           </div>
@@ -118,9 +140,10 @@ export function InventoryView({
             <p className="text-xl sm:text-2xl font-extrabold text-red-600">{stockDepleted}</p>
             <p className="text-[11px] sm:text-xs font-semibold text-[#8A909D] mt-0.5">Stock Depleted</p>
           </div>
-        </motion.div>
+        </div>
       </div>
 
+      {/* Procurement Form */}
       <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
         <h3 className="text-sm font-bold text-[#16191E] mb-3">Register New Procurement</h3>
         <form onSubmit={onAddNewProcurement} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3">
@@ -162,16 +185,63 @@ export function InventoryView({
         </form>
       </div>
 
+      {/* Master Inventory Section with Simple, Clean Search */}
       <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
-        <h3 className="text-sm font-bold text-[#16191E] mb-4">Master Inventory Status</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-sm font-bold text-[#16191E]">Master Inventory Status</h3>
+            <p className="text-[11px] text-[#8A909D] font-medium mt-0.5">
+              {internalSearch ? `Found ${filteredInventory.length} matching of ${inventory.length} total` : `Total ${inventory.length} medicines`}
+            </p>
+          </div>
+
+          {/* Simple Clean Search Bar */}
+          <div className="relative w-full sm:w-72">
+            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+              <Search className="w-3.5 h-3.5" />
+            </span>
+            <input
+              type="text"
+              value={internalSearch}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search medicines..."
+              className="w-full pl-9 pr-8 py-2 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs text-[#16191E] placeholder:text-gray-400 outline-none focus:border-[#2563EB] focus:bg-white transition"
+            />
+            {internalSearch && (
+              <button
+                type="button"
+                onClick={() => handleSearchChange('')}
+                className="absolute right-2.5 inset-y-0 flex items-center text-gray-400 hover:text-gray-600 transition cursor-pointer"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Inventory List */}
         <div className="space-y-3">
-          {inventory.length === 0 ? (
+          {filteredInventory.length === 0 ? (
             <div className="p-8 text-center bg-[#F8F9FB] rounded-xl border border-[#ECEEF2]">
               <Boxes className="w-8 h-8 text-gray-300 mx-auto mb-2 stroke-[1.5]" />
-              <p className="text-sm font-semibold text-gray-700">No Inventory Items in Database</p>
-              <p className="text-xs text-gray-400 mt-1">
-                Add pharmacy molecules above or run the SQL seed in your Supabase dashboard.
+              <p className="text-sm font-semibold text-gray-700">
+                {internalSearch ? 'No medicines match your search' : 'No Inventory Items'}
               </p>
+              <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
+                {internalSearch
+                  ? `No medicines found matching "${internalSearch}". Try checking the spelling.`
+                  : 'Add pharmacy molecules above or run the SQL seed in your Supabase dashboard.'}
+              </p>
+              {internalSearch && (
+                <button
+                  type="button"
+                  onClick={() => handleSearchChange('')}
+                  className="mt-3 text-xs font-semibold text-[#2563EB] hover:underline cursor-pointer"
+                >
+                  Clear search
+                </button>
+              )}
             </div>
           ) : (
             paginatedInventory.map((item) => {
@@ -179,21 +249,21 @@ export function InventoryView({
               const isLow = item.stock > 0 && item.stock <= 20;
 
               return (
-                <motion.div
+                <div
                   key={item.id}
-                  whileHover={{ y: -2 }}
-                  className="p-3.5 sm:p-4 bg-[#F8F9FB] rounded-xl border border-[#ECEEF2] flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0"
+                  className="p-3.5 sm:p-4 bg-[#F8F9FB] hover:bg-[#F3F4F7] rounded-xl border border-[#ECEEF2] flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0 transition-colors"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                       <span className="font-bold text-sm text-[#16191E] truncate">{item.brand}</span>
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${isHigh
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
+                          isHigh
                             ? 'bg-emerald-100 text-emerald-800'
                             : isLow
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}
                       >
                         {item.stock} Units
                       </span>
@@ -210,7 +280,7 @@ export function InventoryView({
                       onChange={(e) =>
                         setStockUpdates((prev) => ({ ...prev, [item.id]: e.target.value }))
                       }
-                      className="w-20 sm:w-24 p-1.5 bg-white border border-[#ECEEF2] rounded-xl text-xs outline-none focus:ring-1 focus:ring-gray-300"
+                      className="w-20 sm:w-24 p-1.5 bg-white border border-[#ECEEF2] rounded-xl text-xs outline-none focus:ring-1 focus:ring-gray-300 text-center font-medium"
                     />
                     <motion.button
                       whileHover={{ scale: 1.05 }}
@@ -221,7 +291,7 @@ export function InventoryView({
                       Update
                     </motion.button>
                   </div>
-                </motion.div>
+                </div>
               );
             })
           )}
@@ -230,9 +300,9 @@ export function InventoryView({
             currentPage={currentPage}
             totalPages={totalPages}
             onPageChange={setCurrentPage}
-            totalItems={inventory.length}
+            totalItems={filteredInventory.length}
             itemsPerPage={ITEMS_PER_PAGE}
-            itemName="molecules"
+            itemName="medicines"
           />
         </div>
       </div>
