@@ -63,6 +63,7 @@ import EcgLoadingScreen from '@/components/loading/EcgLoadingScreen';
 import { SideMenu, NavItemConfig } from '@/components/layout/SideMenu';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { GlobalPatientSearch } from '@/components/common/GlobalPatientSearch';
+import { GlobalPharmacySearch } from '@/components/common/GlobalPharmacySearch';
 import { NavigationDock } from '@/components/layout/NavigationDock';
 import { DoctorAuthModal } from '@/components/auth/DoctorAuthModal';
 import { WalkinRegisterModal } from '@/components/modals/WalkinRegisterModal';
@@ -1322,6 +1323,10 @@ function DashboardContent() {
               requireDoctorPin={config.require_doctor_pin}
               queue={queue}
               onSelectConsult={handleConsultFromSearch}
+              inventory={inventory}
+              onUpdateStock={handleUpdateStock}
+              stockUpdates={stockUpdates}
+              setStockUpdates={setStockUpdates}
             />
 
             <main
@@ -1392,12 +1397,23 @@ function DashboardContent() {
                   transition={{ delay: 0.15 }}
                   className="relative w-full mb-6"
                 >
-                  <GlobalPatientSearch
-                    isMobile
-                    queue={queue}
-                    onSelectConsult={handleConsultFromSearch}
-                    placeholder="Search patient, phone, age, gender (e.g. Menon, 90000, 20-50)..."
-                  />
+                  {activeSection === 'inventory' ? (
+                    <GlobalPharmacySearch
+                      isMobile
+                      inventory={inventory}
+                      onUpdateStock={handleUpdateStock}
+                      stockUpdates={stockUpdates}
+                      setStockUpdates={setStockUpdates}
+                      placeholder="Search pharmacy stock by brand, molecule..."
+                    />
+                  ) : (
+                    <GlobalPatientSearch
+                      isMobile
+                      queue={queue}
+                      onSelectConsult={handleConsultFromSearch}
+                      placeholder="Search patient, phone, age, gender (e.g. Menon, 90000, 20-50)..."
+                    />
+                  )}
                 </motion.div>
               )}
 
@@ -1524,6 +1540,8 @@ function DashboardContent() {
                     setStockUpdates={setStockUpdates}
                     onAddNewProcurement={handleAddNewProcurement}
                     onUpdateStock={handleUpdateStock}
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
                   />
                 )}
 
