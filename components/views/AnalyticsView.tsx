@@ -9,8 +9,6 @@ import {
   CheckCircle2,
   CalendarX,
   Pill,
-  Search,
-  X,
 } from 'lucide-react';
 import { ChartLine } from '@/components/ui/chart-line';
 import { RankBarChart, type RankBarItem } from '@/components/ui/rank-bars';
@@ -30,18 +28,8 @@ export function AnalyticsView({
   queue,
   cancelledAppointments,
   searchQuery = '',
-  onSearchChange,
 }: AnalyticsViewProps) {
-  const [internalSearch, setInternalSearch] = React.useState(searchQuery);
-
-  React.useEffect(() => {
-    setInternalSearch(searchQuery);
-  }, [searchQuery]);
-
-  const handleSearchChange = (val: string) => {
-    setInternalSearch(val);
-    onSearchChange?.(val);
-  };
+  const cleanQuery = searchQuery.trim().toLowerCase();
   const cancelledList = useMemo(() => {
     if (cancelledAppointments !== undefined) {
       return cancelledAppointments;
@@ -146,29 +134,26 @@ export function AnalyticsView({
   ];
 
   const filteredMedicines = useMemo(() => {
-    const q = internalSearch.trim().toLowerCase();
-    if (!q) return topSellingMedicines;
+    if (!cleanQuery) return topSellingMedicines;
     return topSellingMedicines.filter(
-      (m) => (m.label || '').toLowerCase().includes(q) || (m.sub || '').toLowerCase().includes(q)
+      (m) => (m.label || '').toLowerCase().includes(cleanQuery) || (m.sub || '').toLowerCase().includes(cleanQuery)
     );
-  }, [internalSearch, topSellingMedicines]);
+  }, [cleanQuery, topSellingMedicines]);
 
   const filteredCases = useMemo(() => {
-    const q = internalSearch.trim().toLowerCase();
-    if (!q) return casesData;
-    return casesData.filter((c) => (c.label || '').toLowerCase().includes(q));
-  }, [internalSearch, casesData]);
+    if (!cleanQuery) return casesData;
+    return casesData.filter((c) => (c.label || '').toLowerCase().includes(cleanQuery));
+  }, [cleanQuery, casesData]);
 
   const filteredCancelled = useMemo(() => {
-    const q = internalSearch.trim().toLowerCase();
-    if (!q) return cancelledList;
+    if (!cleanQuery) return cancelledList;
     return cancelledList.filter(
       (p) =>
-        (p.name || '').toLowerCase().includes(q) ||
-        (p.phone || '').toLowerCase().includes(q) ||
-        (p.cancellationReason || '').toLowerCase().includes(q)
+        (p.name || '').toLowerCase().includes(cleanQuery) ||
+        (p.phone || '').toLowerCase().includes(cleanQuery) ||
+        (p.cancellationReason || '').toLowerCase().includes(cleanQuery)
     );
-  }, [internalSearch, cancelledList]);
+  }, [cleanQuery, cancelledList]);
 
   return (
     <motion.section
@@ -179,35 +164,12 @@ export function AnalyticsView({
       transition={{ duration: 0.25 }}
       className="space-y-5 sm:space-y-6"
     >
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
         <div>
           <h2 className="text-base sm:text-lg font-bold text-[#16191E]">Clinic Analytics & Practice Insights</h2>
           <p className="text-xs text-[#8A909D] font-medium">
             Monitor patient volume trends, consultation dynamics, digital adoption, and pharmacy metrics
           </p>
-        </div>
-
-        <div className="relative w-full sm:w-72">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
-            <Search className="w-3.5 h-3.5" />
-          </span>
-          <input
-            type="text"
-            value={internalSearch}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="Search analytics & insights..."
-            className="w-full pl-9 pr-8 py-2 bg-white border border-[#ECEEF2] rounded-xl text-xs text-[#16191E] placeholder:text-gray-400 outline-none focus:border-[#2563EB] shadow-2xs transition"
-          />
-          {internalSearch && (
-            <button
-              type="button"
-              onClick={() => handleSearchChange('')}
-              className="absolute right-2.5 inset-y-0 flex items-center text-gray-400 hover:text-gray-600 transition cursor-pointer"
-              title="Clear search"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
         </div>
       </div>
 
