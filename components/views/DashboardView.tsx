@@ -16,9 +16,7 @@ import {
   Flame,
   Check,
   ShieldCheck,
-  Bell,
   MessageSquare,
-  MoreVertical,
   MousePointer,
   ShoppingBag,
   Package,
@@ -735,14 +733,11 @@ export function DashboardView({
 
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <div className="lg:col-span-8 bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] space-y-3.5">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <div>
-              <h3 className="text-base font-bold text-slate-800">Projects</h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Real-time patient queue and consultation triage
-              </p>
-            </div>
-            <MoreVertical className="w-4 h-4 text-slate-400 cursor-pointer hover:text-slate-600 transition" />
+          <div className="pb-3 border-b border-slate-100">
+            <h3 className="text-base font-bold text-slate-800">Projects</h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Real-time patient queue and consultation triage
+            </p>
           </div>
 
           <div className="overflow-x-auto -mx-4 sm:mx-0">
@@ -915,14 +910,11 @@ export function DashboardView({
 
         <div className="lg:col-span-4 bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between min-w-0">
           <div>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-slate-800">Orders overview</h3>
-                <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
-                  <span className="font-bold text-emerald-500">↑ 24%</span> this month
-                </p>
-              </div>
-              <Bell className="w-4 h-4 text-slate-400" />
+            <div className="pb-3 border-b border-slate-100">
+              <h3 className="text-sm sm:text-base font-bold text-slate-800">Orders overview</h3>
+              <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
+                <span className="font-bold text-emerald-500">↑ 24%</span> this month
+              </p>
             </div>
 
             <div className="relative pl-5 pt-4 space-y-4 before:content-[''] before:absolute before:left-[9px] before:top-5 before:bottom-2 before:w-[1.5px] before:bg-slate-100">

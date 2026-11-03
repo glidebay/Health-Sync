@@ -252,13 +252,13 @@ export function AppHeader({
                   whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.96 }}
                   onClick={onLogout}
-                  className={`bg-[#ECEEF2] hover:bg-red-50 hover:text-red-600 text-gray-600 font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
-                    isMobile ? 'h-9 text-[11px] px-2.5 space-x-1' : 'h-10 text-xs px-3.5 space-x-1.5'
+                  className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
+                    isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
                   }`}
                   title="Lock Doctor Session"
                 >
-                  <Lock className="w-3.5 h-3.5 text-gray-400 group-hover:text-red-500 stroke-[2.2] flex-shrink-0" />
-                  <span>Exit Doctor Mode</span>
+                  <Lock className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
+                  <span>Exit</span>
                 </motion.button>
               ) : null
             )}
