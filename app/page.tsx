@@ -506,20 +506,33 @@ function DashboardContent() {
     }
 
     if (portalMode === 'gateway') {
-      const clinicRes = await verifyClinicPin(clean);
-      if (clinicRes.success) {
-        saveClinicSessionLocal({
-          role: 'assistant',
-          name: 'Clinic Assistant',
-          expiresAt: Date.now() + 8 * 60 * 60 * 1000,
-        });
-
-        clearDoctorSessionLocal();
-        setIsLoggedIn(false);
-        setDoctorProfile({
-          name: 'Clinic Assistant',
-          title: 'Reception & Triage',
-        });
+      const authRes = await verifyClinicOrDoctorPin(clean);
+      if (authRes.success) {
+        if (authRes.type === 'doctor' && authRes.doctor) {
+          saveDoctorSessionLocal({
+            doctorId: authRes.doctor.id,
+            name: authRes.doctor.full_name,
+            title: authRes.doctor.specialization || 'General Medicine',
+            expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+          });
+          setIsLoggedIn(true);
+          setDoctorProfile({
+            name: authRes.doctor.full_name,
+            title: authRes.doctor.specialization || 'General Medicine',
+          });
+        } else {
+          saveClinicSessionLocal({
+            role: 'assistant',
+            name: 'Clinic Assistant',
+            expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+          });
+          clearDoctorSessionLocal();
+          setIsLoggedIn(false);
+          setDoctorProfile({
+            name: 'Clinic Assistant',
+            title: 'Reception & Triage',
+          });
+        }
 
         setShowPinModal(false);
         setPinError(false);
