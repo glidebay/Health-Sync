@@ -1324,9 +1324,6 @@ function DashboardContent() {
               queue={queue}
               onSelectConsult={handleConsultFromSearch}
               inventory={inventory}
-              onUpdateStock={handleUpdateStock}
-              stockUpdates={stockUpdates}
-              setStockUpdates={setStockUpdates}
             />
 
             <main
@@ -1401,10 +1398,7 @@ function DashboardContent() {
                     <GlobalPharmacySearch
                       isMobile
                       inventory={inventory}
-                      onUpdateStock={handleUpdateStock}
-                      stockUpdates={stockUpdates}
-                      setStockUpdates={setStockUpdates}
-                      placeholder="Search pharmacy stock by brand, molecule..."
+                      placeholder="Search medicines..."
                     />
                   ) : (
                     <GlobalPatientSearch

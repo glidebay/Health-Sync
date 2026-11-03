@@ -23,9 +23,6 @@ interface AppHeaderProps {
   queue?: Patient[];
   onSelectConsult?: (patient: Patient) => void;
   inventory?: InventoryItem[];
-  onUpdateStock?: (id: string | number) => void;
-  stockUpdates?: Record<string, string>;
-  setStockUpdates?: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }
 
 export function AppHeader({
@@ -44,9 +41,6 @@ export function AppHeader({
   queue = [],
   onSelectConsult,
   inventory = [],
-  onUpdateStock,
-  stockUpdates,
-  setStockUpdates,
 }: AppHeaderProps) {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const isPharmacyStock = activeSection === 'inventory';
@@ -83,10 +77,7 @@ export function AppHeader({
               isExpanded={true}
               onClose={() => setIsSearchExpanded(false)}
               inventory={inventory}
-              onUpdateStock={onUpdateStock}
-              stockUpdates={stockUpdates}
-              setStockUpdates={setStockUpdates}
-              placeholder="Search pharmacy stock by brand, molecule or status (e.g. Dolo, Paracetamol, Low)..."
+              placeholder="Search medicines by brand or molecule..."
             />
           ) : (
             <GlobalPatientSearch
@@ -141,7 +132,7 @@ export function AppHeader({
                 type="button"
                 onClick={() => setIsSearchExpanded(true)}
                 className="w-9 h-9 rounded-xl bg-white border border-[#ECEEF2] flex items-center justify-center text-[#2563EB] shadow-2xs hover:bg-blue-50 transition cursor-pointer flex-shrink-0"
-                title={isPharmacyStock ? 'Search pharmacy stock' : 'Search patients'}
+                title={isPharmacyStock ? 'Search medicines' : 'Search patients'}
               >
                 <Search className="w-4 h-4 stroke-[2.2]" />
               </button>
@@ -157,13 +148,13 @@ export function AppHeader({
                 <div
                   onClick={() => setIsSearchExpanded(true)}
                   className="relative flex items-center cursor-pointer w-44 sm:w-56 md:w-64 lg:w-72 xl:w-80 h-10 pl-10 pr-3.5 bg-[#ECEEF2] hover:bg-[#E6E8ED] border border-transparent rounded-xl text-xs text-gray-500 transition-all duration-200 group"
-                  title={isPharmacyStock ? 'Search pharmacy stock (press / or click)' : 'Search patients (press / or click)'}
+                  title={isPharmacyStock ? 'Search medicines' : 'Search patients (press / or click)'}
                 >
                   <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[#2563EB] group-hover:scale-105 transition-transform">
                     <Search className="w-4 h-4 stroke-[2]" />
                   </span>
                   <span className="truncate text-gray-500 group-hover:text-gray-700">
-                    {isPharmacyStock ? 'Search pharmacy stock, molecule...' : 'Search patient, phone, age...'}
+                    {isPharmacyStock ? 'Search medicines...' : 'Search patient, phone, age...'}
                   </span>
                 </div>
               </motion.div>
