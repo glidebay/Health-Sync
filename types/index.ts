@@ -60,6 +60,7 @@ export type TabType = 'assistant' | 'tables' | 'queue' | 'consult' | 'inventory'
 export type NavSection = 'dashboard' | 'tables' | 'booking' | 'assistant' | 'queue' | 'consult' | 'inventory' | 'analytics' | 'settings';
 
 export type { AppConfig } from '@/data/default-config';
+export * from './medicine';
 
 export type PortalMode = 'gateway' | 'booking' | 'dashboard';
 

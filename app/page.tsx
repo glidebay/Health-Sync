@@ -87,6 +87,7 @@ import { ReallocateStrategy } from '@/components/reception/RescheduleModal';
 import { QueueView } from '@/components/views/QueueView';
 import { ConsultationView } from '@/components/views/ConsultationView';
 import { InventoryView } from '@/components/views/InventoryView';
+import { dispenseFefo, fetchMedicinesMaster, convertMasterToInventoryItems } from '@/lib/medicineService';
 import { AnalyticsView } from '@/components/views/AnalyticsView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { ToastNotification, ToastMessage, ToastType } from '@/components/ui/ToastNotification';
@@ -311,8 +312,13 @@ function DashboardContent() {
       if (dbQueue) {
         setQueue(sortQueueWithCompletedAtEnd(dbQueue));
       }
-      if (dbInventory) {
+      if (dbInventory && dbInventory.length > 0) {
         setInventory(dbInventory);
+      } else {
+        const meds = await fetchMedicinesMaster();
+        if (meds.length > 0) {
+          setInventory(convertMasterToInventoryItems(meds));
+        }
       }
       if (dbDoctors && dbDoctors.length > 0) {
         setAvailableDoctors(dbDoctors);
@@ -339,8 +345,13 @@ function DashboardContent() {
           if (dbQueue) {
             setQueue(sortQueueWithCompletedAtEnd(dbQueue));
           }
-          if (dbInventory) {
+          if (dbInventory && dbInventory.length > 0) {
             setInventory(dbInventory);
+          } else {
+            const meds = await fetchMedicinesMaster();
+            if (meds.length > 0) {
+              setInventory(convertMasterToInventoryItems(meds));
+            }
           }
           if (dbDoctors && dbDoctors.length > 0) {
             setAvailableDoctors(dbDoctors);
@@ -1117,7 +1128,16 @@ function DashboardContent() {
         }
         return item;
       })
-    );
+    );
+
+    for (const p of currentPrescription) {
+      dispenseFefo({
+        medicineId: String(p.med.id),
+        requestedQty: p.qty,
+        referenceNumber: 'RX-' + (activePatient.tokenNumber || activePatient.patientNumber || 'CLINIC'),
+        responsibleUser: doctorProfile.name || 'Dr. Sunny',
+      });
+    }
 
     setQueue((prevQueue) =>
       sortQueueWithCompletedAtEnd(
@@ -1582,6 +1602,8 @@ function DashboardContent() {
                     onUpdateStock={handleUpdateStock}
                     searchQuery={searchQuery}
                     onSearchChange={setSearchQuery}
+                    isDoctorUnlocked={isDoctorUnlocked}
+                    onInventorySync={(updated) => setInventory(updated)}
                   />
                 )}
 

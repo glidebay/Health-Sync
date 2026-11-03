@@ -157,10 +157,11 @@ export function MedicineSearchCombobox({
           setIsOpen(true);
           inputRef.current?.focus();
         }}
-        className={`w-full flex items-center gap-2 px-3.5 py-2.5 bg-[#F8F9FB] border rounded-xl text-xs sm:text-sm cursor-text transition-all duration-150 ${isOpen
+        className={`w-full flex items-center gap-2 px-3.5 py-2.5 bg-[#F8F9FB] border rounded-xl text-xs sm:text-sm cursor-text transition-all duration-150 ${
+          isOpen
             ? 'border-[#2563EB] ring-2 ring-blue-50 bg-white shadow-sm'
             : 'border-[#ECEEF2] hover:border-gray-300'
-          }`}
+        }`}
       >
         <input
           ref={inputRef}
@@ -235,18 +236,20 @@ export function MedicineSearchCombobox({
                       key={item.id}
                       onClick={() => handleSelect(item)}
                       onMouseEnter={() => setHighlightedIndex(index)}
-                      className={`px-3.5 py-2.5 rounded-lg flex items-center justify-between gap-3 text-xs cursor-pointer transition-colors ${isSelected
+                      className={`px-3.5 py-2.5 rounded-lg flex items-center justify-between gap-3 text-xs cursor-pointer transition-colors ${
+                        isSelected
                           ? 'bg-blue-50 text-[#2563EB]'
                           : isHighlighted
-                            ? 'bg-[#F4F5F7]'
-                            : 'hover:bg-[#F8F9FB]'
-                        }`}
+                          ? 'bg-[#F4F5F7]'
+                          : 'hover:bg-[#F8F9FB]'
+                      }`}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <span
-                            className={`font-bold truncate ${isSelected ? 'text-[#2563EB]' : 'text-[#16191E]'
-                              }`}
+                            className={`font-bold truncate ${
+                              isSelected ? 'text-[#2563EB]' : 'text-[#16191E]'
+                            }`}
                           >
                             {item.brand}
                           </span>
@@ -259,6 +262,12 @@ export function MedicineSearchCombobox({
                         <p className="text-[11px] text-[#8A909D] truncate mt-0.5">
                           {item.generic}
                         </p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700">
+                          {item.stock} in stock
+                        </span>
                       </div>
                     </li>
                   );

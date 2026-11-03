@@ -1,10 +1,36 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Boxes, Search, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Boxes,
+  Search,
+  X,
+  Plus,
+  UploadCloud,
+  FileSpreadsheet,
+  AlertTriangle,
+  Clock,
+  Filter,
+  Eye,
+  Barcode,
+  Package,
+  Layers,
+  CheckCircle2,
+  AlertCircle,
+  TrendingDown,
+  Building,
+} from 'lucide-react';
 import { InventoryItem } from '@/types';
+import { MedicineMaster, DosageForm } from '@/types/medicine';
 import { NumberedPagination } from '@/components/ui/pagination';
+import { MedicineDetailsModal } from '@/components/inventory/MedicineDetailsModal';
+import { MedicineCsvImportModal } from '@/components/inventory/MedicineCsvImportModal';
+import {
+  fetchMedicinesMaster,
+  addMedicineWithInitialBatch,
+  convertMasterToInventoryItems,
+} from '@/lib/medicineService';
 
 interface InventoryViewProps {
   inventory: InventoryItem[];
@@ -20,9 +46,11 @@ interface InventoryViewProps {
   onUpdateStock: (id: string | number) => void;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
+  isDoctorUnlocked?: boolean;
+  onInventorySync?: (updatedItems: InventoryItem[]) => void;
 }
 
-const ITEMS_PER_PAGE = 8;
+const ITEMS_PER_PAGE = 7;
 
 export function InventoryView({
   inventory,
@@ -38,9 +66,54 @@ export function InventoryView({
   onUpdateStock,
   searchQuery = '',
   onSearchChange,
+  isDoctorUnlocked = true,
+  onInventorySync,
 }: InventoryViewProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [internalSearch, setInternalSearch] = useState(searchQuery);
+
+  const [medicines, setMedicines] = useState<MedicineMaster[]>([]);
+  const [loadingMeds, setLoadingMeds] = useState(true);
+
+  const [selectedMedicine, setSelectedMedicine] = useState<MedicineMaster | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+
+  const [categoryFilter, setCategoryFilter] = useState<string>('All');
+  const [stockStatusFilter, setStockStatusFilter] = useState<string>('All');
+  const [expiryStatusFilter, setExpiryStatusFilter] = useState<string>('All');
+
+  const [showFullAddForm, setShowFullAddForm] = useState(false);
+  const [addSku, setAddSku] = useState('');
+  const [addManufacturer, setAddManufacturer] = useState('');
+  const [addCategory, setAddCategory] = useState('General Medicine');
+  const [addDosageForm, setAddDosageForm] = useState<DosageForm>('Tablet');
+  const [addStrength, setAddStrength] = useState('');
+  const [addUnit, setAddUnit] = useState('Strips');
+  const [addBarcode, setAddBarcode] = useState('');
+  const [addBatchNo, setAddBatchNo] = useState('');
+  const [addMfgDate, setAddMfgDate] = useState('');
+  const [addExpDate, setAddExpDate] = useState('');
+  const [addBuyPrice, setAddBuyPrice] = useState('');
+  const [addSellPrice, setAddSellPrice] = useState('');
+  const [addSupplierName, setAddSupplierName] = useState('');
+
+  const loadData = async () => {
+    setLoadingMeds(true);
+    try {
+      const data = await fetchMedicinesMaster();
+      setMedicines(data);
+      if (onInventorySync) {
+        onInventorySync(convertMasterToInventoryItems(data));
+      }
+    } finally {
+      setLoadingMeds(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   useEffect(() => {
     setInternalSearch(searchQuery);
@@ -52,24 +125,48 @@ export function InventoryView({
     onSearchChange?.(value);
   };
 
-  const totalMolecules = inventory.length;
-  const adequateStocks = inventory.filter((m) => m.stock > 20).length;
-  const lowStockAlerts = inventory.filter((m) => m.stock > 0 && m.stock <= 20).length;
-  const stockDepleted = inventory.filter((m) => m.stock === 0).length;
-
-  // Simple, direct filtering by brand or generic name
-  const filteredInventory = useMemo(() => {
-    const q = internalSearch.trim().toLowerCase();
-    if (!q) return inventory;
-
-    return inventory.filter((item) => {
-      const brandMatch = (item.brand || '').toLowerCase().includes(q);
-      const genericMatch = (item.generic || '').toLowerCase().includes(q);
-      return brandMatch || genericMatch;
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    medicines.forEach((m) => {
+      if (m.category) set.add(m.category);
     });
-  }, [inventory, internalSearch]);
+    return Array.from(set);
+  }, [medicines]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredInventory.length / ITEMS_PER_PAGE));
+  const totalMedicines = medicines.length;
+  const adequateCount = medicines.filter((m) => m.stockStatus === 'Available').length;
+  const lowStockCount = medicines.filter((m) => m.stockStatus === 'Low Stock').length;
+  const outOfStockCount = medicines.filter((m) => m.stockStatus === 'Out of Stock').length;
+  const nearExpiryCount = medicines.filter((m) => m.expiryStatus === 'Near Expiry').length;
+  const expiredCount = medicines.filter((m) => m.expiryStatus === 'Expired').length;
+
+  const filteredMedicines = useMemo(() => {
+    const q = internalSearch.trim().toLowerCase();
+
+    return medicines.filter((m) => {
+      if (categoryFilter !== 'All' && m.category !== categoryFilter) return false;
+      if (stockStatusFilter !== 'All' && m.stockStatus !== stockStatusFilter) return false;
+      if (expiryStatusFilter !== 'All' && m.expiryStatus !== expiryStatusFilter) return false;
+
+      if (!q) return true;
+
+      const brand = (m.brandName || '').toLowerCase();
+      const generic = (m.genericName || '').toLowerCase();
+      const sku = (m.sku || '').toLowerCase();
+      const barcode = (m.barcode || '').toLowerCase();
+      const mfg = (m.manufacturer || '').toLowerCase();
+
+      return (
+        brand.includes(q) ||
+        generic.includes(q) ||
+        sku.includes(q) ||
+        barcode.includes(q) ||
+        mfg.includes(q)
+      );
+    });
+  }, [medicines, internalSearch, categoryFilter, stockStatusFilter, expiryStatusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredMedicines.length / ITEMS_PER_PAGE));
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -77,10 +174,88 @@ export function InventoryView({
     }
   }, [currentPage, totalPages]);
 
-  const paginatedInventory = useMemo(() => {
+  const paginatedMedicines = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredInventory.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredInventory, currentPage]);
+    return filteredMedicines.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredMedicines, currentPage]);
+
+  const handleOpenDetails = (med: MedicineMaster) => {
+    setSelectedMedicine(med);
+    setIsDetailsOpen(true);
+  };
+
+  const handleCreateFullMedicine = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBrand.trim() || !newGeneric.trim() || !newQty || !addExpDate) return;
+
+    const qty = parseInt(newQty, 10);
+    const buyPrice = parseFloat(addBuyPrice) || 0;
+    const sellPrice = parseFloat(addSellPrice) || buyPrice * 1.4;
+
+    const newMed = await addMedicineWithInitialBatch({
+      sku: addSku.trim() || `MED-${newBrand.substring(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`,
+      brandName: newBrand.trim(),
+      genericName: newGeneric.trim(),
+      manufacturer: addManufacturer.trim() || 'Standard Pharma Ltd',
+      category: addCategory.trim() || 'General Medicine',
+      dosageForm: addDosageForm,
+      strength: addStrength.trim() || 'Standard',
+      unit: addUnit.trim() || 'Strips',
+      barcode: addBarcode.trim() || undefined,
+      minimumStockLevel: 20,
+      batchNumber: addBatchNo.trim() || `BAT-${Date.now().toString().slice(-5)}`,
+      manufacturingDate: addMfgDate || new Date().toISOString().split('T')[0],
+      expiryDate: addExpDate,
+      purchasePrice: buyPrice,
+      sellingPrice: sellPrice,
+      quantity: qty,
+      supplierName: addSupplierName.trim() || 'Primary Distributor',
+      responsibleUser: isDoctorUnlocked ? 'Dr. Sunny' : 'Staff Pharmacist',
+    });
+
+    setMedicines((prev) => [newMed, ...prev]);
+    if (onInventorySync) {
+      onInventorySync(convertMasterToInventoryItems([newMed, ...medicines]));
+    }
+
+    setNewBrand('');
+    setNewGeneric('');
+    setNewQty('');
+    setAddSku('');
+    setAddManufacturer('');
+    setAddStrength('');
+    setAddBarcode('');
+    setAddBatchNo('');
+    setAddMfgDate('');
+    setAddExpDate('');
+    setAddBuyPrice('');
+    setAddSellPrice('');
+    setAddSupplierName('');
+    setShowFullAddForm(false);
+  };
+
+  const handleQuickRestockSubmit = (medId: string, currentBatchCount: number) => {
+    const addVal = parseInt(stockUpdates[medId] || '0', 10);
+    if (addVal <= 0) return;
+
+    onUpdateStock(medId);
+
+    setMedicines((prev) =>
+      prev.map((m) => {
+        if (m.id !== medId) return m;
+        const nextStock = m.totalStock + addVal;
+        const updatedBatches = m.batches.map((b, idx) =>
+          idx === 0 ? { ...b, availableQuantity: b.availableQuantity + addVal } : b
+        );
+        return {
+          ...m,
+          totalStock: nextStock,
+          batches: updatedBatches,
+          stockStatus: nextStock > m.minimumStockLevel ? 'Available' : nextStock > 0 ? 'Low Stock' : 'Out of Stock',
+        };
+      })
+    );
+  };
 
   return (
     <motion.section
@@ -91,187 +266,482 @@ export function InventoryView({
       transition={{ duration: 0.25 }}
       className="space-y-4 sm:space-y-6"
     >
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
         <div>
-          <h2 className="text-base sm:text-lg font-bold text-[#16191E]">Pharmacy Stock & Inventory</h2>
-          <p className="text-xs text-[#8A909D] font-medium">
-            Monitor molecule stock levels, record new procurements, and manage pharmacy dispensary
+          <h2 className="text-lg sm:text-xl font-black text-[#16191E]">
+            Pharmacy Stock & Medicine Master
+          </h2>
+          <p className="text-xs text-[#8A909D] font-medium mt-0.5">
+            FEFO batch-wise inventory tracking, stock movements, and master data import
           </p>
         </div>
-      </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-50 flex items-center justify-center text-[#2563EB]">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18" /></svg>
-          </div>
-          <div>
-            <p className="text-xl sm:text-2xl font-extrabold text-[#16191E]">{totalMolecules}</p>
-            <p className="text-[11px] sm:text-xs font-semibold text-[#8A909D] mt-0.5">Total Molecules</p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
-          </div>
-          <div>
-            <p className="text-xl sm:text-2xl font-extrabold text-emerald-600">{adequateStocks}</p>
-            <p className="text-[11px] sm:text-xs font-semibold text-[#8A909D] mt-0.5">Adequate Stocks</p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><line x1="12" x2="12" y1="9" y2="13" /><line x1="12" x2="12.01" y1="17" y2="17" /></svg>
-          </div>
-          <div>
-            <p className="text-xl sm:text-2xl font-extrabold text-amber-600">{lowStockAlerts}</p>
-            <p className="text-[11px] sm:text-xs font-semibold text-[#8A909D] mt-0.5">Low Stock Alert</p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col gap-2 sm:gap-3">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-red-50 flex items-center justify-center text-red-600">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="15" x2="9" y1="9" y2="15" /><line x1="9" x2="15" y1="9" y2="15" /></svg>
-          </div>
-          <div>
-            <p className="text-xl sm:text-2xl font-extrabold text-red-600">{stockDepleted}</p>
-            <p className="text-[11px] sm:text-xs font-semibold text-[#8A909D] mt-0.5">Stock Depleted</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Procurement Form */}
-      <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
-        <h3 className="text-sm font-bold text-[#16191E] mb-3">Register New Procurement</h3>
-        <form onSubmit={onAddNewProcurement} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3">
-          <input
-            type="text"
-            placeholder="Generic Molecule (e.g. Paracetamol 650mg)"
-            value={newGeneric}
-            onChange={(e) => setNewGeneric(e.target.value)}
-            required
-            className="col-span-1 md:col-span-1 xl:col-span-5 p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300 w-full"
-          />
-          <input
-            type="text"
-            placeholder="Brand (e.g. Dolo 650)"
-            value={newBrand}
-            onChange={(e) => setNewBrand(e.target.value)}
-            required
-            className="col-span-1 md:col-span-1 xl:col-span-4 p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300 w-full"
-          />
-          <div className="col-span-1 md:col-span-2 xl:col-span-3 flex gap-2">
-            <input
-              type="number"
-              placeholder="Total Qty"
-              min="1"
-              value={newQty}
-              onChange={(e) => setNewQty(e.target.value)}
-              required
-              className="w-24 sm:w-28 p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300 flex-shrink-0"
-            />
+        <div className="flex items-center gap-2 flex-wrap">
+          {isDoctorUnlocked && (
             <motion.button
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              type="submit"
-              className="flex-1 xl:flex-initial bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition cursor-pointer whitespace-nowrap min-w-[90px] flex items-center justify-center shadow-xs"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setIsCsvModalOpen(true)}
+              className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
             >
-              Add Stock
+              <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
+              <span>Import CSV Master</span>
             </motion.button>
-          </div>
-        </form>
+          )}
+
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setShowFullAddForm((prev) => !prev)}
+            className="px-3.5 py-2 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>{showFullAddForm ? 'Hide Procurement Form' : 'Add Medicine Master'}</span>
+          </motion.button>
+        </div>
       </div>
 
-      {/* Master Inventory Section with Simple, Clean Search */}
-      <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-          <div>
-            <h3 className="text-sm font-bold text-[#16191E]">Master Inventory Status</h3>
-            <p className="text-[11px] text-[#8A909D] font-medium mt-0.5">
-              {internalSearch ? `Found ${filteredInventory.length} matching of ${inventory.length} total` : `Total ${inventory.length} medicines`}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
+        <div className="bg-white rounded-2xl p-4 border border-[#ECEEF2] shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-[#8A909D]">Total Medicines</span>
+            <div className="w-7 h-7 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <Layers className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <p className="text-2xl font-black text-[#16191E]">{totalMedicines}</p>
+            <p className="text-[10px] text-slate-400 font-medium mt-0.5">Active Molecules</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 border border-[#ECEEF2] shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-emerald-700">Adequate Stocks</span>
+            <div className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <p className="text-2xl font-black text-emerald-600">{adequateCount}</p>
+            <p className="text-[10px] text-emerald-700 font-medium mt-0.5">Sufficient inventory</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 border border-[#ECEEF2] shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-amber-700">Low Stock Alert</span>
+            <div className="w-7 h-7 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+              <AlertTriangle className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <p className="text-2xl font-black text-amber-600">{lowStockCount}</p>
+            <p className="text-[10px] text-amber-700 font-medium mt-0.5">Needs reorder</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 border border-[#ECEEF2] shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-red-700">Stock Depleted</span>
+            <div className="w-7 h-7 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+              <TrendingDown className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <p className="text-2xl font-black text-red-600">{outOfStockCount}</p>
+            <p className="text-[10px] text-red-700 font-medium mt-0.5">0 units available</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 border border-[#ECEEF2] shadow-xs flex flex-col justify-between col-span-2 sm:col-span-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-orange-700">Near Expiry / Expired</span>
+            <div className="w-7 h-7 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center">
+              <Clock className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <p className="text-2xl font-black text-orange-600">
+              {nearExpiryCount + expiredCount}
+            </p>
+            <p className="text-[10px] text-orange-700 font-medium mt-0.5">
+              {nearExpiryCount} near expiry &bull; {expiredCount} expired
             </p>
           </div>
-
-          {/* Simple Clean Search Bar */}
-          <div className="relative w-full sm:w-72">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
-              <Search className="w-3.5 h-3.5" />
-            </span>
-            <input
-              type="text"
-              value={internalSearch}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search medicines..."
-              className="w-full pl-9 pr-8 py-2 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs text-[#16191E] placeholder:text-gray-400 outline-none focus:border-[#2563EB] focus:bg-white transition"
-            />
-            {internalSearch && (
-              <button
-                type="button"
-                onClick={() => handleSearchChange('')}
-                className="absolute right-2.5 inset-y-0 flex items-center text-gray-400 hover:text-gray-600 transition cursor-pointer"
-                title="Clear search"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
         </div>
+      </div>
 
-        {/* Inventory List */}
-        <div className="space-y-3">
-          {filteredInventory.length === 0 ? (
-            <div className="p-8 text-center bg-[#F8F9FB] rounded-xl border border-[#ECEEF2]">
-              <Boxes className="w-8 h-8 text-gray-300 mx-auto mb-2 stroke-[1.5]" />
-              <p className="text-sm font-semibold text-gray-700">
-                {internalSearch ? 'No medicines match your search' : 'No Inventory Items'}
-              </p>
-              <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
-                {internalSearch
-                  ? `No medicines found matching "${internalSearch}". Try checking the spelling.`
-                  : 'Add pharmacy molecules above or run the SQL seed in your Supabase dashboard.'}
-              </p>
+      <AnimatePresence>
+        {showFullAddForm && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#ECEEF2] shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-[#16191E] flex items-center gap-2">
+                  <Package className="w-4 h-4 text-blue-600" />
+                  Comprehensive Medicine Master & Batch Intake
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowFullAddForm(false)}
+                  className="text-xs text-slate-400 hover:text-slate-600"
+                >
+                  Close
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateFullMedicine} className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Brand Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Dolo 650"
+                      value={newBrand}
+                      onChange={(e) => setNewBrand(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Generic Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Paracetamol 650mg"
+                      value={newGeneric}
+                      onChange={(e) => setNewGeneric(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">SKU / Medicine Code</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. MED-PAR-650"
+                      value={addSku}
+                      onChange={(e) => setAddSku(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Category</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Analgesics"
+                      value={addCategory}
+                      onChange={(e) => setAddCategory(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Manufacturer</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Micro Labs Ltd"
+                      value={addManufacturer}
+                      onChange={(e) => setAddManufacturer(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Dosage Form</label>
+                    <select
+                      value={addDosageForm}
+                      onChange={(e) => setAddDosageForm(e.target.value as DosageForm)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                    >
+                      <option value="Tablet">Tablet</option>
+                      <option value="Capsule">Capsule</option>
+                      <option value="Syrup">Syrup</option>
+                      <option value="Injection">Injection</option>
+                      <option value="Ointment">Ointment</option>
+                      <option value="Drops">Drops</option>
+                      <option value="Suspension">Suspension</option>
+                      <option value="Powder">Powder</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Strength</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 650 mg"
+                      value={addStrength}
+                      onChange={(e) => setAddStrength(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Unit of Measure</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Strips, Bottles"
+                      value={addUnit}
+                      onChange={(e) => setAddUnit(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3 pt-2 border-t border-slate-100">
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Batch Number *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. DL26J09"
+                      value={addBatchNo}
+                      onChange={(e) => setAddBatchNo(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Quantity (Units) *</label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      placeholder="e.g. 100"
+                      value={newQty}
+                      onChange={(e) => setNewQty(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Expiry Date *</label>
+                    <input
+                      type="date"
+                      required
+                      value={addExpDate}
+                      onChange={(e) => setAddExpDate(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Purchase Price (₹)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="e.g. 18.50"
+                      value={addBuyPrice}
+                      onChange={(e) => setAddBuyPrice(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Selling Price (₹)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="e.g. 32.00"
+                      value={addSellPrice}
+                      onChange={(e) => setAddSellPrice(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowFullAddForm(false)}
+                    className="px-4 py-2 text-slate-600 font-semibold hover:bg-slate-50 rounded-xl border border-slate-200 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-[#2563EB] hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs transition cursor-pointer"
+                  >
+                    Save Medicine & Initial Batch
+                  </button>
+                </div>
+              </form>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="bg-white rounded-3xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative w-full sm:w-64">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                <Search className="w-3.5 h-3.5" />
+              </span>
+              <input
+                type="text"
+                value={internalSearch}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                placeholder="Search by brand, generic, SKU, barcode..."
+                className="w-full pl-9 pr-8 py-2 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs text-[#16191E] placeholder:text-slate-400 outline-none focus:border-[#2563EB] focus:bg-white transition"
+              />
               {internalSearch && (
                 <button
                   type="button"
                   onClick={() => handleSearchChange('')}
-                  className="mt-3 text-xs font-semibold text-[#2563EB] hover:underline cursor-pointer"
+                  className="absolute right-2.5 inset-y-0 flex items-center text-slate-400 hover:text-slate-600 transition cursor-pointer"
                 >
-                  Clear search
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                value={categoryFilter}
+                onChange={(e) => {
+                  setCategoryFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs text-slate-700 font-semibold outline-none focus:border-blue-500 cursor-pointer"
+              >
+                <option value="All">All Categories</option>
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={stockStatusFilter}
+                onChange={(e) => {
+                  setStockStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs text-slate-700 font-semibold outline-none focus:border-blue-500 cursor-pointer"
+              >
+                <option value="All">All Stock Levels</option>
+                <option value="Available">Available Only</option>
+                <option value="Low Stock">Low Stock Alert</option>
+                <option value="Out of Stock">Out of Stock</option>
+              </select>
+
+              <select
+                value={expiryStatusFilter}
+                onChange={(e) => {
+                  setExpiryStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-2 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs text-slate-700 font-semibold outline-none focus:border-blue-500 cursor-pointer"
+              >
+                <option value="All">All Expiry Statuses</option>
+                <option value="Valid">Valid (Safe)</option>
+                <option value="Near Expiry">Near Expiry (&le; 60 days)</option>
+                <option value="Expired">Expired</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="text-xs text-slate-400 font-medium">
+            Showing {filteredMedicines.length} of {medicines.length} registered molecules
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {filteredMedicines.length === 0 ? (
+            <div className="p-10 text-center bg-[#F8F9FB] rounded-2xl border border-[#ECEEF2]">
+              <Boxes className="w-10 h-10 text-slate-300 mx-auto mb-2 stroke-[1.5]" />
+              <p className="text-sm font-bold text-slate-700">No medicines match your criteria</p>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                Try clearing active search or filters, or import fresh medicine data from CSV.
+              </p>
+              {(internalSearch || categoryFilter !== 'All' || stockStatusFilter !== 'All' || expiryStatusFilter !== 'All') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSearchChange('');
+                    setCategoryFilter('All');
+                    setStockStatusFilter('All');
+                    setExpiryStatusFilter('All');
+                  }}
+                  className="mt-3 text-xs font-bold text-[#2563EB] hover:underline cursor-pointer"
+                >
+                  Reset all filters
                 </button>
               )}
             </div>
           ) : (
-            paginatedInventory.map((item) => {
-              const isHigh = item.stock > 20;
-              const isLow = item.stock > 0 && item.stock <= 20;
+            paginatedMedicines.map((item) => {
+              const nearestBatch =
+                item.batches && item.batches.length > 0
+                  ? [...item.batches].sort(
+                      (a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime()
+                    )[0]
+                  : null;
 
               return (
                 <div
                   key={item.id}
-                  className="p-3.5 sm:p-4 bg-[#F8F9FB] hover:bg-[#F3F4F7] rounded-xl border border-[#ECEEF2] flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0 transition-colors"
+                  onClick={() => handleOpenDetails(item)}
+                  className="p-4 bg-[#F8F9FB] hover:bg-slate-50/90 rounded-2xl border border-[#ECEEF2] flex flex-col md:flex-row md:items-center justify-between gap-4 transition cursor-pointer group shadow-2xs hover:shadow-xs"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                      <span className="font-bold text-sm text-[#16191E] truncate">{item.brand}</span>
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-200/70 text-slate-700">
+                        {item.sku}
+                      </span>
+                      <h4 className="font-extrabold text-sm text-[#16191E] group-hover:text-blue-600 transition">
+                        {item.brandName}
+                      </h4>
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
-                          isHigh
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                          item.stockStatus === 'Available'
                             ? 'bg-emerald-100 text-emerald-800'
-                            : isLow
+                            : item.stockStatus === 'Low Stock'
                             ? 'bg-amber-100 text-amber-800'
                             : 'bg-red-100 text-red-800'
                         }`}
                       >
-                        {item.stock} Units
+                        {item.totalStock} {item.unit}
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                          item.expiryStatus === 'Valid'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : item.expiryStatus === 'Near Expiry'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : 'bg-red-50 text-red-700 border border-red-200'
+                        }`}
+                      >
+                        {item.expiryStatus}
                       </span>
                     </div>
-                    <p className="text-xs text-[#8A909D] font-medium mt-0.5 truncate">{item.generic}</p>
+
+                    <p className="text-xs text-[#8A909D] font-medium truncate">
+                      {item.genericName} &bull; {item.dosageForm} ({item.strength}) &bull; {item.manufacturer}
+                    </p>
+
+                    <div className="flex items-center gap-4 text-[11px] text-slate-500 mt-2 flex-wrap">
+                      <span className="flex items-center gap-1 font-mono">
+                        <Package className="w-3 h-3 text-slate-400" />
+                        {item.batches.length} {item.batches.length === 1 ? 'batch' : 'batches'}
+                      </span>
+                      {nearestBatch && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-slate-400" />
+                          Earliest Exp: {nearestBatch.expiryDate} (Batch {nearestBatch.batchNumber})
+                        </span>
+                      )}
+                      <span className="font-semibold text-emerald-700">
+                        MRP: ₹{Number(item.sellingPrice || 0).toFixed(2)}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex items-center space-x-2 self-end sm:self-auto flex-shrink-0">
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-2 self-end md:self-auto flex-shrink-0"
+                  >
                     <input
                       type="number"
                       min="1"
@@ -280,16 +750,25 @@ export function InventoryView({
                       onChange={(e) =>
                         setStockUpdates((prev) => ({ ...prev, [item.id]: e.target.value }))
                       }
-                      className="w-20 sm:w-24 p-1.5 bg-white border border-[#ECEEF2] rounded-xl text-xs outline-none focus:ring-1 focus:ring-gray-300 text-center font-medium"
+                      className="w-20 p-2 bg-white border border-[#ECEEF2] rounded-xl text-xs outline-none focus:ring-1 focus:ring-blue-500 text-center font-bold"
                     />
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      onClick={() => onUpdateStock(item.id)}
-                      className="bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition cursor-pointer flex-shrink-0 shadow-xs"
+                      onClick={() => handleQuickRestockSubmit(item.id, item.batches.length)}
+                      className="bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold px-3 py-2 rounded-xl transition cursor-pointer flex-shrink-0 shadow-xs"
                     >
-                      Update
+                      Restock
                     </motion.button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDetails(item)}
+                      className="p-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl transition cursor-pointer flex items-center justify-center shadow-2xs"
+                      title="View Complete Medicine Details"
+                    >
+                      <Eye className="w-4 h-4 text-slate-600" />
+                    </button>
                   </div>
                 </div>
               );
@@ -300,12 +779,31 @@ export function InventoryView({
             currentPage={currentPage}
             totalPages={totalPages}
             onPageChange={setCurrentPage}
-            totalItems={filteredInventory.length}
+            totalItems={filteredMedicines.length}
             itemsPerPage={ITEMS_PER_PAGE}
             itemName="medicines"
           />
         </div>
       </div>
+
+      <MedicineDetailsModal
+        medicine={selectedMedicine}
+        isOpen={isDetailsOpen}
+        onClose={() => {
+          setIsDetailsOpen(false);
+          setSelectedMedicine(null);
+        }}
+        onMedicineUpdated={loadData}
+        isDoctorUnlocked={isDoctorUnlocked}
+      />
+
+      <MedicineCsvImportModal
+        isOpen={isCsvModalOpen}
+        onClose={() => setIsCsvModalOpen(false)}
+        existingMedicines={medicines}
+        onImportComplete={loadData}
+        responsibleUser={isDoctorUnlocked ? 'Dr. Sunny' : 'Staff Pharmacist'}
+      />
     </motion.section>
   );
 }
