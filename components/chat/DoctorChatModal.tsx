@@ -181,7 +181,6 @@ function AudioVoiceMessagePlayer({
             onClick={handleWaveformClick}
             className="relative h-6 flex items-center group cursor-pointer"
           >
-            {/* Waveform Bars */}
             <div className="absolute inset-0 flex items-center justify-between gap-[2px] pointer-events-none">
               {waveBars.map((height, i) => {
                 const barPercent = (i / waveBars.length) * 100;
