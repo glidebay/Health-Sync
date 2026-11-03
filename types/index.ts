@@ -18,6 +18,8 @@ export interface Patient {
   priority?: 'Normal' | 'Urgent';
   visitType?: 'Walk-in' | 'WhatsApp' | 'WhatsApp Link' | string;
   cancellationReason?: string;
+  smsSent?: boolean;
+  lastSmsType?: string;
 }
 
 export interface InventoryItem {
@@ -53,9 +55,9 @@ export interface ConsultationRecord {
   demographics?: string;
 }
 
-export type TabType = 'assistant' | 'queue' | 'consult' | 'inventory' | 'analytics' | 'settings';
+export type TabType = 'assistant' | 'tables' | 'queue' | 'consult' | 'inventory' | 'analytics' | 'settings';
 
-export type NavSection = 'dashboard' | 'booking' | 'assistant' | 'queue' | 'consult' | 'inventory' | 'analytics' | 'settings';
+export type NavSection = 'dashboard' | 'tables' | 'booking' | 'assistant' | 'queue' | 'consult' | 'inventory' | 'analytics' | 'settings';
 
 export type { AppConfig } from '@/data/default-config';
 

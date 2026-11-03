@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Home,
+  Table,
   Users,
   ClipboardList,
   Stethoscope,
@@ -80,6 +81,7 @@ import { validateMobileNumber } from '@/lib/phoneValidation';
 import { GatewayScreen } from '@/components/views/GatewayScreen';
 import { SlotBookingView } from '@/components/views/SlotBookingView';
 import { DashboardView } from '@/components/views/DashboardView';
+import { TablesView } from '@/components/views/TablesView';
 import { AssistantView } from '@/components/views/AssistantView';
 import { ReallocateStrategy } from '@/components/reception/RescheduleModal';
 import { QueueView } from '@/components/views/QueueView';
@@ -477,6 +479,7 @@ function DashboardContent() {
 
   const navItems: NavItemConfig[] = [
     { id: 'dashboard', label: 'Dashboard', icon: Home, reqAuth: false },
+    { id: 'tables', label: 'Tables', icon: Table, reqAuth: false },
     { id: 'assistant', label: 'Assistant Desk', icon: ClipboardList, reqAuth: false },
     { id: 'queue', label: 'Doctor Queue', icon: Users, reqAuth: true },
     { id: 'consult', label: 'Consultation', icon: Stethoscope, reqAuth: true },
@@ -1494,6 +1497,30 @@ function DashboardContent() {
                       setQueue(sortQueueWithCompletedAtEnd(updatedPatients));
                     }}
                     onRefresh={syncClinicData}
+                  />
+                )}
+
+                {activeSection === 'tables' && (
+                  <TablesView
+                    initialQueue={queue}
+                    onOpenConsultation={(patientId) => {
+                      startConsultation(patientId);
+                      setActiveSection('consult');
+                    }}
+                    onPrintRecord={(patient) => {
+                      setPrintRecord({
+                        date: patient.appointmentDate || getTodayIST(),
+                        patientName: patient.name,
+                        patientPhone: patient.phone,
+                        demographics: `${patient.age} Yrs / ${patient.gender}`,
+                        diagnostics: patient.cancellationReason || 'Consultation verified',
+                        items: [],
+                        patientAge: patient.age,
+                        patientGender: patient.gender,
+                        tokenNumber: patient.tokenNumber || patient.displayId || '',
+                      });
+                      setShowPrintModal(true);
+                    }}
                   />
                 )}
 

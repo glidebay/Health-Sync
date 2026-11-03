@@ -231,7 +231,7 @@ export function QueueView({
       </div>
 
       <div className="relative min-h-[180px]">
-        <EcgActionLoader isLoading={isLoading} fullscreen={false} text="Syncing consultation queue..." />
+        <EcgActionLoader isLoading={isLoading} fullscreen={true} text="Syncing consultation queue..." />
         <div className="space-y-3 sm:space-y-4">
           {currentPatients.length === 0 ? (
             <div className="bg-white rounded-2xl p-10 border border-[#ECEEF2] text-center shadow-xs">

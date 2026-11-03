@@ -11,7 +11,6 @@ import {
   Play,
   Pause,
   Mic,
-  Volume2,
 } from 'lucide-react';
 import { PatientChatThread } from '@/types/chat';
 import { DbDoctor } from '@/types/database';
@@ -39,18 +38,6 @@ function AudioVoiceMessagePlayer({
   const [playbackRate, setPlaybackRate] = useState<number>(1);
   const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
-    setLoadError(false);
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      audioRef.current.load();
-    }
-  }, [audioUrl]);
-
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio || !audioUrl) return;
@@ -74,10 +61,23 @@ function AudioVoiceMessagePlayer({
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const audio = audioRef.current;
     const newTime = Number(e.target.value);
-    setCurrentTime(newTime);
-    if (audio) {
-      audio.currentTime = newTime;
+    if (!isNaN(newTime) && isFinite(newTime)) {
+      setCurrentTime(newTime);
+      if (audio) {
+        audio.currentTime = newTime;
+      }
     }
+  };
+
+  const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const audio = audioRef.current;
+    if (!audio || !duration || duration <= 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, clickX / rect.width));
+    const newTime = pct * duration;
+    setCurrentTime(newTime);
+    audio.currentTime = newTime;
   };
 
   const cycleRate = () => {
@@ -89,7 +89,7 @@ function AudioVoiceMessagePlayer({
   };
 
   const formatTime = (secs: number) => {
-    if (!secs || isNaN(secs) || !isFinite(secs)) return '0:00';
+    if (!secs || isNaN(secs) || !isFinite(secs) || secs < 0) return '0:00';
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
@@ -112,12 +112,35 @@ function AudioVoiceMessagePlayer({
           src={audioUrl}
           preload="metadata"
           onTimeUpdate={() => {
-            if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
+            const audio = audioRef.current;
+            if (!audio) return;
+            setCurrentTime(audio.currentTime);
+            if ((!duration || !isFinite(duration) || duration <= 0) && isFinite(audio.duration) && audio.duration > 0) {
+              setDuration(audio.duration);
+            }
+          }}
+          onDurationChange={() => {
+            const d = audioRef.current?.duration;
+            if (d && !isNaN(d) && isFinite(d) && d > 0) {
+              setDuration(d);
+            }
           }}
           onLoadedMetadata={() => {
-            const d = audioRef.current?.duration;
-            if (d && !isNaN(d) && isFinite(d)) {
+            const audio = audioRef.current;
+            if (!audio) return;
+            const d = audio.duration;
+            if (d && !isNaN(d) && isFinite(d) && d > 0) {
               setDuration(d);
+            } else if (d === Infinity) {
+              // Workaround for Chromium / WhatsApp Opus OGG stream duration Infinity
+              audio.currentTime = 1e101;
+              const handleInitialSeek = () => {
+                audio.currentTime = 0;
+                if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
+                  setDuration(audio.duration);
+                }
+              };
+              audio.addEventListener('timeupdate', handleInitialSeek, { once: true });
             }
           }}
           onEnded={() => {
@@ -154,7 +177,10 @@ function AudioVoiceMessagePlayer({
 
         {/* Waveform & Scrubber */}
         <div className="flex-1 flex flex-col justify-center min-w-0">
-          <div className="relative h-6 flex items-center group cursor-pointer">
+          <div
+            onClick={handleWaveformClick}
+            className="relative h-6 flex items-center group cursor-pointer"
+          >
             {/* Waveform Bars */}
             <div className="absolute inset-0 flex items-center justify-between gap-[2px] pointer-events-none">
               {waveBars.map((height, i) => {
@@ -178,15 +204,16 @@ function AudioVoiceMessagePlayer({
               })}
             </div>
 
-            {/* Invisible Range Input for Scrubing */}
+            {/* Invisible Range Input for Scrubbing */}
             <input
               type="range"
               min={0}
-              max={duration || 100}
-              step={0.1}
-              value={currentTime}
+              max={duration > 0 ? duration : 100}
+              step={0.05}
+              value={duration > 0 ? currentTime : 0}
+              disabled={!duration || duration <= 0}
               onChange={handleSeek}
-              className="absolute inset-0 w-full opacity-0 cursor-pointer z-10"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 m-0 p-0"
               aria-label="Seek voice note"
             />
           </div>
@@ -270,7 +297,7 @@ export function DoctorChatModal({
     }
   }, []);
 
-const loadThreads = useCallback(async (silent: boolean = false) => {
+  const loadThreads = useCallback(async (silent: boolean = false) => {
     if (!silent) setIsLoadingThreads(true);
     try {
       const data = await fetchInboundChatThreads();
@@ -289,7 +316,18 @@ const loadThreads = useCallback(async (silent: boolean = false) => {
   useEffect(() => {
     if (!isOpen) return;
 
-    loadThreads(false);
+    let isMounted = true;
+    fetchInboundChatThreads()
+      .then((data) => {
+        if (!isMounted) return;
+        setThreads(data);
+        if (data.length > 0) {
+          setSelectedThreadId((prev) => prev || data[0].id);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load chat threads:', err);
+      });
 
     // Live WebSocket connection to incoming WhatsApp messages
     const unsubscribe = subscribeToChatUpdates(() => {
@@ -302,6 +340,7 @@ const loadThreads = useCallback(async (silent: boolean = false) => {
     }, 3000);
 
     return () => {
+      isMounted = false;
       unsubscribe();
       clearInterval(interval);
     };
@@ -311,25 +350,27 @@ const loadThreads = useCallback(async (silent: boolean = false) => {
     return threads.find((t) => t.id === selectedThreadId) || threads[0] || null;
   }, [threads, selectedThreadId]);
 
-  const [readStates, setReadStates] = useState<Record<string, number>>({});
+  const [readStates, setReadStates] = useState<Record<string, number>>(() => getReadThreadStates());
 
   // Sync read states from storage
   useEffect(() => {
-    setReadStates(getReadThreadStates());
     const onReadChange = () => setReadStates(getReadThreadStates());
     window.addEventListener('healthsync_chat_read_change', onReadChange);
     return () => window.removeEventListener('healthsync_chat_read_change', onReadChange);
   }, []);
 
   // Mark active thread as read whenever it is open and visible
-  useEffect(() => {
-    if (isOpen && activeThread && activeThread.id) {
-      markThreadAsRead(activeThread.id, activeThread.messages?.length || 0);
-    }
-  }, [isOpen, activeThread?.id, activeThread?.messages?.length]);
+  const activeThreadId = activeThread?.id;
+  const activeThreadMsgCount = activeThread?.messages?.length || 0;
 
   useEffect(() => {
-    if (!isOpen || !activeThread) return;
+    if (isOpen && activeThreadId) {
+      markThreadAsRead(activeThreadId, activeThreadMsgCount);
+    }
+  }, [isOpen, activeThreadId, activeThreadMsgCount]);
+
+  useEffect(() => {
+    if (!isOpen || !activeThreadId) return;
 
     // Immediately snap to bottom without animated scrolling down
     scrollToBottom();
@@ -342,7 +383,7 @@ const loadThreads = useCallback(async (silent: boolean = false) => {
       cancelAnimationFrame(rId);
       clearTimeout(t);
     };
-  }, [isOpen, activeThread?.id, activeThread?.messages?.length, scrollToBottom]);
+  }, [isOpen, activeThreadId, activeThreadMsgCount, scrollToBottom]);
 
   const filteredThreads = useMemo(() => {
     return threads.filter((t) => {
@@ -548,7 +589,7 @@ const loadThreads = useCallback(async (silent: boolean = false) => {
                     </div>
                   </div>
 
-<div
+                  <div
                     ref={messagesContainerRef}
                     className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-5 pb-6 space-y-3"
                   >
@@ -577,7 +618,6 @@ const loadThreads = useCallback(async (silent: boolean = false) => {
                                     #{formatPatientToken({ tokenNumber: msg.tokenNumber })}
                                   </span>
                                 </div>
-
                               </div>
                               <p className="text-[11px] text-[#8A909D] pt-1">{msg.text}</p>
                             </div>
@@ -585,9 +625,10 @@ const loadThreads = useCallback(async (silent: boolean = false) => {
                         );
                       }
 
-                      if (msg.messageType === 'audio' || msg.audioUrl || msg.isVoiceNote || isMediaIdString) {
+                      if (msg.messageType === 'audio' || msg.audioUrl || msg.isVoiceNote || msg.mediaId || isMediaIdString) {
                         const voiceUrl =
                           msg.audioUrl ||
+                          (msg.mediaId ? `/api/whatsapp-audio?media_id=${encodeURIComponent(msg.mediaId)}` : undefined) ||
                           (isMediaIdString ? `/api/whatsapp-audio?media_id=${encodeURIComponent(rawMsgText)}` : undefined);
                         return (
                           <div
@@ -595,6 +636,7 @@ const loadThreads = useCallback(async (silent: boolean = false) => {
                             className={`flex ${isDoctor ? 'justify-end' : 'justify-start'}`}
                           >
                             <AudioVoiceMessagePlayer
+                              key={voiceUrl || msg.id}
                               audioUrl={voiceUrl}
                               isDoctor={isDoctor}
                               timestamp={msg.timestamp}
