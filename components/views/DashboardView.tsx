@@ -1,20 +1,27 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Eye,
-  Check,
+  Users,
+  CheckCircle2,
   Boxes,
   Plus,
   Stethoscope,
   Clock,
-  Users,
   Pill,
-  CheckCircle2,
-  User,
-  Phone,
-  RefreshCw,
+  ArrowRight,
+  TrendingUp,
+  Sparkles,
+  Flame,
+  Check,
+  ShieldCheck,
+  Bell,
+  MessageSquare,
+  MoreVertical,
+  MousePointer,
+  ShoppingBag,
+  Package,
 } from 'lucide-react';
 import { Patient } from '@/types';
 import { AnimatedCounter } from '@/components/common/AnimatedCounter';
@@ -81,13 +88,12 @@ export function DashboardView({
   const [selectedPatientForCancel, setSelectedPatientForCancel] = useState<Patient | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [dbPatients, setDbPatients] = useState<Patient[] | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [activeTooltipIndex, setActiveTooltipIndex] = useState<number>(4);
 
-  const itemsPerPage = 8;
+  const itemsPerPage = 6;
 
   const loadData = useCallback(
     async (silent: boolean = true) => {
-      if (!silent) setIsRefreshing(true);
       try {
         const fetched = await fetchPatientAppointmentsFromDb({
           date: getTodayIST(),
@@ -101,8 +107,6 @@ export function DashboardView({
         }
       } catch (err) {
         console.warn('Dashboard live queue fetch error:', err);
-      } finally {
-        if (!silent) setIsRefreshing(false);
       }
     },
     [onQueueUpdated]
@@ -158,6 +162,17 @@ export function DashboardView({
   const effectiveInChamber = dbPatients !== null ? activePatientsList.find((p) => p.status === 'In Progress') : inChamberPatient;
   const effectiveNextWaiting = dbPatients !== null ? activePatientsList.find((p) => p.status === 'Waiting') : nextWaitingPatient;
 
+  const onlineAppointmentsCount = useMemo(() => {
+    return activePatientsList.filter((p) => {
+      const vt = (p.visitType || '').toLowerCase();
+      return vt.includes('whatsapp') || vt.includes('online');
+    }).length;
+  }, [activePatientsList]);
+
+  const completionRate = effectiveTotalCount > 0
+    ? Math.round((effectiveCompletedCount / effectiveTotalCount) * 100)
+    : 0;
+
   const totalPages = Math.max(1, Math.ceil(effectiveQueue.length / itemsPerPage));
 
   useEffect(() => {
@@ -169,365 +184,794 @@ export function DashboardView({
   const paginatedQueue = useMemo(() => {
     return effectiveQueue.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   }, [effectiveQueue, currentPage, itemsPerPage]);
+
+  const barChartValues = useMemo(() => [330, 140, 80, 220, 380, 150, 310, 170, 360], []);
+
+  const months = useMemo(() => ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], []);
+  const walkinData = useMemo(() => [510, 580, 550, 610, 640, 620, 690, 730, 780], []);
+  const whatsappData = useMemo(() => [340, 410, 430, 490, 530, 570, 640, 710, 790], []);
+
+  const lineChartXCoords = useMemo(() => [60, 129, 198, 266, 335, 404, 473, 541, 610], []);
+
+  const pts1 = useMemo(() => {
+    return lineChartXCoords.map((x, i) => ({
+      x,
+      y: 220 - (walkinData[i] / 800) * 180,
+    }));
+  }, [lineChartXCoords, walkinData]);
+
+  const pts2 = useMemo(() => {
+    return lineChartXCoords.map((x, i) => ({
+      x,
+      y: 220 - (whatsappData[i] / 800) * 180,
+    }));
+  }, [lineChartXCoords, whatsappData]);
+
+  const getCubicBezierPath = useCallback((points: { x: number; y: number }[]) => {
+    if (points.length < 2) return '';
+    let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[i === 0 ? 0 : i - 1];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[i + 2 < points.length ? i + 2 : i + 1];
+
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+      d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+    }
+    return d;
+  }, []);
+
+  const splinePath1 = useMemo(() => getCubicBezierPath(pts1), [getCubicBezierPath, pts1]);
+  const splineAreaPath1 = useMemo(() => {
+    if (!splinePath1) return '';
+    return `${splinePath1} L 610 220 L 60 220 Z`;
+  }, [splinePath1]);
+
+  const splinePath2 = useMemo(() => getCubicBezierPath(pts2), [getCubicBezierPath, pts2]);
+
+  const activityLog = useMemo(() => {
+    const items = [];
+    if (effectiveInChamber) {
+      items.push({
+        id: 'in-chamber',
+        title: `Token ${formatPatientToken(effectiveInChamber)} in Consultation`,
+        subtitle: `${effectiveInChamber.name} (${effectiveInChamber.age}y, ${effectiveInChamber.gender}) in Chamber`,
+        time: effectiveInChamber.time || 'Live Now',
+        icon: Stethoscope,
+        color: 'from-emerald-500 to-teal-400',
+      });
+    }
+
+    const recentlyCompleted = activePatientsList.filter((p) => p.status === 'Completed').slice(-1);
+    recentlyCompleted.forEach((p) => {
+      items.push({
+        id: `comp-${p.id}`,
+        title: `Token ${formatPatientToken(p)} Completed`,
+        subtitle: `Rx charting finalized for ${p.name}`,
+        time: p.time || 'Recent',
+        icon: CheckCircle2,
+        color: 'from-blue-600 to-indigo-500',
+      });
+    });
+
+    if (effectiveNextWaiting) {
+      items.push({
+        id: 'next-waiting',
+        title: `Token ${formatPatientToken(effectiveNextWaiting)} Next in Line`,
+        subtitle: `${effectiveNextWaiting.name} at Waiting Lounge`,
+        time: effectiveNextWaiting.time || 'Next Slot',
+        icon: Clock,
+        color: 'from-indigo-600 to-purple-500',
+      });
+    }
+
+    items.push({
+      id: 'pharmacy-stock',
+      title: 'Pharmacy Sync Online',
+      subtitle: `${totalStockUnits} units cataloged in stock`,
+      time: 'Synced',
+      icon: Pill,
+      color: 'from-amber-500 to-orange-400',
+    });
+
+    items.push({
+      id: 'wa-channel',
+      title: 'WhatsApp Gateway Active',
+      subtitle: `${onlineAppointmentsCount} digital appointments verified`,
+      time: 'Ready',
+      icon: MessageSquare,
+      color: 'from-teal-600 to-emerald-500',
+    });
+
+    return items;
+  }, [effectiveInChamber, activePatientsList, effectiveNextWaiting, totalStockUnits, onlineAppointmentsCount]);
+
   return (
     <motion.div
       key="dashboard"
-      initial={{ opacity: 0, y: 14 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -14 }}
+      exit={{ opacity: 0, y: -12 }}
       transition={{ duration: 0.25 }}
+      className="space-y-5 sm:space-y-6 max-w-7xl mx-auto pb-4"
     >
       <motion.section
         variants={staggerContainer}
         initial="hidden"
         animate="visible"
-        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-10"
+        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
       >
         <motion.div
           variants={fadeScale}
-          whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(0,0,0,0.08)' }}
-          transition={{ type: 'spring', damping: 18, stiffness: 300 }}
-          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] flex justify-between items-start shadow-sm cursor-default min-w-0"
+          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-xs sm:text-sm font-semibold text-[#16191E] block mb-2 sm:mb-4 truncate">
-              Total Patients Today
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+              Today&apos;s Patients
             </span>
-            <span className="text-xl sm:text-2xl font-bold text-[#16191E] tracking-tight block">
-              <AnimatedCounter target={effectiveTotalCount} />
-            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+                <AnimatedCounter target={effectiveTotalCount} />
+              </span>
+              <span className="inline-flex items-center text-xs font-semibold text-emerald-500">
+                +12% <span className="text-slate-400 font-normal text-[11px] ml-1">today</span>
+              </span>
+            </div>
           </div>
-          <motion.div
-            whileHover={{ rotate: 12, scale: 1.1 }}
-            className="w-8 h-8 rounded-lg bg-[#2563EB] flex items-center justify-center text-white shadow-sm shadow-blue-500/20 flex-shrink-0"
-          >
-            <Eye className="w-4 h-4 stroke-[2]" />
-          </motion.div>
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-blue-700 to-blue-500 shadow-md shadow-blue-500/25 flex items-center justify-center text-white flex-shrink-0">
+            <Users className="w-5 h-5 stroke-[2.2]" />
+          </div>
         </motion.div>
 
         <motion.div
           variants={fadeScale}
-          whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(0,0,0,0.08)' }}
-          transition={{ type: 'spring', damping: 18, stiffness: 300 }}
-          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] flex justify-between items-start shadow-sm cursor-default min-w-0"
+          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-xs sm:text-sm font-semibold text-[#16191E] block mb-2 sm:mb-4 truncate">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
               Completed Consults
             </span>
-            <span className="text-xl sm:text-2xl font-bold text-[#16191E] tracking-tight block">
-              <AnimatedCounter target={effectiveCompletedCount} />
-            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+                <AnimatedCounter target={effectiveCompletedCount} />
+              </span>
+              <span className="inline-flex items-center text-xs font-semibold text-emerald-500">
+                {completionRate}% <span className="text-slate-400 font-normal text-[11px] ml-1">rate</span>
+              </span>
+            </div>
           </div>
-          <motion.div
-            whileHover={{ rotate: -12, scale: 1.1 }}
-            className="w-8 h-8 rounded-lg bg-[#2563EB] flex items-center justify-center text-white shadow-sm shadow-blue-500/20 flex-shrink-0"
-          >
-            <Check className="w-4 h-4 stroke-[2.5]" />
-          </motion.div>
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-emerald-600 to-teal-400 shadow-md shadow-emerald-500/25 flex items-center justify-center text-white flex-shrink-0">
+            <CheckCircle2 className="w-5 h-5 stroke-[2.2]" />
+          </div>
         </motion.div>
 
         <motion.div
           variants={fadeScale}
-          whileHover={{ y: -4, boxShadow: '0 14px 28px -6px rgba(0,0,0,0.08)' }}
-          transition={{ type: 'spring', damping: 18, stiffness: 300 }}
-          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] sm:col-span-2 xl:col-span-1 flex justify-between items-start shadow-sm cursor-default min-w-0"
+          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-xs sm:text-sm font-semibold text-[#16191E] block mb-2 sm:mb-4 truncate">
-              Pharmacy Units in Stock
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+              Waiting in Queue
             </span>
-            <span className="text-xl sm:text-2xl font-bold text-[#16191E] tracking-tight block">
-              <AnimatedCounter target={totalStockUnits} />
-            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+                <AnimatedCounter target={effectiveWaitingCount} />
+              </span>
+              <span className="inline-flex items-center text-xs font-semibold text-blue-600">
+                Active <span className="text-slate-400 font-normal text-[11px] ml-1">queue</span>
+              </span>
+            </div>
           </div>
-          <motion.div
-            whileHover={{ rotate: 12, scale: 1.1 }}
-            className="w-8 h-8 rounded-lg bg-[#2563EB] flex items-center justify-center text-white shadow-sm shadow-blue-500/20 flex-shrink-0"
-          >
-            <Boxes className="w-4 h-4 stroke-[2]" />
-          </motion.div>
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-indigo-600 to-blue-500 shadow-md shadow-indigo-500/25 flex items-center justify-center text-white flex-shrink-0">
+            <Clock className="w-5 h-5 stroke-[2.2]" />
+          </div>
+        </motion.div>
+
+        <motion.div
+          variants={fadeScale}
+          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+        >
+          <div className="min-w-0 pr-2">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+              Pharmacy Stock
+            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+                <AnimatedCounter target={totalStockUnits} />
+              </span>
+              <span className="inline-flex items-center text-xs font-semibold text-emerald-500">
+                <ShieldCheck className="w-3 h-3 mr-0.5" />
+                Synced <span className="text-slate-400 font-normal text-[11px] ml-1">units</span>
+              </span>
+            </div>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-amber-500 to-orange-400 shadow-md shadow-amber-500/25 flex items-center justify-center text-white flex-shrink-0">
+            <Boxes className="w-5 h-5 stroke-[2.2]" />
+          </div>
         </motion.div>
       </motion.section>
 
-      <section className="mb-8 sm:mb-10">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-4 sm:mb-5">
-          <h2 className="text-base sm:text-lg font-bold text-[#16191E] tracking-tight">
-            Active consultations & Chamber Flow
-          </h2>
-          <motion.button
-            whileHover={{ scale: 1.04, y: -1 }}
-            whileTap={{ scale: 0.96 }}
-            onClick={onRegisterWalkin}
-            className="flex items-center space-x-1.5 text-xs font-semibold bg-[#2563EB] text-white px-3 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl hover:bg-blue-700 transition cursor-pointer shadow-sm flex-shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Register Walk-in</span>
-            <span className="sm:hidden">Walk-in</span>
-          </motion.button>
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div className="lg:col-span-7 bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] min-w-0">
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-5 items-stretch h-full">
+            <div className="sm:col-span-7 flex flex-col justify-between py-1 space-y-4">
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                  HEALTHSYNC • CLINIC OPS
+                </span>
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
+                  Smart Patient Flow &amp; Chamber Triage
+                </h2>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Direct token sequencing, automated WhatsApp reminders, and real-time consultation coordination with zero waiting congestion.
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center gap-2.5">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={onRegisterWalkin}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold transition shadow-sm shadow-blue-500/20 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Register Walk-in</span>
+                </motion.button>
+                <button
+                  type="button"
+                  onClick={onViewAllQueue}
+                  className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-slate-700 hover:text-[#2563EB] transition cursor-pointer"
+                >
+                  <span>Full Queue</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="sm:col-span-5 h-full min-h-[170px] sm:min-h-[190px] rounded-2xl overflow-hidden relative shadow-sm border border-slate-100 bg-[#EBF4FF] flex items-center justify-center">
+              <img
+                src="/images/medical-rocket.jpg"
+                alt="HealthSync Clinical Ops"
+                className="w-full h-full object-cover"
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
-          <motion.div
-            whileHover={{
-              y: -4,
-              boxShadow: '0 14px 32px -8px rgba(0,0,0,0.08)',
+        <div className="lg:col-span-5 bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] min-w-0 flex flex-col">
+          <div
+            className="relative h-full min-h-[190px] rounded-2xl overflow-hidden p-5 text-white shadow-sm border border-slate-800/20 flex flex-col items-end text-right"
+            style={{
+              backgroundImage: "linear-gradient(135deg, rgba(15, 23, 42, 0.35) 0%, rgba(10, 18, 38, 0.75) 100%), url('/images/doctor-telemetry-bg.jpg')",
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
             }}
-            className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col justify-between cursor-default min-w-0"
           >
-            <motion.div
-              whileHover={{ rotate: -8, scale: 1.1 }}
-              className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-[#2563EB] mb-6 sm:mb-10 flex-shrink-0"
-            >
-              <Stethoscope className="w-5 h-5 stroke-[1.8]" />
-            </motion.div>
-            <div className="min-w-0">
-              <h3 className="text-sm font-bold text-[#16191E] mb-3 truncate" title={effectiveInChamber ? `${effectiveInChamber.name} (In Chamber)` : undefined}>
-                {effectiveInChamber ? `${effectiveInChamber.name} (In Chamber)` : 'No Patient in Chamber'}
+            <div className="relative z-10 flex flex-col items-end text-right space-y-1.5">
+              <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-blue-300 drop-shadow-xs">
+                CHAMBER TELEMETRY
+              </span>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-white/20 border border-white/30 text-white font-bold text-xs sm:text-sm tracking-wide shadow-xs backdrop-blur-xs">
+                {effectiveInChamber ? `Token ${formatPatientToken(effectiveInChamber)}` : effectiveNextWaiting ? `Token ${formatPatientToken(effectiveNextWaiting)}` : 'Token --'}
+              </span>
+              <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight truncate max-w-[260px] drop-shadow-xs">
+                {effectiveInChamber ? effectiveInChamber.name : effectiveNextWaiting ? effectiveNextWaiting.name : 'Waiting Lounge Clear'}
               </h3>
-              <div className="flex items-center justify-between gap-2.5 min-w-0">
-                <AnimatedProgress percent={effectiveInChamber ? 85 : 0} delay={0.1} className="flex-1 min-w-[36px] max-w-[120px]" />
-                <span className="text-xs font-semibold text-[#8A909D] flex-shrink-0 whitespace-nowrap">
-                  {effectiveInChamber ? (
-                    <>
-                      <strong className="text-[#16191E]">{effectiveInChamber.age}</strong> Yrs • {effectiveInChamber.gender}
-                    </>
-                  ) : (
-                    'Chamber Available'
-                  )}
-                </span>
-              </div>
             </div>
-          </motion.div>
-
-          <motion.div
-            whileHover={{
-              y: -4,
-              boxShadow: '0 14px 32px -8px rgba(0,0,0,0.08)',
-            }}
-            className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col justify-between cursor-default min-w-0"
-          >
-            <motion.div
-              whileHover={{ rotate: 8, scale: 1.1 }}
-              className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-[#2563EB] mb-6 sm:mb-10 flex-shrink-0"
-            >
-              <Clock className="w-5 h-5 stroke-[1.8]" />
-            </motion.div>
-            <div className="min-w-0">
-              <h3 className="text-sm font-bold text-[#16191E] mb-3 truncate" title={effectiveNextWaiting ? `${effectiveNextWaiting.name} (Next)` : undefined}>
-                {effectiveNextWaiting ? `${effectiveNextWaiting.name} (Next)` : 'No Waiting Patients'}
-              </h3>
-              <div className="flex items-center justify-between gap-2.5 min-w-0">
-                <AnimatedProgress percent={effectiveNextWaiting ? 50 : 0} delay={0.2} className="flex-1 min-w-[36px] max-w-[120px]" />
-                <span className="text-xs font-semibold text-[#8A909D] flex-shrink-0 whitespace-nowrap">
-                  {effectiveNextWaiting ? (
-                    <>
-                      <strong className="text-[#16191E]">{effectiveNextWaiting.time}</strong> Slot
-                    </>
-                  ) : (
-                    'Queue Clear'
-                  )}
-                </span>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            whileHover={{
-              y: -4,
-              boxShadow: '0 14px 32px -8px rgba(0,0,0,0.08)',
-            }}
-            className="md:col-span-2 xl:col-span-1 bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col justify-start cursor-default min-w-0"
-          >
-            <h3 className="text-base font-bold text-[#16191E] mb-4">Clinic Daily Stream</h3>
-            <div className="flex flex-wrap md:flex-col gap-2.5">
-              <motion.div whileHover={{ scale: 1.03, x: 2 }} transition={{ type: 'spring', damping: 20 }}>
-                <span className="inline-flex items-center space-x-2 bg-[#EAECEF] px-3.5 py-1.5 rounded-lg text-xs font-semibold text-[#16191E] cursor-pointer">
-                  <Users className="w-4 h-4 text-[#2563EB] stroke-[2]" />
-                  <span>{effectiveWaitingCount} Waiting in Queue</span>
-                </span>
-              </motion.div>
-              <motion.div whileHover={{ scale: 1.03, x: 2 }} transition={{ type: 'spring', damping: 20 }}>
-                <span className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#16191E] hover:bg-gray-100 transition cursor-pointer">
-                  <Pill className="w-4 h-4 text-[#2563EB] stroke-[1.8]" />
-                  <span>Live Stock Synced</span>
-                </span>
-              </motion.div>
-              <motion.div whileHover={{ scale: 1.03, x: 2 }} transition={{ type: 'spring', damping: 20 }}>
-                <span className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#16191E] hover:bg-gray-100 transition cursor-pointer">
-                  <CheckCircle2 className="w-4 h-4 text-[#2563EB] stroke-[1.8]" />
-                  <span>14m Avg Consultation</span>
-                </span>
-              </motion.div>
-            </div>
-          </motion.div>
+          </div>
         </div>
       </section>
 
-      <section className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div className="lg:col-span-5 bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between min-w-0">
           <div>
-            <h2 className="text-base sm:text-lg font-bold text-[#16191E]">Live Queue Oversight</h2>
-            <p className="text-xs text-[#8A909D]">
-              Real-time patient triage, token coordination, and active consultation flow
-            </p>
+            <div className="bg-[#181F38] rounded-2xl p-4 text-white shadow-sm relative overflow-hidden">
+              <div className="h-40 w-full relative">
+                <svg className="w-full h-full" viewBox="0 0 360 160" preserveAspectRatio="none">
+                  <text x="32" y="28" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">400</text>
+                  <text x="32" y="78" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">200</text>
+                  <text x="32" y="128" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">0</text>
+
+                  <line x1="42" y1="28" x2="345" y2="28" stroke="rgba(255,255,255,0.12)" strokeDasharray="4 4" />
+                  <line x1="42" y1="78" x2="345" y2="78" stroke="rgba(255,255,255,0.12)" strokeDasharray="4 4" />
+                  <line x1="42" y1="128" x2="345" y2="128" stroke="rgba(255,255,255,0.15)" />
+
+                  {barChartValues.map((val, i) => {
+                    const x = 65 + i * 31;
+                    const h = (val / 400) * 100;
+                    const y = 128 - h;
+
+                    return (
+                      <motion.rect
+                        key={`bar-${i}`}
+                        x={x}
+                        width="6"
+                        rx="3"
+                        fill="#FFFFFF"
+                        initial={{ height: 0, y: 128 }}
+                        animate={{ height: h, y: y }}
+                        transition={{ duration: 0.55, delay: i * 0.05, ease: 'easeOut' }}
+                      />
+                    );
+                  })}
+                </svg>
+              </div>
+            </div>
+
+            <div className="pt-4">
+              <h3 className="text-base font-bold text-slate-800">Clinical Activity</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                <span className="font-bold text-emerald-500">(+21.4%)</span> annual growth in patient consultations
+              </p>
+            </div>
           </div>
 
+          <div className="grid grid-cols-4 gap-3 pt-4 border-t border-slate-100 mt-4">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-[#7928CA] to-[#FF0080] flex items-center justify-center text-white shadow-2xs">
+                  <Users className="w-2.5 h-2.5 stroke-[2.5]" />
+                </div>
+                <span className="text-xs font-semibold text-slate-500">Patients</span>
+              </div>
+              <div className="text-lg font-bold text-slate-800 mt-1">11.8K</div>
+              <div className="w-full h-1 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-[#7928CA] to-[#FF0080] rounded-full w-[65%]" />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-2xs">
+                  <MessageSquare className="w-2.5 h-2.5 stroke-[2.5]" />
+                </div>
+                <span className="text-xs font-semibold text-slate-500">WhatsApp</span>
+              </div>
+              <div className="text-lg font-bold text-slate-800 mt-1">50.3%</div>
+              <div className="w-full h-1 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-emerald-600 to-teal-400 rounded-full w-[78%]" />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-[#2152ff] to-[#21d4fd] flex items-center justify-center text-white shadow-2xs">
+                  <Clock className="w-2.5 h-2.5 stroke-[2.5]" />
+                </div>
+                <span className="text-xs font-semibold text-slate-500">Avg Time</span>
+              </div>
+              <div className="text-lg font-bold text-slate-800 mt-1">14m</div>
+              <div className="w-full h-1 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-[#2152ff] to-[#21d4fd] rounded-full w-[55%]" />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-[#ea0606] to-[#ff667c] flex items-center justify-center text-white shadow-2xs">
+                  <Pill className="w-2.5 h-2.5 stroke-[2.5]" />
+                </div>
+                <span className="text-xs font-semibold text-slate-500">Rx Stock</span>
+              </div>
+              <div className="text-lg font-bold text-slate-800 mt-1">{totalStockUnits || 716}</div>
+              <div className="w-full h-1 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-[#ea0606] to-[#ff667c] rounded-full w-[82%]" />
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-          {effectiveQueue.length === 0 ? (
-            <div className="col-span-full bg-white rounded-2xl p-8 border border-[#ECEEF2] text-center shadow-xs">
-              <Users className="w-8 h-8 text-gray-300 mx-auto mb-2 stroke-[1.5]" />
-              <p className="text-sm font-semibold text-gray-700">No Patients in Database Queue</p>
-              <p className="text-xs text-gray-400 mt-1">Register walk-in patients from Assistant Desk to populate live queue.</p>
+        <div className="lg:col-span-7 bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between min-w-0">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+            <div>
+              <h3 className="text-base font-bold text-slate-800">Patient Intake Overview</h3>
+              <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                <span className="font-bold text-emerald-500 flex items-center">
+                  ↑ +21.4%
+                </span>
+                <span>annual growth in clinical consultations</span>
+              </p>
             </div>
-          ) : (
-            paginatedQueue.map((p) => {
-              const isWaiting = p.status === 'Waiting';
-              const isInProgress = p.status === 'In Progress';
-              const isCompleted = p.status === 'Completed';
-              const tokenDisplay = formatPatientToken(p);
+            <div className="flex items-center gap-3 self-start sm:self-auto">
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#17C1E8]" />
+                <span>Walk-in</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#10B981]" />
+                <span>WhatsApp</span>
+              </div>
+            </div>
+          </div>
 
-              return (
-                <motion.div
-                  key={p.id}
-                  whileHover={{
-                    y: -2,
-                    boxShadow: '0 10px 24px -6px rgba(0,0,0,0.07)',
-                  }}
-                  className={`bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between gap-3 min-w-0 transition-colors ${isCompleted ? 'opacity-65' : ''
-                    }`}
+          <div className="w-full h-64 relative pt-2 pb-2">
+            <svg className="w-full h-full" viewBox="0 0 650 250" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="softCyanAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#17C1E8" stopOpacity="0.32" />
+                  <stop offset="100%" stopColor="#17C1E8" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+
+              <text x="35" y="44" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">800</text>
+              <text x="35" y="89" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">600</text>
+              <text x="35" y="134" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">400</text>
+              <text x="35" y="179" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">200</text>
+              <text x="35" y="224" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">0</text>
+
+              <line x1="45" y1="40" x2="630" y2="40" stroke="#EDF2F7" strokeDasharray="5 5" />
+              <line x1="45" y1="85" x2="630" y2="85" stroke="#EDF2F7" strokeDasharray="5 5" />
+              <line x1="45" y1="130" x2="630" y2="130" stroke="#EDF2F7" strokeDasharray="5 5" />
+              <line x1="45" y1="175" x2="630" y2="175" stroke="#EDF2F7" strokeDasharray="5 5" />
+              <line x1="45" y1="220" x2="630" y2="220" stroke="#EDF2F7" />
+
+              <motion.path
+                d={splineAreaPath1}
+                fill="url(#softCyanAreaGrad)"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.8, delay: 0.3 }}
+              />
+
+              <motion.path
+                d={splinePath1}
+                fill="none"
+                stroke="#17C1E8"
+                strokeWidth="3"
+                strokeLinecap="round"
+                initial={{ pathLength: 0 }}
+                animate={{ pathLength: 1 }}
+                transition={{ duration: 1.1, ease: 'easeOut' }}
+              />
+
+              <motion.path
+                d={splinePath2}
+                fill="none"
+                stroke="#10B981"
+                strokeWidth="3"
+                strokeLinecap="round"
+                initial={{ pathLength: 0 }}
+                animate={{ pathLength: 1 }}
+                transition={{ duration: 1.1, delay: 0.15, ease: 'easeOut' }}
+              />
+
+              {activeTooltipIndex !== null && (
+                <line
+                  x1={pts1[activeTooltipIndex].x}
+                  y1="40"
+                  x2={pts1[activeTooltipIndex].x}
+                  y2="220"
+                  stroke="#E2E8F0"
+                  strokeWidth="1.5"
+                  strokeDasharray="4 4"
+                />
+              )}
+
+              {months.map((m, i) => (
+                <text
+                  key={m}
+                  x={lineChartXCoords[i]}
+                  y="242"
+                  textAnchor="middle"
+                  fill="#A0AEC0"
+                  fontSize="11"
+                  fontWeight="500"
                 >
-                  <div className="flex items-start space-x-3 sm:space-x-4 min-w-0">
-                    <motion.div
-                      whileHover={{ rotate: 10 }}
-                      className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${isInProgress
-                        ? 'bg-emerald-50 text-emerald-600'
-                        : isCompleted
-                          ? 'bg-gray-100 text-gray-500'
-                          : 'bg-blue-50 text-[#2563EB]'
-                        }`}
-                    >
-                      <User className="w-5 h-5 stroke-[2]" />
-                    </motion.div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center space-x-2 mb-1 flex-wrap">
-                        <h3 className="text-sm font-bold text-[#16191E] truncate">{p.name}</h3>
-                        <span className="text-xs text-[#8A909D] font-medium flex-shrink-0">
-                          ({tokenDisplay})
-                        </span>
-                        {p.priority === 'Urgent' && (
-                          <span className="bg-amber-100 text-amber-800 text-[9px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0">
-                            Urgent
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 text-xs text-[#5E6470] font-medium">
-                        <span>
-                          {p.age} Yrs • {p.gender}
-                        </span>
-                        {p.phone && (
-                          <>
-                            <span className="text-gray-300">•</span>
-                            <span className="inline-flex items-center gap-1 text-[#5E6470]">
-                              <Phone className="w-3 h-3 text-[#2563EB]" />
-                              {p.phone}
-                            </span>
-                          </>
-                        )}
-                        <span className="text-gray-300">•</span>
-                        <span className="inline-flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5 text-[#2563EB] stroke-[2]" />
-                          Slot: {p.time}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${isCompleted
-                            ? 'bg-gray-100 text-gray-600'
-                            : isInProgress
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : p.status === 'Cancelled'
-                                ? 'bg-rose-50 text-rose-700'
-                                : 'bg-blue-50 text-blue-700'
-                            }`}
-                        >
-                          {p.status}
-                        </span>
-                        {p.visitType && (
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1 ${p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online')
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                  {m}
+                </text>
+              ))}
+
+              {pts1.map((p, i) => (
+                <rect
+                  key={`hit-${i}`}
+                  x={p.x - 25}
+                  y="20"
+                  width="50"
+                  height="210"
+                  fill="transparent"
+                  className="cursor-pointer"
+                  onMouseEnter={() => setActiveTooltipIndex(i)}
+                />
+              ))}
+
+              {activeTooltipIndex !== null && (
+                <>
+                  <circle
+                    cx={pts1[activeTooltipIndex].x}
+                    cy={pts1[activeTooltipIndex].y}
+                    r="5"
+                    fill="#17C1E8"
+                    stroke="#FFFFFF"
+                    strokeWidth="3"
+                  />
+                  <circle
+                    cx={pts2[activeTooltipIndex].x}
+                    cy={pts2[activeTooltipIndex].y}
+                    r="5"
+                    fill="#10B981"
+                    stroke="#FFFFFF"
+                    strokeWidth="3"
+                  />
+                </>
+              )}
+            </svg>
+
+            {activeTooltipIndex !== null && (
+              <div
+                className="absolute bg-[#1E293B] text-white text-[11px] rounded-xl px-3 py-2 shadow-xl border border-slate-700/50 pointer-events-none transition-all duration-150 z-20"
+                style={{
+                  left: `${(pts1[activeTooltipIndex].x / 650) * 100}%`,
+                  top: '18px',
+                  transform: 'translateX(-50%)',
+                }}
+              >
+                <div className="font-bold text-white mb-1">{months[activeTooltipIndex]}</div>
+                <div className="flex items-center gap-1.5 text-slate-300">
+                  <span className="w-2 h-2 rounded-xs bg-[#17C1E8]" />
+                  <span>Walk-in: {walkinData[activeTooltipIndex]}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-slate-300">
+                  <span className="w-2 h-2 rounded-xs bg-[#10B981]" />
+                  <span>WhatsApp: {whatsappData[activeTooltipIndex]}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div className="lg:col-span-8 bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] space-y-3.5">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <h3 className="text-base font-bold text-slate-800">Projects</h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Real-time patient queue and consultation triage
+              </p>
+            </div>
+            <MoreVertical className="w-4 h-4 text-slate-400 cursor-pointer hover:text-slate-600 transition" />
+          </div>
+
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="w-full text-left border-collapse min-w-[580px]">
+              <thead>
+                <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="pb-2.5 pl-4 sm:pl-0">Patient / Token</th>
+                  <th className="pb-2.5 px-3">Type</th>
+                  <th className="pb-2.5 px-3">Slot</th>
+                  <th className="pb-2.5 px-3">Status</th>
+                  <th className="pb-2.5 pr-4 sm:pr-0 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {paginatedQueue.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-xs text-slate-400">
+                      No appointments in queue.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedQueue.map((p) => {
+                    const isWaiting = p.status === 'Waiting';
+                    const isInProgress = p.status === 'In Progress';
+                    const isCompleted = p.status === 'Completed';
+                    const tokenDisplay = formatPatientToken(p);
+                    const isOnline =
+                      Boolean(p.visitType) &&
+                      (Boolean(p.visitType?.toLowerCase().includes('whatsapp')) || Boolean(p.visitType?.toLowerCase().includes('online')));
+
+                    return (
+                      <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3 pl-4 sm:pl-0">
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${
+                                isInProgress
+                                  ? 'bg-gradient-to-tl from-emerald-600 to-teal-400'
+                                  : isCompleted
+                                  ? 'bg-slate-400'
+                                  : 'bg-gradient-to-tl from-blue-700 to-blue-500'
                               }`}
+                            >
+                              {tokenDisplay}
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-xs font-semibold text-slate-800 block truncate max-w-[130px]">
+                                {p.name}
+                              </span>
+                              <span className="text-[11px] text-slate-400 block">
+                                {p.age}y • {p.gender}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-1">
+                            <span
+                              className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                                isOnline
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {isOnline ? 'Online WA' : 'Walk-in'}
+                            </span>
+                            {p.priority === 'Urgent' && (
+                              <span className="inline-flex items-center gap-0.5 bg-rose-50 text-rose-700 text-[10px] font-bold px-1 py-0.5 rounded">
+                                <Flame className="w-2.5 h-2.5 fill-rose-500 text-rose-500" />
+                                Urgent
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <div className="text-xs text-slate-700 font-medium flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-blue-600" />
+                            <span>{p.time}</span>
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <span
+                            className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
+                              isInProgress
+                                ? 'text-emerald-600'
+                                : isCompleted
+                                ? 'text-slate-400'
+                                : 'text-blue-600'
+                            }`}
                           >
-                            {p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online') ? 'Online' : 'Walk-in'}
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                isInProgress
+                                  ? 'bg-emerald-500 animate-pulse'
+                                  : isCompleted
+                                  ? 'bg-slate-300'
+                                  : 'bg-blue-500'
+                              }`}
+                            />
+                            {p.status}
                           </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                        </td>
 
-                  <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#ECEEF2]/80 flex-wrap gap-y-1.5">
-                    {isWaiting && (
-                      <>
-                        <motion.button
-                          whileHover={{ scale: 1.04 }}
-                          whileTap={{ scale: 0.96 }}
-                          onClick={() => setSelectedPatientForCancel(p)}
-                          className="text-xs font-semibold px-2.5 py-1.5 border border-rose-200 text-rose-600 rounded-xl hover:bg-rose-50 transition cursor-pointer"
-                        >
-                          Cancel
-                        </motion.button>
-                        <motion.button
-                          whileHover={{ scale: 1.04 }}
-                          whileTap={{ scale: 0.96 }}
-                          onClick={() => setSelectedPatientForReschedule(p)}
-                          className="text-xs font-semibold px-2.5 py-1.5 border border-blue-200 text-[#2563EB] rounded-xl hover:bg-blue-50 transition cursor-pointer"
-                        >
-                          Reschedule
-                        </motion.button>
+                        <td className="py-3 pr-4 sm:pr-0 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {isWaiting && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedPatientForCancel(p)}
+                                  className="px-2 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedPatientForReschedule(p)}
+                                  className="px-2 py-1 text-[11px] font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                                >
+                                  Reschedule
+                                </button>
+                              </>
+                            )}
 
-                      </>
-                    )}
-                    {isInProgress && (
-                      <motion.button
-                        whileHover={{ scale: 1.04 }}
-                        whileTap={{ scale: 0.96 }}
-                        onClick={() => {
-                          if (isLoggedIn) onStartConsultation(p.id);
-                          else onRequireLogin();
-                        }}
-                        className="text-xs font-semibold px-3 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-xl transition cursor-pointer shadow-2xs whitespace-nowrap"
-                      >
-                        Resume Consult &rarr;
-                      </motion.button>
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })
+                            {isInProgress && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (isLoggedIn) onStartConsultation(p.id);
+                                  else onRequireLogin();
+                                }}
+                                className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition cursor-pointer flex items-center gap-1"
+                              >
+                                <span>Resume</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {isCompleted && (
+                              <span className="inline-flex items-center text-xs text-emerald-600 font-semibold">
+                                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {effectiveQueue.length > itemsPerPage && (
+            <div className="pt-2 border-t border-slate-100">
+              <NumberedPagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                totalItems={effectiveQueue.length}
+                itemsPerPage={itemsPerPage}
+                itemName="patients"
+              />
+            </div>
           )}
         </div>
 
-        {effectiveQueue.length > itemsPerPage && (
-          <NumberedPagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-            totalItems={effectiveQueue.length}
-            itemsPerPage={itemsPerPage}
-            itemName="patients"
-          />
-        )}
+        <div className="lg:col-span-4 bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between min-w-0">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-slate-800">Orders overview</h3>
+                <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
+                  <span className="font-bold text-emerald-500">↑ 24%</span> this month
+                </p>
+              </div>
+              <Bell className="w-4 h-4 text-slate-400" />
+            </div>
+
+            <div className="relative pl-5 pt-4 space-y-4 before:content-[''] before:absolute before:left-[9px] before:top-5 before:bottom-2 before:w-[1.5px] before:bg-slate-100">
+              {activityLog.map((item) => {
+                const IconComponent = item.icon;
+                return (
+                  <div key={item.id} className="relative flex items-start justify-between gap-2.5">
+                    <div
+                      className={`absolute -left-5 top-0.5 w-5 h-5 rounded-full bg-gradient-to-tl ${item.color} flex items-center justify-center text-white shadow-xs`}
+                    >
+                      <IconComponent className="w-2.5 h-2.5 stroke-[2.2]" />
+                    </div>
+
+                    <div className="min-w-0 flex-1 pl-2">
+                      <h4 className="text-xs font-semibold text-slate-800 leading-snug">
+                        {item.title}
+                      </h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5 leading-tight">
+                        {item.subtitle}
+                      </p>
+                    </div>
+
+                    <span className="text-[10px] font-semibold text-slate-400 flex-shrink-0 pt-0.5">
+                      {item.time}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="pt-4 mt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onViewAllQueue}
+              className="w-full py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>View Full Chamber Board</span>
+              <ArrowRight className="w-3.5 h-3.5 text-[#2563EB]" />
+            </button>
+          </div>
+        </div>
       </section>
 
       <CancelModal
         isOpen={!!selectedPatientForCancel}
         patient={selectedPatientForCancel}
         onClose={() => setSelectedPatientForCancel(null)}
-        onConfirmCancel={onCancelAppointment || (async () => { })}
+        onConfirmCancel={onCancelAppointment || (async () => {})}
       />
 
       <RescheduleModal
@@ -535,7 +979,7 @@ export function DashboardView({
         patient={selectedPatientForReschedule}
         queue={queue}
         onClose={() => setSelectedPatientForReschedule(null)}
-        onReschedulePatient={onReschedulePatient || (async () => { })}
+        onReschedulePatient={onReschedulePatient || (async () => {})}
       />
     </motion.div>
   );
