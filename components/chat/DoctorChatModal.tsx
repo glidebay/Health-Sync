@@ -203,7 +203,6 @@ function AudioVoiceMessagePlayer({
               })}
             </div>
 
-            {/* Invisible Range Input for Scrubbing */}
             <input
               type="range"
               min={0}
