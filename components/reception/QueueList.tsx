@@ -13,7 +13,6 @@ import {
   AlertTriangle,
   UserCheck,
   Globe,
-  Stethoscope,
 } from 'lucide-react';
 import { Patient } from '@/types';
 import { NumberedPagination } from '@/components/ui/pagination';
@@ -360,6 +359,11 @@ export function QueueList({
                                   </a>
                                 </>
                               )}
+                              <span>•</span>
+                              <span className="inline-flex items-center gap-1 text-slate-500">
+                                <Clock className="w-3 h-3 text-slate-400" />
+                                <span>Slot: {p.time}</span>
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -397,17 +401,10 @@ export function QueueList({
                           </span>
                         </div>
                       </div>
-
-                      <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                        <div className="flex items-center gap-1.5 font-medium">
-                          <Clock className="w-3.5 h-3.5 text-slate-400" />
-                          <span>Slot: {p.time}</span>
-                        </div>
-                      </div>
                     </div>
 
                     {isWaiting && (
-                      <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100 flex-shrink-0">
+                      <div className="flex items-center justify-end space-x-2 pt-1 flex-shrink-0">
                         <motion.button
                           whileHover={{ scale: 1.04 }}
                           whileTap={{ scale: 0.96 }}
@@ -424,17 +421,6 @@ export function QueueList({
                         >
                           Reschedule
                         </motion.button>
-                        {onStartConsultation && (
-                          <motion.button
-                            whileHover={{ scale: 1.04 }}
-                            whileTap={{ scale: 0.96 }}
-                            onClick={() => onStartConsultation(p.id)}
-                            className="text-xs font-semibold px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl shadow-2xs hover:shadow-sm transition cursor-pointer flex items-center gap-1"
-                          >
-                            <Stethoscope className="w-3 h-3" />
-                            <span>Consult</span>
-                          </motion.button>
-                        )}
                       </div>
                     )}
                   </motion.div>
