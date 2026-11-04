@@ -20,7 +20,6 @@ import {
   ChevronDown,
   Check,
   Pill,
-  RefreshCw,
 } from 'lucide-react';
 import { InventoryItem } from '@/types';
 import { MedicineMaster, DosageForm, Supplier } from '@/types/medicine';
@@ -367,16 +366,6 @@ export function InventoryView({
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-          <motion.button
-            whileHover={{ y: -2, boxShadow: '0 4px 12px 0 rgba(0,0,0,0.05)' }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => loadData()}
-            className="p-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-500 hover:text-slate-800 rounded-xl transition cursor-pointer shadow-2xs"
-            title="Refresh Pharmacy Stock"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingMeds ? 'animate-spin text-[#2563EB]' : ''}`} />
-          </motion.button>
-
           {isDoctorUnlocked && (
             <motion.button
               whileHover={{ y: -2, boxShadow: '0 4px 12px 0 rgba(0,0,0,0.05)' }}
