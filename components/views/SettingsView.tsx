@@ -297,12 +297,9 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
               <span className="text-slate-400 font-normal">in chamber</span>
             </span>
           </div>
-          <motion.div
-            whileHover={{ scale: 1.1, rotate: 6 }}
-            className="w-11 h-11 rounded-xl bg-gradient-to-tl from-blue-600 to-indigo-500 shadow-md shadow-blue-500/25 flex items-center justify-center text-white flex-shrink-0"
-          >
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-blue-600 to-indigo-500 shadow-md shadow-blue-500/25 flex items-center justify-center text-white flex-shrink-0">
             <SlidersHorizontal className="w-5 h-5 stroke-[2.2]" />
-          </motion.div>
+          </div>
         </motion.div>
 
         <motion.div
@@ -326,12 +323,9 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
               <span className="text-slate-400 font-normal">enforced</span>
             </span>
           </div>
-          <motion.div
-            whileHover={{ scale: 1.1, rotate: -6 }}
-            className="w-11 h-11 rounded-xl bg-gradient-to-tl from-emerald-600 to-teal-500 shadow-md shadow-emerald-500/25 flex items-center justify-center text-white flex-shrink-0"
-          >
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-emerald-600 to-teal-500 shadow-md shadow-emerald-500/25 flex items-center justify-center text-white flex-shrink-0">
             <ShieldCheck className="w-5 h-5 stroke-[2.2]" />
-          </motion.div>
+          </div>
         </motion.div>
 
         <motion.div
@@ -354,12 +348,9 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
               <span className="text-slate-400 font-normal">privileges locked</span>
             </span>
           </div>
-          <motion.div
-            whileHover={{ scale: 1.1, rotate: 6 }}
-            className="w-11 h-11 rounded-xl bg-gradient-to-tl from-indigo-600 to-violet-500 shadow-md shadow-indigo-500/25 flex items-center justify-center text-white flex-shrink-0"
-          >
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-indigo-600 to-violet-500 shadow-md shadow-indigo-500/25 flex items-center justify-center text-white flex-shrink-0">
             <Lock className="w-5 h-5 stroke-[2.2]" />
-          </motion.div>
+          </div>
         </motion.div>
       </motion.section>
 
