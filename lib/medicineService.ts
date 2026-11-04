@@ -555,7 +555,11 @@ export async function fetchMedicinesMaster(): Promise<MedicineMaster[]> {
           stockStatus: calculateStockStatus(totalStock, minLevel),
           expiryStatus: calculateExpiryStatus(batches),
           sellingPrice: Number(m.selling_price) || 0,
+          lastPurchasePrice: batches[batches.length - 1]?.purchasePrice,
+          lastPurchaseDate: batches[batches.length - 1]?.manufacturingDate,
           supplier: primarySupplier,
+          createdAt: m.created_at,
+          updatedAt: m.updated_at,
         };
       });
 
@@ -1793,7 +1797,78 @@ export function executeCsvImport(
         status: failedCount === 0 ? 'Success' : 'Partial Success',
         error_log: failureErrors,
       },
-    ]);
+    ]).then(() => {}, () => {});
+
+    const dbMedsToUpsert = finalMeds.map((m) => ({
+      id: m.id,
+      sku: m.sku,
+      brand_name: m.brandName,
+      generic_name: m.genericName,
+      manufacturer: m.manufacturer,
+      category: m.category,
+      dosage_form: m.dosageForm,
+      strength: m.strength,
+      unit: m.unit,
+      barcode: m.barcode,
+      minimum_stock_level: m.minimumStockLevel,
+      selling_price: m.sellingPrice,
+      supplier_id: m.supplier?.id || null,
+      updated_at: new Date().toISOString(),
+    }));
+    supabase.from('medicines').upsert(dbMedsToUpsert, { onConflict: 'sku' }).then(() => {}, () => {});
+
+    const allBatches = finalMeds.flatMap((m) =>
+      m.batches.map((b) => ({
+        id: b.id,
+        medicine_id: m.id,
+        batch_number: b.batchNumber,
+        manufacturing_date: b.manufacturingDate,
+        expiry_date: b.expiryDate,
+        purchase_price: b.purchasePrice,
+        selling_price: b.sellingPrice,
+        initial_quantity: b.initialQuantity,
+        available_quantity: b.availableQuantity,
+        supplier_id: b.supplierId || null,
+        supplier_name: b.supplierName || null,
+      }))
+    );
+    if (allBatches.length > 0) {
+      supabase.from('medicine_batches').upsert(allBatches, { onConflict: 'medicine_id,batch_number' }).then(() => {}, () => {});
+    }
+
+    if (newPurchases.length > 0) {
+      supabase.from('purchase_records').insert(
+        newPurchases.map((p) => ({
+          id: p.id,
+          medicine_id: p.medicineId,
+          medicine_name: p.medicineName,
+          supplier_id: p.supplierId || null,
+          supplier_name: p.supplierName,
+          batch_number: p.batchNumber,
+          purchase_date: p.purchaseDate,
+          quantity_purchased: p.quantityPurchased,
+          purchase_price: p.purchasePrice,
+          total_purchase_amount: p.totalPurchaseAmount,
+          invoice_number: p.invoiceNumber,
+        }))
+      ).then(() => {}, () => {});
+    }
+
+    if (newMovements.length > 0) {
+      supabase.from('stock_movements').insert(
+        newMovements.map((mv) => ({
+          id: mv.id,
+          medicine_id: mv.medicineId,
+          batch_id: mv.batchId || null,
+          movement_type: mv.movementType,
+          quantity: mv.quantity,
+          reference_number: mv.referenceNumber,
+          responsible_user: mv.responsibleUser,
+          date: mv.date,
+          notes: mv.notes,
+        }))
+      ).then(() => {}, () => {});
+    }
   } catch {}
 
   return {
