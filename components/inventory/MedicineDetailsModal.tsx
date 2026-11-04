@@ -31,13 +31,13 @@ import {
   MovementType,
   Supplier,
 } from '@/types/medicine';
+import { SupplierFormModal } from '@/components/inventory/SupplierFormModal';
 import {
   fetchPurchaseHistory,
   fetchStockMovements,
   fetchSuppliers,
   addBatchToMedicine,
   recordStockAdjustment,
-  saveOrUpdateSupplier,
   linkSupplierToMedicine,
 } from '@/lib/medicineService';
 
@@ -81,15 +81,9 @@ export function MedicineDetailsModal({
   const [adjustNotes, setAdjustNotes] = useState('');
   const [adjustBatchId, setAdjustBatchId] = useState('');
 
-  const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [isSupplierFormOpen, setIsSupplierFormOpen] = useState(false);
+  const [selectedSupplierForModal, setSelectedSupplierForModal] = useState<Supplier | null>(null);
   const [showLinkSupplierModal, setShowLinkSupplierModal] = useState(false);
-  const [supplierIdEdit, setSupplierIdEdit] = useState<string | undefined>(undefined);
-  const [supplierNameEdit, setSupplierNameEdit] = useState('');
-  const [supplierContactEdit, setSupplierContactEdit] = useState('');
-  const [supplierPhoneEdit, setSupplierPhoneEdit] = useState('');
-  const [supplierEmailEdit, setSupplierEmailEdit] = useState('');
-  const [supplierGstinEdit, setSupplierGstinEdit] = useState('');
-  const [supplierAddressEdit, setSupplierAddressEdit] = useState('');
 
   useEffect(() => {
     if (!medicine || !isOpen) return;
@@ -199,49 +193,23 @@ export function MedicineDetailsModal({
     return Array.from(map.values());
   }, [batches, purchases]);
 
-  const handleOpenEditSupplier = () => {
-    if (activeSupplier) {
-      setSupplierIdEdit(activeSupplier.id);
-      setSupplierNameEdit(activeSupplier.name);
-      setSupplierContactEdit(activeSupplier.contactPerson || '');
-      setSupplierPhoneEdit(activeSupplier.phone || '');
-      setSupplierEmailEdit(activeSupplier.email || '');
-      setSupplierGstinEdit(activeSupplier.gstin || '');
-      setSupplierAddressEdit(activeSupplier.address || '');
-    } else {
-      setSupplierIdEdit(undefined);
-      setSupplierNameEdit('');
-      setSupplierContactEdit('');
-      setSupplierPhoneEdit('');
-      setSupplierEmailEdit('');
-      setSupplierGstinEdit('');
-      setSupplierAddressEdit('');
-    }
-    setShowSupplierModal(true);
+  const handleOpenNewSupplier = () => {
+    setSelectedSupplierForModal(null);
+    setIsSupplierFormOpen(true);
   };
 
-  const handleSaveSupplier = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!medicine || !supplierNameEdit.trim()) return;
+  const handleOpenEditSupplier = () => {
+    setSelectedSupplierForModal(activeSupplier || null);
+    setIsSupplierFormOpen(true);
+  };
 
-    const savedSup = await saveOrUpdateSupplier({
-      id: supplierIdEdit,
-      name: supplierNameEdit.trim(),
-      contactPerson: supplierContactEdit.trim() || undefined,
-      phone: supplierPhoneEdit.trim() || '+91 00000 00000',
-      email: supplierEmailEdit.trim() || undefined,
-      gstin: supplierGstinEdit.trim() || undefined,
-      address: supplierAddressEdit.trim() || undefined,
-      lastPurchaseDate: medicine.lastPurchaseDate,
-      lastPurchasePrice: medicine.lastPurchasePrice,
-    });
-
-    await linkSupplierToMedicine(medicine.id, savedSup);
-
-    const sups = await fetchSuppliers();
-    setSuppliersList(sups);
-    setShowSupplierModal(false);
-    onMedicineUpdated();
+  const handleSupplierFormSuccess = async (savedSup: Supplier) => {
+    if (medicine) {
+      await linkSupplierToMedicine(medicine.id, savedSup);
+      const sups = await fetchSuppliers();
+      setSuppliersList(sups);
+      onMedicineUpdated();
+    }
   };
 
   const handleSelectExistingSupplier = async (sup: Supplier) => {
@@ -736,6 +704,14 @@ export function MedicineDetailsModal({
                   </div>
                   {isDoctorUnlocked && (
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleOpenNewSupplier}
+                        className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#2563EB] border border-blue-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Supplier</span>
+                      </button>
                       {activeSupplier && (
                         <button
                           type="button"
@@ -914,7 +890,7 @@ export function MedicineDetailsModal({
                       <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
                         <button
                           type="button"
-                          onClick={handleOpenEditSupplier}
+                          onClick={handleOpenNewSupplier}
                           className="px-4 py-2 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs inline-flex items-center gap-1.5"
                         >
                           <Plus className="w-3.5 h-3.5" />
@@ -949,120 +925,12 @@ export function MedicineDetailsModal({
           </div>
         </motion.div>
 
-        {showSupplierModal && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-lg shadow-2xl border border-slate-100"
-            >
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                    <Building className="w-4 h-4" />
-                  </div>
-                  <h3 className="font-bold text-base text-slate-800">
-                    {supplierIdEdit ? 'Edit Supplier Information' : 'Add New Supplier / Vendor'}
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowSupplierModal(false)}
-                  className="text-slate-400 hover:text-slate-700 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSaveSupplier} className="space-y-3.5 mt-4 text-xs">
-                <div>
-                  <label className="block text-slate-500 font-semibold mb-1">Company / Supplier Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Apex Pharma Distributors"
-                    value={supplierNameEdit}
-                    onChange={(e) => setSupplierNameEdit(e.target.value)}
-                    className="w-full p-2.5 bg-[#F8F9FB] border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Contact Person</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Rajesh Kumar"
-                      value={supplierContactEdit}
-                      onChange={(e) => setSupplierContactEdit(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Contact Phone</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. +91 98450 12345"
-                      value={supplierPhoneEdit}
-                      onChange={(e) => setSupplierPhoneEdit(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Email Address</label>
-                    <input
-                      type="email"
-                      placeholder="e.g. orders@apexpharma.in"
-                      value={supplierEmailEdit}
-                      onChange={(e) => setSupplierEmailEdit(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-500 font-semibold mb-1">GSTIN Number</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 29ABCDE1234F1Z5"
-                      value={supplierGstinEdit}
-                      onChange={(e) => setSupplierGstinEdit(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-500 font-semibold mb-1">Registered Warehouse Address</label>
-                  <textarea
-                    rows={2}
-                    placeholder="e.g. Plot 45, Industrial Area, Phase II, Bengaluru"
-                    value={supplierAddressEdit}
-                    onChange={(e) => setSupplierAddressEdit(e.target.value)}
-                    className="w-full p-2.5 bg-[#F8F9FB] border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowSupplierModal(false)}
-                    className="px-4 py-2 border border-slate-200 rounded-xl font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-[#2563EB] hover:bg-blue-700 text-white rounded-xl font-semibold shadow-xs cursor-pointer"
-                  >
-                    Save Supplier Details
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
+        <SupplierFormModal
+          isOpen={isSupplierFormOpen}
+          onClose={() => setIsSupplierFormOpen(false)}
+          supplier={selectedSupplierForModal}
+          onSuccess={handleSupplierFormSuccess}
+        />
 
         {showLinkSupplierModal && (
           <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
@@ -1136,14 +1004,7 @@ export function MedicineDetailsModal({
                   type="button"
                   onClick={() => {
                     setShowLinkSupplierModal(false);
-                    setSupplierIdEdit(undefined);
-                    setSupplierNameEdit('');
-                    setSupplierContactEdit('');
-                    setSupplierPhoneEdit('');
-                    setSupplierEmailEdit('');
-                    setSupplierGstinEdit('');
-                    setSupplierAddressEdit('');
-                    setShowSupplierModal(true);
+                    handleOpenNewSupplier();
                   }}
                   className="font-bold text-blue-600 hover:underline flex items-center gap-1 cursor-pointer"
                 >

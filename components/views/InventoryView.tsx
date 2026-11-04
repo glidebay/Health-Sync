@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Boxes,
@@ -20,14 +20,18 @@ import {
   AlertCircle,
   TrendingDown,
   Building,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import { InventoryItem } from '@/types';
-import { MedicineMaster, DosageForm } from '@/types/medicine';
+import { MedicineMaster, DosageForm, Supplier } from '@/types/medicine';
 import { NumberedPagination } from '@/components/ui/pagination';
 import { MedicineDetailsModal } from '@/components/inventory/MedicineDetailsModal';
 import { MedicineCsvImportModal } from '@/components/inventory/MedicineCsvImportModal';
+import { SupplierFormModal } from '@/components/inventory/SupplierFormModal';
 import {
   fetchMedicinesMaster,
+  fetchSuppliers,
   addMedicineWithInitialBatch,
   convertMasterToInventoryItems,
 } from '@/lib/medicineService';
@@ -49,6 +53,25 @@ interface InventoryViewProps {
   isDoctorUnlocked?: boolean;
   onInventorySync?: (updatedItems: InventoryItem[]) => void;
 }
+
+const DEFAULT_CATEGORIES = [
+  'Analgesics & Antipyretics',
+  'Antibiotics',
+  'Gastrointestinal',
+  'Respiratory & Anti-Allergic',
+  'Cardiovascular',
+  'Dermatology',
+  'Vitamins & Supplements',
+  'Anti-Diabetic',
+  'ENT & Ophthalmology',
+  'Antihistamines',
+  'Antifungal',
+  'Neurology & Psychiatry',
+  'Orthopedic & Musculoskeletal',
+  'Gynecology & Women’s Health',
+  'Pediatric Care',
+  'General Medicine',
+];
 
 const ITEMS_PER_PAGE = 7;
 
@@ -97,12 +120,32 @@ export function InventoryView({
   const [addBuyPrice, setAddBuyPrice] = useState('');
   const [addSellPrice, setAddSellPrice] = useState('');
   const [addSupplierName, setAddSupplierName] = useState('');
+  const [addSupplierId, setAddSupplierId] = useState('');
+  const [suppliersList, setSuppliersList] = useState<Supplier[]>([]);
+  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [selectedSupplierForModal, setSelectedSupplierForModal] = useState<Supplier | null>(null);
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target as Node)) {
+        setIsCategoryDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadData = async () => {
     setLoadingMeds(true);
     try {
-      const data = await fetchMedicinesMaster();
+      const [data, sups] = await Promise.all([
+        fetchMedicinesMaster(),
+        fetchSuppliers(),
+      ]);
       setMedicines(data);
+      setSuppliersList(sups);
       if (onInventorySync) {
         onInventorySync(convertMasterToInventoryItems(data));
       }
@@ -132,6 +175,22 @@ export function InventoryView({
     });
     return Array.from(set);
   }, [medicines]);
+
+  const allAvailableCategories = useMemo(() => {
+    const set = new Set<string>(DEFAULT_CATEGORIES);
+    medicines.forEach((m) => {
+      if (m.category && m.category.trim()) {
+        set.add(m.category.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [medicines]);
+
+  const filteredCategories = useMemo(() => {
+    const q = addCategory.trim().toLowerCase();
+    if (!q) return allAvailableCategories;
+    return allAvailableCategories.filter((c) => c.toLowerCase().includes(q));
+  }, [allAvailableCategories, addCategory]);
 
   const totalMedicines = medicines.length;
   const adequateCount = medicines.filter((m) => m.stockStatus === 'Available').length;
@@ -209,6 +268,7 @@ export function InventoryView({
       purchasePrice: buyPrice,
       sellingPrice: sellPrice,
       quantity: qty,
+      supplierId: addSupplierId && addSupplierId !== '__custom__' ? addSupplierId : undefined,
       supplierName: addSupplierName.trim() || undefined,
       responsibleUser: isDoctorUnlocked ? 'Dr. Sunny' : 'Staff Pharmacist',
     });
@@ -231,6 +291,7 @@ export function InventoryView({
     setAddBuyPrice('');
     setAddSellPrice('');
     setAddSupplierName('');
+    setAddSupplierId('');
     setShowFullAddForm(false);
   };
 
@@ -286,6 +347,21 @@ export function InventoryView({
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
               <span>Import CSV Master</span>
+            </motion.button>
+          )}
+
+          {isDoctorUnlocked && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => {
+                setSelectedSupplierForModal(null);
+                setIsSupplierModalOpen(true);
+              }}
+              className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            >
+              <Building className="w-3.5 h-3.5 text-blue-600" />
+              <span>Add Supplier</span>
             </motion.button>
           )}
 
@@ -429,15 +505,70 @@ export function InventoryView({
                       className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
                     />
                   </div>
-                  <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Category</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Analgesics"
-                      value={addCategory}
-                      onChange={(e) => setAddCategory(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
-                    />
+                  <div className="relative" ref={categoryDropdownRef}>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-slate-500 font-semibold">Category</label>
+                      <span className="text-[10px] text-slate-400 font-medium">Select or type</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        list="category-suggestions-list"
+                        placeholder="e.g. Analgesics & Antipyretics"
+                        value={addCategory}
+                        onChange={(e) => {
+                          setAddCategory(e.target.value);
+                          setIsCategoryDropdownOpen(true);
+                        }}
+                        onFocus={() => setIsCategoryDropdownOpen(true)}
+                        className="w-full p-2.5 pr-8 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs"
+                      />
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        onClick={() => setIsCategoryDropdownOpen((prev) => !prev)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isCategoryDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                    </div>
+
+                    <datalist id="category-suggestions-list">
+                      {allAvailableCategories.map((c) => (
+                        <option key={c} value={c} />
+                      ))}
+                    </datalist>
+
+                    {isCategoryDropdownOpen && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white rounded-2xl shadow-xl border border-slate-200 py-1.5 divide-y divide-slate-50">
+                        {filteredCategories.length > 0 ? (
+                          filteredCategories.map((cat) => (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => {
+                                setAddCategory(cat);
+                                setIsCategoryDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-2 text-xs transition flex items-center justify-between cursor-pointer ${
+                                addCategory.trim().toLowerCase() === cat.toLowerCase()
+                                  ? 'bg-blue-50 text-blue-700 font-bold'
+                                  : 'text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span>{cat}</span>
+                              {addCategory.trim().toLowerCase() === cat.toLowerCase() && (
+                                <Check className="w-3.5 h-3.5 text-blue-600" />
+                              )}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-[11px] text-slate-400">
+                            Custom category: &quot;{addCategory}&quot;
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -547,15 +678,54 @@ export function InventoryView({
                       className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
                     />
                   </div>
-                  <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Supplier / Wholesaler</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Apex Pharma"
-                      value={addSupplierName}
-                      onChange={(e) => setAddSupplierName(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
-                    />
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-slate-500 font-semibold">Supplier / Wholesaler</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedSupplierForModal(null);
+                          setIsSupplierModalOpen(true);
+                        }}
+                        className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer whitespace-nowrap"
+                        title="Register brand new supplier"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Add Supplier</span>
+                      </button>
+                    </div>
+                    <select
+                      value={addSupplierId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAddSupplierId(val);
+                        if (val === '__custom__') {
+                          setAddSupplierName('');
+                        } else {
+                          const sup = suppliersList.find((s) => s.id === val);
+                          setAddSupplierName(sup ? sup.name : '');
+                        }
+                      }}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs truncate"
+                    >
+                      <option value="">-- Select Wholesaler --</option>
+                      {suppliersList.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                      <option value="__custom__">+ Enter Custom Wholesaler...</option>
+                    </select>
+                    {addSupplierId === '__custom__' && (
+                      <input
+                        type="text"
+                        placeholder="Enter wholesaler name"
+                        value={addSupplierName}
+                        onChange={(e) => setAddSupplierName(e.target.value)}
+                        className="w-full mt-1 p-2 bg-white border border-blue-300 rounded-xl font-medium outline-none focus:border-blue-500 text-xs"
+                        autoFocus
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -813,6 +983,20 @@ export function InventoryView({
         existingMedicines={medicines}
         onImportComplete={loadData}
         responsibleUser={isDoctorUnlocked ? 'Dr. Sunny' : 'Staff Pharmacist'}
+      />
+
+      <SupplierFormModal
+        isOpen={isSupplierModalOpen}
+        onClose={() => {
+          setIsSupplierModalOpen(false);
+          setSelectedSupplierForModal(null);
+        }}
+        supplier={selectedSupplierForModal}
+        onSuccess={(savedSup) => {
+          setSuppliersList((prev) => [savedSup, ...prev.filter((s) => s.id !== savedSup.id)]);
+          setAddSupplierId(savedSup.id);
+          setAddSupplierName(savedSup.name);
+        }}
       />
     </motion.section>
   );
