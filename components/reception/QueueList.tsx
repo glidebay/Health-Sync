@@ -318,10 +318,10 @@ export function QueueList({
                 return (
                   <motion.div
                     key={p.id}
-                    layout
                     variants={cardVariants}
-                    whileHover={{ y: -2, transition: { duration: 0.2 } }}
-                    className={`bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs hover:border-slate-200 hover:shadow-md transition-all duration-300 flex flex-col justify-between gap-3 ${
+                    whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
+                    transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+                    className={`bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs hover:border-slate-200 flex flex-col justify-between gap-3 ${
                       isCompleted ? 'opacity-65' : ''
                     }`}
                   >

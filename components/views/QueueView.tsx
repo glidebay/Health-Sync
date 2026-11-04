@@ -293,14 +293,14 @@ export function QueueView({
                 return (
                   <motion.div
                     key={p.id}
-                    layout
                     variants={cardVariants}
-                    whileHover={!isCompleted ? { y: -2, transition: { duration: 0.2 } } : {}}
+                    whileHover={!isCompleted ? { y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' } : {}}
+                    transition={{ type: 'spring', damping: 25, stiffness: 400 }}
                     onClick={() => !isCompleted && onStartConsultation(p.id, p)}
-                    className={`bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs transition-all duration-300 relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                    className={`bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
                       isCompleted
                         ? 'opacity-65 cursor-default'
-                        : 'cursor-pointer hover:border-slate-200 hover:shadow-md'
+                        : 'cursor-pointer hover:border-slate-200'
                     }`}
                   >
                     <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
