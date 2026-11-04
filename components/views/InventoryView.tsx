@@ -7,21 +7,19 @@ import {
   Search,
   X,
   Plus,
-  UploadCloud,
   FileSpreadsheet,
   AlertTriangle,
   Clock,
-  Filter,
   Eye,
   Barcode,
   Package,
   Layers,
   CheckCircle2,
-  AlertCircle,
   TrendingDown,
   Building,
   ChevronDown,
   Check,
+  Pill,
 } from 'lucide-react';
 import { InventoryItem } from '@/types';
 import { MedicineMaster, DosageForm, Supplier } from '@/types/medicine';
@@ -29,6 +27,9 @@ import { NumberedPagination } from '@/components/ui/pagination';
 import { MedicineDetailsModal } from '@/components/inventory/MedicineDetailsModal';
 import { MedicineCsvImportModal } from '@/components/inventory/MedicineCsvImportModal';
 import { SupplierFormModal } from '@/components/inventory/SupplierFormModal';
+import { AnimatedCounter } from '@/components/common/AnimatedCounter';
+import { EcgActionLoader } from '@/components/loading/EcgActionLoader';
+import { staggerContainer, fadeScale } from '@/lib/constants';
 import {
   fetchMedicinesMaster,
   fetchSuppliers,
@@ -96,11 +97,14 @@ export function InventoryView({
   const [internalSearch, setInternalSearch] = useState(searchQuery);
 
   const [medicines, setMedicines] = useState<MedicineMaster[]>([]);
+  const [suppliersList, setSuppliersList] = useState<Supplier[]>([]);
   const [loadingMeds, setLoadingMeds] = useState(true);
 
   const [selectedMedicine, setSelectedMedicine] = useState<MedicineMaster | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [selectedSupplierForModal, setSelectedSupplierForModal] = useState<Supplier | null>(null);
 
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
   const [stockStatusFilter, setStockStatusFilter] = useState<string>('All');
@@ -119,11 +123,9 @@ export function InventoryView({
   const [addExpDate, setAddExpDate] = useState('');
   const [addBuyPrice, setAddBuyPrice] = useState('');
   const [addSellPrice, setAddSellPrice] = useState('');
-  const [addSupplierName, setAddSupplierName] = useState('');
   const [addSupplierId, setAddSupplierId] = useState('');
-  const [suppliersList, setSuppliersList] = useState<Supplier[]>([]);
-  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
-  const [selectedSupplierForModal, setSelectedSupplierForModal] = useState<Supplier | null>(null);
+  const [addSupplierName, setAddSupplierName] = useState('');
+
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -290,8 +292,8 @@ export function InventoryView({
     setAddExpDate('');
     setAddBuyPrice('');
     setAddSellPrice('');
-    setAddSupplierName('');
     setAddSupplierId('');
+    setAddSupplierName('');
     setShowFullAddForm(false);
   };
 
@@ -311,48 +313,38 @@ export function InventoryView({
         return {
           ...m,
           totalStock: nextStock,
-          batches: updatedBatches,
           stockStatus: nextStock > m.minimumStockLevel ? 'Available' : nextStock > 0 ? 'Low Stock' : 'Out of Stock',
+          batches: updatedBatches,
         };
       })
     );
+
+    setStockUpdates((prev) => ({ ...prev, [medId]: '' }));
   };
 
   return (
     <motion.section
-      key="inventory"
-      initial={{ opacity: 0, y: 14 }}
+      key="inventory-view"
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -14 }}
+      exit={{ opacity: 0, y: -12 }}
       transition={{ duration: 0.25 }}
-      className="space-y-4 sm:space-y-6"
+      className="space-y-5 pb-12"
     >
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-1 gap-3">
         <div>
-          <h2 className="text-lg sm:text-xl font-black text-[#16191E]">
-            Pharmacy Stock & Medicine Master
+          <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
+            Pharmacy Stock &amp; Medicine Master
           </h2>
-          <p className="text-xs text-[#8A909D] font-medium mt-0.5">
+          <p className="text-xs text-slate-400 mt-0.5">
             FEFO batch-wise inventory tracking, stock movements, and master data import
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
           {isDoctorUnlocked && (
             <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setIsCsvModalOpen(true)}
-              className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
-              <span>Import CSV Master</span>
-            </motion.button>
-          )}
-
-          {isDoctorUnlocked && (
-            <motion.button
-              whileHover={{ scale: 1.02 }}
+              whileHover={{ y: -2, boxShadow: '0 4px 12px 0 rgba(0,0,0,0.05)' }}
               whileTap={{ scale: 0.98 }}
               onClick={() => {
                 setSelectedSupplierForModal(null);
@@ -365,149 +357,234 @@ export function InventoryView({
             </motion.button>
           )}
 
+          {isDoctorUnlocked && (
+            <motion.button
+              whileHover={{ y: -2, boxShadow: '0 4px 12px 0 rgba(0,0,0,0.05)' }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setIsCsvModalOpen(true)}
+              className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Import CSV Master</span>
+            </motion.button>
+          )}
+
           <motion.button
-            whileHover={{ scale: 1.02 }}
+            whileHover={{ y: -2, boxShadow: '0 4px 12px 0 rgba(37,99,235,0.25)' }}
             whileTap={{ scale: 0.98 }}
             onClick={() => setShowFullAddForm((prev) => !prev)}
-            className="px-3.5 py-2 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+            className="px-4 py-2 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-xs"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>{showFullAddForm ? 'Hide Procurement Form' : 'Add Medicine Master'}</span>
+            <span>{showFullAddForm ? 'Hide Intake Form' : 'Add Medicine Master'}</span>
           </motion.button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
-        <div className="bg-white rounded-2xl p-4 border border-[#ECEEF2] shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[#8A909D]">Total Medicines</span>
-            <div className="w-7 h-7 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Layers className="w-3.5 h-3.5" />
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        animate="visible"
+        className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4"
+      >
+        <motion.div
+          variants={fadeScale}
+          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+        >
+          <div className="min-w-0 pr-2">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+              Total Medicines
+            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+                <AnimatedCounter target={totalMedicines} />
+              </span>
+              <span className="text-[11px] text-slate-400 font-normal">Active</span>
             </div>
           </div>
-          <div className="mt-2">
-            <p className="text-2xl font-black text-[#16191E]">{totalMedicines}</p>
-            <p className="text-[10px] text-slate-400 font-medium mt-0.5">Active Molecules</p>
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-blue-600 to-indigo-500 shadow-md shadow-blue-500/25 flex items-center justify-center text-white flex-shrink-0">
+            <Layers className="w-5 h-5 stroke-[2.2]" />
           </div>
-        </div>
+        </motion.div>
 
-        <div className="bg-white rounded-2xl p-4 border border-[#ECEEF2] shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-emerald-700">Adequate Stocks</span>
-            <div className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <CheckCircle2 className="w-3.5 h-3.5" />
+        <motion.div
+          variants={fadeScale}
+          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+        >
+          <div className="min-w-0 pr-2">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+              Adequate Stocks
+            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+                <AnimatedCounter target={adequateCount} />
+              </span>
+              <span className="inline-flex items-center text-xs font-semibold text-emerald-500">
+                Safe <span className="text-slate-400 font-normal text-[11px] ml-1">levels</span>
+              </span>
             </div>
           </div>
-          <div className="mt-2">
-            <p className="text-2xl font-black text-emerald-600">{adequateCount}</p>
-            <p className="text-[10px] text-emerald-700 font-medium mt-0.5">Sufficient inventory</p>
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-emerald-600 to-teal-400 shadow-md shadow-emerald-500/25 flex items-center justify-center text-white flex-shrink-0">
+            <CheckCircle2 className="w-5 h-5 stroke-[2.2]" />
           </div>
-        </div>
+        </motion.div>
 
-        <div className="bg-white rounded-2xl p-4 border border-[#ECEEF2] shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-amber-700">Low Stock Alert</span>
-            <div className="w-7 h-7 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <AlertTriangle className="w-3.5 h-3.5" />
+        <motion.div
+          variants={fadeScale}
+          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+        >
+          <div className="min-w-0 pr-2">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+              Low Stock Alert
+            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+                <AnimatedCounter target={lowStockCount} />
+              </span>
+              <span className="inline-flex items-center text-xs font-semibold text-amber-500">
+                Reorder <span className="text-slate-400 font-normal text-[11px] ml-1">soon</span>
+              </span>
             </div>
           </div>
-          <div className="mt-2">
-            <p className="text-2xl font-black text-amber-600">{lowStockCount}</p>
-            <p className="text-[10px] text-amber-700 font-medium mt-0.5">Needs reorder</p>
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-amber-500 to-orange-400 shadow-md shadow-amber-500/25 flex items-center justify-center text-white flex-shrink-0">
+            <AlertTriangle className="w-5 h-5 stroke-[2.2]" />
           </div>
-        </div>
+        </motion.div>
 
-        <div className="bg-white rounded-2xl p-4 border border-[#ECEEF2] shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-red-700">Stock Depleted</span>
-            <div className="w-7 h-7 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
-              <TrendingDown className="w-3.5 h-3.5" />
+        <motion.div
+          variants={fadeScale}
+          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+        >
+          <div className="min-w-0 pr-2">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+              Stock Depleted
+            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+                <AnimatedCounter target={outOfStockCount} />
+              </span>
+              <span className="inline-flex items-center text-xs font-semibold text-rose-500">
+                0 units <span className="text-slate-400 font-normal text-[11px] ml-1">left</span>
+              </span>
             </div>
           </div>
-          <div className="mt-2">
-            <p className="text-2xl font-black text-red-600">{outOfStockCount}</p>
-            <p className="text-[10px] text-red-700 font-medium mt-0.5">0 units available</p>
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-rose-600 to-red-500 shadow-md shadow-rose-500/25 flex items-center justify-center text-white flex-shrink-0">
+            <TrendingDown className="w-5 h-5 stroke-[2.2]" />
           </div>
-        </div>
+        </motion.div>
 
-        <div className="bg-white rounded-2xl p-4 border border-[#ECEEF2] shadow-xs flex flex-col justify-between col-span-2 sm:col-span-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-orange-700">Near Expiry / Expired</span>
-            <div className="w-7 h-7 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center">
-              <Clock className="w-3.5 h-3.5" />
+        <motion.div
+          variants={fadeScale}
+          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0 col-span-2 sm:col-span-1"
+        >
+          <div className="min-w-0 pr-2">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+              Near Expiry / Expired
+            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+                <AnimatedCounter target={nearExpiryCount + expiredCount} />
+              </span>
+              <span className="text-[10px] text-slate-400 font-medium">
+                {nearExpiryCount} near • {expiredCount} exp
+              </span>
             </div>
           </div>
-          <div className="mt-2">
-            <p className="text-2xl font-black text-orange-600">
-              {nearExpiryCount + expiredCount}
-            </p>
-            <p className="text-[10px] text-orange-700 font-medium mt-0.5">
-              {nearExpiryCount} near expiry &bull; {expiredCount} expired
-            </p>
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-purple-600 to-violet-400 shadow-md shadow-purple-500/25 flex items-center justify-center text-white flex-shrink-0">
+            <Clock className="w-5 h-5 stroke-[2.2]" />
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       <AnimatePresence>
         {showFullAddForm && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
+            initial={{ opacity: 0, y: -12, scale: 0.99 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12, scale: 0.99 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
             className="overflow-hidden"
           >
-            <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#ECEEF2] shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-[#16191E] flex items-center gap-2">
-                  <Package className="w-4 h-4 text-blue-600" />
-                  Comprehensive Medicine Master & Batch Intake
-                </h3>
+            <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <Package className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800">
+                      Comprehensive Medicine Master &amp; Batch Intake
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Register medicine molecule, initial stock batch, and procurement supplier
+                    </p>
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowFullAddForm(false)}
-                  className="text-xs text-slate-400 hover:text-slate-600"
+                  className="text-xs font-semibold text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-50 transition cursor-pointer"
                 >
                   Close
                 </button>
               </div>
 
               <form onSubmit={handleCreateFullMedicine} className="space-y-4 text-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Brand Name *</label>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Brand Name *</label>
+                    </div>
                     <input
                       type="text"
                       required
                       placeholder="e.g. Dolo 650"
                       value={newBrand}
                       onChange={(e) => setNewBrand(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                      className="w-full h-10 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Generic Name *</label>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Generic Name *</label>
+                    </div>
                     <input
                       type="text"
                       required
                       placeholder="e.g. Paracetamol 650mg"
                       value={newGeneric}
                       onChange={(e) => setNewGeneric(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                      className="w-full h-10 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">SKU / Medicine Code</label>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">SKU / Medicine Code</label>
+                    </div>
                     <input
                       type="text"
                       placeholder="e.g. MED-PAR-650"
                       value={addSku}
                       onChange={(e) => setAddSku(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                      className="w-full h-10 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white"
                     />
                   </div>
+
                   <div className="relative" ref={categoryDropdownRef}>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-slate-500 font-semibold">Category</label>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Category</label>
                       <span className="text-[10px] text-slate-400 font-medium">Select or type</span>
                     </div>
                     <div className="relative">
@@ -521,7 +598,7 @@ export function InventoryView({
                           setIsCategoryDropdownOpen(true);
                         }}
                         onFocus={() => setIsCategoryDropdownOpen(true)}
-                        className="w-full p-2.5 pr-8 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs"
+                        className="w-full h-10 px-3 pr-8 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white"
                       />
                       <button
                         type="button"
@@ -572,23 +649,28 @@ export function InventoryView({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Manufacturer</label>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Manufacturer</label>
+                    </div>
                     <input
                       type="text"
                       placeholder="e.g. Micro Labs Ltd"
                       value={addManufacturer}
                       onChange={(e) => setAddManufacturer(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                      className="w-full h-10 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Dosage Form</label>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Dosage Form</label>
+                    </div>
                     <select
                       value={addDosageForm}
                       onChange={(e) => setAddDosageForm(e.target.value as DosageForm)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                      className="w-full h-10 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white cursor-pointer"
                     >
                       <option value="Tablet">Tablet</option>
                       <option value="Capsule">Capsule</option>
@@ -600,42 +682,53 @@ export function InventoryView({
                       <option value="Powder">Powder</option>
                     </select>
                   </div>
+
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Strength</label>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Strength</label>
+                    </div>
                     <input
                       type="text"
                       placeholder="e.g. 650 mg"
                       value={addStrength}
                       onChange={(e) => setAddStrength(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                      className="w-full h-10 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Unit of Measure</label>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Unit of Measure</label>
+                    </div>
                     <input
                       type="text"
                       placeholder="e.g. Strips, Bottles"
                       value={addUnit}
                       onChange={(e) => setAddUnit(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                      className="w-full h-10 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3 pt-2 border-t border-slate-100">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 pt-3 border-t border-slate-100">
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Batch Number *</label>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Batch Number *</label>
+                    </div>
                     <input
                       type="text"
                       required
                       placeholder="e.g. DL26J09"
                       value={addBatchNo}
                       onChange={(e) => setAddBatchNo(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                      className="w-full h-10 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Quantity (Units) *</label>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Quantity (Units) *</label>
+                    </div>
                     <input
                       type="number"
                       required
@@ -643,52 +736,76 @@ export function InventoryView({
                       placeholder="e.g. 100"
                       value={newQty}
                       onChange={(e) => setNewQty(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                      className="w-full h-10 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Expiry Date *</label>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Manufacturing Date</label>
+                    </div>
+                    <input
+                      type="date"
+                      value={addMfgDate}
+                      onChange={(e) => setAddMfgDate(e.target.value)}
+                      className="w-full h-10 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Expiry Date *</label>
+                    </div>
                     <input
                       type="date"
                       required
                       value={addExpDate}
                       onChange={(e) => setAddExpDate(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                      className="w-full h-10 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white"
                     />
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Purchase Price (₹)</label>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Purchase Price (₹)</label>
+                    </div>
                     <input
                       type="number"
                       step="0.01"
                       placeholder="e.g. 18.50"
                       value={addBuyPrice}
                       onChange={(e) => setAddBuyPrice(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                      className="w-full h-10 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Selling Price (₹)</label>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Selling Price (₹)</label>
+                    </div>
                     <input
                       type="number"
                       step="0.01"
                       placeholder="e.g. 32.00"
                       value={addSellPrice}
                       onChange={(e) => setAddSellPrice(e.target.value)}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                      className="w-full h-10 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-slate-500 font-semibold">Supplier / Wholesaler</label>
+
+                  <div>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Supplier / Wholesaler</label>
                       <button
                         type="button"
                         onClick={() => {
                           setSelectedSupplierForModal(null);
                           setIsSupplierModalOpen(true);
                         }}
-                        className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5 cursor-pointer whitespace-nowrap"
-                        title="Register brand new supplier"
+                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                        title="Register new wholesaler"
                       >
                         <Plus className="w-3 h-3" />
                         <span>Add Supplier</span>
@@ -706,12 +823,12 @@ export function InventoryView({
                           setAddSupplierName(sup ? sup.name : '');
                         }
                       }}
-                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs truncate"
+                      className="w-full h-10 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs truncate transition focus:bg-white cursor-pointer"
                     >
                       <option value="">-- Select Wholesaler --</option>
                       {suppliersList.map((s) => (
                         <option key={s.id} value={s.id}>
-                          {s.name}
+                          {s.name} {s.phone ? `(${s.phone})` : ''}
                         </option>
                       ))}
                       <option value="__custom__">+ Enter Custom Wholesaler...</option>
@@ -719,29 +836,45 @@ export function InventoryView({
                     {addSupplierId === '__custom__' && (
                       <input
                         type="text"
-                        placeholder="Enter wholesaler name"
+                        placeholder="Type wholesaler name..."
                         value={addSupplierName}
                         onChange={(e) => setAddSupplierName(e.target.value)}
-                        className="w-full mt-1 p-2 bg-white border border-blue-300 rounded-xl font-medium outline-none focus:border-blue-500 text-xs"
+                        className="w-full mt-1.5 h-9 px-3 bg-white border border-blue-300 rounded-xl font-medium outline-none focus:border-blue-500 text-xs shadow-xs"
                         autoFocus
                       />
                     )}
                   </div>
+
+                  <div>
+                    <div className="flex items-center justify-between h-5 mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 truncate">Barcode (Optional)</label>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="e.g. 8901234567890"
+                        value={addBarcode}
+                        onChange={(e) => setAddBarcode(e.target.value)}
+                        className="w-full h-10 px-3 pl-8 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500 text-xs transition focus:bg-white"
+                      />
+                      <Barcode className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2">
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={() => setShowFullAddForm(false)}
-                    className="px-4 py-2 text-slate-600 font-semibold hover:bg-slate-50 rounded-xl border border-slate-200 cursor-pointer"
+                    className="px-4 py-2 text-slate-600 font-semibold hover:bg-slate-50 rounded-xl border border-slate-200 cursor-pointer transition text-xs"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-[#2563EB] hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs transition cursor-pointer"
+                    className="px-5 py-2.5 bg-[#2563EB] hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs transition cursor-pointer text-xs"
                   >
-                    Save Medicine & Initial Batch
+                    Save Medicine &amp; Initial Batch
                   </button>
                 </div>
               </form>
@@ -750,32 +883,43 @@ export function InventoryView({
         )}
       </AnimatePresence>
 
-      <div className="bg-white rounded-3xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="relative w-full sm:w-64">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
-                <Search className="w-3.5 h-3.5" />
+      <div className="relative space-y-5">
+        <EcgActionLoader isLoading={loadingMeds} fullscreen={false} text="Syncing pharmacy stock..." />
+
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] p-4 sm:p-5 overflow-hidden">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-4 border-b border-slate-100 gap-3">
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold text-slate-800">
+                Medicine Directory
+              </h3>
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+                {medicines.length} Registered
               </span>
-              <input
-                type="text"
-                value={internalSearch}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                placeholder="Search by brand, generic, SKU, barcode..."
-                className="w-full pl-9 pr-8 py-2 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs text-[#16191E] placeholder:text-slate-400 outline-none focus:border-[#2563EB] focus:bg-white transition"
-              />
-              {internalSearch && (
-                <button
-                  type="button"
-                  onClick={() => handleSearchChange('')}
-                  className="absolute right-2.5 inset-y-0 flex items-center text-slate-400 hover:text-slate-600 transition cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="relative w-full sm:w-64">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                  <Search className="w-3.5 h-3.5" />
+                </span>
+                <input
+                  type="text"
+                  value={internalSearch}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  placeholder="Search brand, generic, SKU..."
+                  className="w-full pl-9 pr-8 py-2 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-500 focus:bg-white transition"
+                />
+                {internalSearch && (
+                  <button
+                    type="button"
+                    onClick={() => handleSearchChange('')}
+                    className="absolute right-2.5 inset-y-0 flex items-center text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
               <select
                 value={categoryFilter}
                 onChange={(e) => {
@@ -822,138 +966,169 @@ export function InventoryView({
             </div>
           </div>
 
-          <div className="text-xs text-slate-400 font-medium">
-            Showing {filteredMedicines.length} of {medicines.length} registered molecules
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          {filteredMedicines.length === 0 ? (
-            <div className="p-10 text-center bg-[#F8F9FB] rounded-2xl border border-[#ECEEF2]">
-              <Boxes className="w-10 h-10 text-slate-300 mx-auto mb-2 stroke-[1.5]" />
-              <p className="text-sm font-bold text-slate-700">No medicines match your criteria</p>
-              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                Try clearing active search or filters, or import fresh medicine data from CSV.
-              </p>
-              {(internalSearch || categoryFilter !== 'All' || stockStatusFilter !== 'All' || expiryStatusFilter !== 'All') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleSearchChange('');
-                    setCategoryFilter('All');
-                    setStockStatusFilter('All');
-                    setExpiryStatusFilter('All');
-                  }}
-                  className="mt-3 text-xs font-bold text-[#2563EB] hover:underline cursor-pointer"
-                >
-                  Reset all filters
-                </button>
-              )}
-            </div>
-          ) : (
-            paginatedMedicines.map((item) => {
-              const nearestBatch =
-                item.batches && item.batches.length > 0
-                  ? [...item.batches].sort(
-                      (a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime()
-                    )[0]
-                  : null;
-
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => handleOpenDetails(item)}
-                  className="p-4 bg-[#F8F9FB] hover:bg-slate-50/90 rounded-2xl border border-[#ECEEF2] flex flex-col md:flex-row md:items-center justify-between gap-4 transition cursor-pointer group shadow-2xs hover:shadow-xs"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-200/70 text-slate-700">
-                        {item.sku}
-                      </span>
-                      <h4 className="font-extrabold text-sm text-[#16191E] group-hover:text-blue-600 transition">
-                        {item.brandName}
-                      </h4>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                          item.stockStatus === 'Available'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : item.stockStatus === 'Low Stock'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        {item.totalStock} {item.unit}
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                          item.expiryStatus === 'Valid'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : item.expiryStatus === 'Near Expiry'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : 'bg-red-50 text-red-700 border border-red-200'
-                        }`}
-                      >
-                        {item.expiryStatus}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-[#8A909D] font-medium truncate">
-                      {item.genericName} &bull; {item.dosageForm} ({item.strength}) &bull; {item.manufacturer}
-                    </p>
-
-                    <div className="flex items-center gap-4 text-[11px] text-slate-500 mt-2 flex-wrap">
-                      <span className="flex items-center gap-1 font-mono">
-                        <Package className="w-3 h-3 text-slate-400" />
-                        {item.batches.length} {item.batches.length === 1 ? 'batch' : 'batches'}
-                      </span>
-                      {nearestBatch && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-slate-400" />
-                          Earliest Exp: {nearestBatch.expiryDate} (Batch {nearestBatch.batchNumber})
-                        </span>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="w-full text-left border-collapse table-fixed min-w-[760px]">
+              <thead>
+                <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="py-3 pl-4 sm:pl-0 w-[30%]">Medicine &amp; Molecule</th>
+                  <th className="py-3 px-3 w-[18%]">Category &amp; Form</th>
+                  <th className="py-3 px-3 w-[18%]">Stock &amp; Availability</th>
+                  <th className="py-3 px-3 w-[18%]">Expiry &amp; Nearest Batch</th>
+                  <th className="py-3 pr-4 sm:pr-0 text-right w-[16%]">Restock &amp; Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {filteredMedicines.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-xs text-slate-400">
+                      <Boxes className="w-9 h-9 text-slate-300 mx-auto mb-2 stroke-[1.5]" />
+                      <p className="font-bold text-slate-700">No medicines match current filters</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Try resetting search keywords or filters</p>
+                      {(internalSearch || categoryFilter !== 'All' || stockStatusFilter !== 'All' || expiryStatusFilter !== 'All') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleSearchChange('');
+                            setCategoryFilter('All');
+                            setStockStatusFilter('All');
+                            setExpiryStatusFilter('All');
+                          }}
+                          className="mt-2 text-xs font-bold text-blue-600 hover:underline cursor-pointer"
+                        >
+                          Reset Filters
+                        </button>
                       )}
-                      <span className="font-semibold text-emerald-700">
-                        MRP: ₹{Number(item.sellingPrice || 0).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedMedicines.map((item) => {
+                    const nearestBatch =
+                      item.batches && item.batches.length > 0
+                        ? [...item.batches].sort(
+                            (a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime()
+                          )[0]
+                        : null;
 
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-2 self-end md:self-auto flex-shrink-0"
-                  >
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="Add Qty"
-                      value={stockUpdates[item.id] || ''}
-                      onChange={(e) =>
-                        setStockUpdates((prev) => ({ ...prev, [item.id]: e.target.value }))
-                      }
-                      className="w-20 p-2 bg-white border border-[#ECEEF2] rounded-xl text-xs outline-none focus:ring-1 focus:ring-blue-500 text-center font-bold"
-                    />
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => handleQuickRestockSubmit(item.id, item.batches.length)}
-                      className="bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold px-3 py-2 rounded-xl transition cursor-pointer flex-shrink-0 shadow-xs"
-                    >
-                      Restock
-                    </motion.button>
+                    return (
+                      <tr
+                        key={item.id}
+                        className="hover:bg-slate-50/70 transition-colors group cursor-pointer"
+                        onClick={() => handleOpenDetails(item)}
+                      >
+                        <td className="py-3.5 pl-4 sm:pl-0">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-tl from-blue-700 to-blue-500 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 shadow-xs">
+                              <Pill className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0 pr-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition block truncate">
+                                  {item.brandName}
+                                </span>
+                                <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200 flex-shrink-0">
+                                  {item.sku}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-slate-400 block truncate mt-0.5">
+                                {item.genericName} &bull; {item.manufacturer}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
 
-                    <button
-                      type="button"
-                      onClick={() => handleOpenDetails(item)}
-                      className="p-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl transition cursor-pointer flex items-center justify-center shadow-2xs"
-                      title="View Complete Medicine Details"
-                    >
-                      <Eye className="w-4 h-4 text-slate-600" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
+                        <td className="py-3.5 px-3">
+                          <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md inline-block max-w-full truncate">
+                            {item.category}
+                          </span>
+                          <span className="text-[11px] text-slate-400 block mt-0.5">
+                            {item.dosageForm} &bull; {item.strength}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-3">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-xs text-slate-800">
+                              {item.totalStock} {item.unit}
+                            </span>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                item.stockStatus === 'Available'
+                                  ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                  : item.stockStatus === 'Low Stock'
+                                  ? 'bg-amber-50 text-amber-600 border-amber-100'
+                                  : 'bg-rose-50 text-rose-600 border-rose-100'
+                              }`}
+                            >
+                              {item.stockStatus}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-400 block mt-0.5">
+                            Min: {item.minimumStockLevel} units
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-3">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-semibold text-slate-700">
+                              {nearestBatch ? nearestBatch.expiryDate : 'N/A'}
+                            </span>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                item.expiryStatus === 'Valid'
+                                  ? 'bg-slate-50 text-slate-600 border-slate-200'
+                                  : item.expiryStatus === 'Near Expiry'
+                                  ? 'bg-orange-50 text-orange-600 border-orange-100'
+                                  : 'bg-red-50 text-red-600 border-red-100'
+                              }`}
+                            >
+                              {item.expiryStatus}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-400 block mt-0.5">
+                            Batch: {nearestBatch?.batchNumber || 'None'}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 pr-4 sm:pr-0 text-right">
+                          <div
+                            className="inline-flex items-center gap-1.5"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="number"
+                              min="1"
+                              placeholder="+Qty"
+                              value={stockUpdates[item.id] || ''}
+                              onChange={(e) =>
+                                setStockUpdates((prev) => ({ ...prev, [item.id]: e.target.value }))
+                              }
+                              className="w-14 h-7 text-xs px-1.5 text-center bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleQuickRestockSubmit(item.id, item.batches.length)}
+                              disabled={!stockUpdates[item.id] || parseInt(stockUpdates[item.id], 10) <= 0}
+                              className="h-7 px-2.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#2563EB] disabled:opacity-30 disabled:pointer-events-none text-xs font-bold transition cursor-pointer"
+                            >
+                              Add
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDetails(item)}
+                              className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+                              title="View Full Details"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
 
           <NumberedPagination
             currentPage={currentPage}
