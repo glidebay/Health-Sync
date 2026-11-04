@@ -20,7 +20,6 @@ import {
   LogOut,
   ChevronDown,
   Check,
-  X,
 } from 'lucide-react';
 import { useClinic } from '@/context/ClinicContext';
 import EcgActionLoader from '@/components/loading/EcgActionLoader';
@@ -167,21 +166,11 @@ function CustomDropdownInput({
   );
 }
 
-export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onSearchChange }: SettingsViewProps) {
+export function SettingsView({ isMobile = false, onLogout, searchQuery = '' }: SettingsViewProps) {
   const { config, updateAllConfigs, resetConfigToDefaults } = useClinic();
 
   const [edits, setEdits] = useState<Partial<AppConfig>>({});
   const [activeCategory, setActiveCategory] = useState<string>(CATEGORIES[0].id);
-  const [searchFilter, setSearchFilter] = useState(searchQuery);
-
-  useEffect(() => {
-    setSearchFilter(searchQuery);
-  }, [searchQuery]);
-
-  const handleSearchChange = (val: string) => {
-    setSearchFilter(val);
-    onSearchChange?.(val);
-  };
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -202,7 +191,7 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
 
   const filteredParameters = useMemo(() => {
     return SETTINGS_METADATA.filter((meta) => {
-      const q = searchFilter.trim().toLowerCase();
+      const q = searchQuery.trim().toLowerCase();
       const matchesSearch =
         q === '' ||
         (meta.name || '').toLowerCase().includes(q) ||
@@ -215,7 +204,7 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
       }
       return meta.category === activeCategory;
     });
-  }, [activeCategory, searchFilter]);
+  }, [activeCategory, searchQuery]);
 
   const handleFieldChange = (key: keyof AppConfig, value: unknown) => {
     setEdits((prev) => ({ ...prev, [key]: value as never }));
@@ -428,59 +417,32 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="relative w-full sm:w-72">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
-            <Search className="w-3.5 h-3.5" />
-          </span>
-          <input
-            type="text"
-            placeholder="Search parameter..."
-            value={searchFilter}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs placeholder:text-slate-400 text-slate-800 shadow-2xs outline-none focus:border-blue-500 transition"
-          />
-          {searchFilter && (
+      <div className="flex items-center gap-1.5 p-1 bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-xs overflow-x-auto scrollbar-none max-w-full">
+        {CATEGORIES.map((cat) => {
+          const Icon = cat.icon;
+          const isActive = activeCategory === cat.id;
+          return (
             <button
-              type="button"
-              onClick={() => handleSearchChange('')}
-              className="absolute right-2.5 inset-y-0 flex items-center text-slate-400 hover:text-slate-600 transition cursor-pointer"
-              title="Clear search"
+              key={cat.id}
+              onClick={() => setActiveCategory(cat.id)}
+              className={`relative flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors cursor-pointer flex-shrink-0 select-none ${
+                isActive
+                  ? 'text-white'
+                  : 'text-slate-600 hover:text-slate-800 hover:bg-slate-100/60'
+              }`}
             >
-              <X className="w-3.5 h-3.5" />
+              {isActive && (
+                <motion.div
+                  layoutId="activeSettingsCategory"
+                  className="absolute inset-0 bg-[#2563EB] rounded-xl shadow-xs"
+                  transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+                />
+              )}
+              <Icon className={`relative z-10 w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+              <span className="relative z-10 whitespace-nowrap">{cat.label}</span>
             </button>
-          )}
-        </div>
-
-        {!searchFilter && (
-          <div className="flex items-center gap-1.5 p-1 bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-xs overflow-x-auto scrollbar-none max-w-full">
-            {CATEGORIES.map((cat) => {
-              const Icon = cat.icon;
-              const isActive = activeCategory === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCategory(cat.id)}
-                  className={`relative flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors cursor-pointer flex-shrink-0 select-none ${
-                    isActive
-                      ? 'text-white'
-                      : 'text-slate-600 hover:text-slate-800 hover:bg-slate-100/60'
-                  }`}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeSettingsCategory"
-                      className="absolute inset-0 bg-[#2563EB] rounded-xl shadow-xs"
-                      transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-                    />
-                  )}
-                  <Icon className={`relative z-10 w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                  <span className="relative z-10 whitespace-nowrap">{cat.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+          );
+        })}
       </div>
 
       <div className="relative min-h-[160px]">
@@ -499,12 +461,12 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
               </div>
               <h4 className="text-sm font-bold text-slate-800">No parameters found</h4>
               <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                No clinic parameters matched "{searchFilter}". Try searching for keywords like quota, pin, or whatsapp.
+                No clinic parameters configured in this category.
               </p>
             </motion.div>
           ) : (
             <motion.div
-              key={activeCategory + (searchFilter || '')}
+              key={activeCategory}
               variants={staggerContainer}
               initial="hidden"
               animate="visible"
@@ -761,7 +723,7 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
 
       {(activeCategory === 'Clinic Identity & Branding' ||
         ['prescription', 'template', 'rx', 'pad', 'letterhead'].some((k) =>
-          searchFilter.toLowerCase().includes(k)
+          searchQuery.toLowerCase().includes(k)
         )) && (
         <motion.div
           variants={fadeScale}

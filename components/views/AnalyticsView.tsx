@@ -9,8 +9,6 @@ import {
   CheckCircle2,
   CalendarX,
   Pill,
-  Search,
-  X,
   Clock,
   ArrowUpRight,
   ArrowDownRight,
@@ -55,21 +53,9 @@ export function AnalyticsView({
   queue,
   cancelledAppointments,
   searchQuery = '',
-  onSearchChange,
 }: AnalyticsViewProps) {
-  const [internalSearch, setInternalSearch] = useState(searchQuery);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('month');
   const [cancelledPage, setCancelledPage] = useState(1);
-
-  useEffect(() => {
-    setInternalSearch(searchQuery);
-  }, [searchQuery]);
-
-  const handleSearchChange = (val: string) => {
-    setInternalSearch(val);
-    setCancelledPage(1);
-    onSearchChange?.(val);
-  };
 
   const cancelledList = useMemo(() => {
     if (cancelledAppointments !== undefined) {
@@ -235,21 +221,21 @@ export function AnalyticsView({
   ];
 
   const filteredMedicines = useMemo(() => {
-    const q = internalSearch.trim().toLowerCase();
+    const q = searchQuery.trim().toLowerCase();
     if (!q) return topSellingMedicines;
     return topSellingMedicines.filter(
       (m) => (m.label || '').toLowerCase().includes(q) || (m.sub || '').toLowerCase().includes(q)
     );
-  }, [internalSearch]);
+  }, [searchQuery]);
 
   const filteredCases = useMemo(() => {
-    const q = internalSearch.trim().toLowerCase();
+    const q = searchQuery.trim().toLowerCase();
     if (!q) return casesData;
     return casesData.filter((c) => (c.label || '').toLowerCase().includes(q));
-  }, [internalSearch]);
+  }, [searchQuery]);
 
   const filteredCancelled = useMemo(() => {
-    const q = internalSearch.trim().toLowerCase();
+    const q = searchQuery.trim().toLowerCase();
     if (!q) return cancelledList;
     return cancelledList.filter(
       (p) =>
@@ -257,7 +243,7 @@ export function AnalyticsView({
         (p.phone || '').toLowerCase().includes(q) ||
         (p.cancellationReason || '').toLowerCase().includes(q)
     );
-  }, [internalSearch, cancelledList]);
+  }, [searchQuery, cancelledList]);
 
   const totalCancelledPages = Math.max(1, Math.ceil(filteredCancelled.length / CANCELLED_PER_PAGE));
 
@@ -291,7 +277,7 @@ export function AnalyticsView({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+        <div className="flex items-center self-start sm:self-auto">
           <div className="flex items-center bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/80 p-1 shadow-xs hover:border-slate-300 transition-all">
             {PERIOD_OPTIONS.map((period) => {
               const isActive = selectedPeriod === period.id;
@@ -300,7 +286,7 @@ export function AnalyticsView({
                   key={period.id}
                   type="button"
                   onClick={() => setSelectedPeriod(period.id)}
-                  className={`relative px-3 py-1.5 text-xs font-bold rounded-xl transition-colors cursor-pointer select-none ${
+                  className={`relative px-3.5 py-1.5 text-xs font-bold rounded-xl transition-colors cursor-pointer select-none ${
                     isActive ? 'text-white' : 'text-slate-600 hover:text-slate-800'
                   }`}
                 >
@@ -315,29 +301,6 @@ export function AnalyticsView({
                 </button>
               );
             })}
-          </div>
-
-          <div className="relative w-full sm:w-64">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
-              <Search className="w-3.5 h-3.5" />
-            </span>
-            <input
-              type="text"
-              value={internalSearch}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search analytics &amp; insights..."
-              className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-500 shadow-2xs transition"
-            />
-            {internalSearch && (
-              <button
-                type="button"
-                onClick={() => handleSearchChange('')}
-                className="absolute right-2.5 inset-y-0 flex items-center text-slate-400 hover:text-slate-600 transition cursor-pointer"
-                title="Clear search"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
           </div>
         </div>
       </div>
