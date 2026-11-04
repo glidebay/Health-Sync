@@ -34,6 +34,7 @@ import {
   fetchMedicinesMaster,
   fetchSuppliers,
   addMedicineWithInitialBatch,
+  recordStockAdjustment,
   convertMasterToInventoryItems,
 } from '@/lib/medicineService';
 import { supabase } from '@/lib/supabaseClient';
@@ -319,11 +320,24 @@ export function InventoryView({
     setShowFullAddForm(false);
   };
 
-  const handleQuickRestockSubmit = (medId: string, currentBatchCount: number) => {
+  const handleQuickRestockSubmit = async (medId: string, currentBatchCount: number) => {
     const addVal = parseInt(stockUpdates[medId] || '0', 10);
     if (addVal <= 0) return;
 
     onUpdateStock(medId);
+
+    const med = medicines.find((m) => m.id === medId);
+    if (med && med.batches.length > 0) {
+      await recordStockAdjustment({
+        medicineId: medId,
+        batchId: med.batches[0].id,
+        movementType: 'Purchase',
+        quantityChange: addVal,
+        referenceNumber: `RESTOCK-${Date.now().toString().slice(-6)}`,
+        responsibleUser: isDoctorUnlocked ? 'Dr. Sunny' : 'Staff Pharmacist',
+        notes: 'Quick restock from Pharmacy Stock table',
+      });
+    }
 
     setMedicines((prev) =>
       prev.map((m) => {

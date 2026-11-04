@@ -298,8 +298,8 @@ export function TablesView({
       <div className="relative space-y-5">
         <EcgActionLoader isLoading={isLoading} fullscreen={true} text="Syncing patient tables..." />
 
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] p-4 sm:p-5 overflow-hidden">
-          <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] overflow-hidden">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <h3 className="text-base font-bold text-slate-800">
                 Completed Patients
@@ -310,21 +310,21 @@ export function TablesView({
             </div>
           </div>
 
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <table className="w-full text-left border-collapse table-fixed min-w-[620px]">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse table-fixed min-w-[640px]">
               <thead>
-                <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="pb-3 pl-4 sm:pl-0 w-[30%]">Patient</th>
-                  <th className="pb-3 px-3 w-[22%]">Channel &amp; Token</th>
-                  <th className="pb-3 px-3 w-[16%]">Status</th>
-                  <th className="pb-3 px-3 w-[20%]">Consultation Time</th>
-                  <th className="pb-3 pr-4 sm:pr-0 text-right w-[12%]">Action</th>
+                <tr className="border-b border-slate-100 bg-slate-50/40 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="py-3 px-4 sm:px-6 w-[30%]">Patient</th>
+                  <th className="py-3 px-4 w-[22%]">Channel &amp; Token</th>
+                  <th className="py-3 px-4 w-[16%]">Status</th>
+                  <th className="py-3 px-4 w-[20%]">Consultation Time</th>
+                  <th className="py-3 px-4 sm:px-6 text-right w-[12%]">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody className="divide-y divide-slate-100">
                 {paginatedCompleted.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-xs text-slate-400">
+                    <td colSpan={5} className="py-10 text-center text-xs text-slate-400">
                       No completed consultations recorded for this date.
                     </td>
                   </tr>
@@ -337,7 +337,7 @@ export function TablesView({
                         key={patient.id}
                         className="hover:bg-slate-50/70 transition-colors"
                       >
-                        <td className="py-3.5 pl-4 sm:pl-0">
+                        <td className="py-3.5 px-4 sm:px-6">
                           <div className="flex items-center gap-2.5">
                             <div className="w-8 h-8 rounded-lg bg-gradient-to-tl from-blue-700 to-blue-500 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 shadow-xs">
                               {tokenDisplay}
@@ -353,7 +353,7 @@ export function TablesView({
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-3">
+                        <td className="py-3.5 px-4">
                           <div className="space-y-0.5">
                             <span className="inline-block text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-[#2563EB] border border-blue-100/60">
                               Token {tokenDisplay}
@@ -364,21 +364,21 @@ export function TablesView({
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-3">
+                        <td className="py-3.5 px-4">
                           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                             Completed
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-3">
+                        <td className="py-3.5 px-4">
                           <div className="text-xs text-slate-700 font-medium flex items-center gap-1.5">
                             <Clock className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
                             <span>{patient.time}</span>
                           </div>
                         </td>
 
-                        <td className="py-3.5 pr-4 sm:pr-0 text-right">
+                        <td className="py-3.5 px-4 sm:px-6 text-right">
                           <button
                             type="button"
                             onClick={() => fetchFullPatientDetails(patient)}
@@ -397,7 +397,7 @@ export function TablesView({
           </div>
 
           {completedPatients.length > itemsPerPage && (
-            <div className="pt-2 border-t border-slate-100">
+            <div className="px-4 sm:px-6 py-3 border-t border-slate-100">
               <NumberedPagination
                 currentPage={completedPage}
                 totalPages={completedTotalPages}
@@ -410,8 +410,8 @@ export function TablesView({
           )}
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] p-4 sm:p-5 overflow-hidden">
-          <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] overflow-hidden">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <h3 className="text-base font-bold text-slate-800">
                 Cancelled Patients
@@ -422,21 +422,21 @@ export function TablesView({
             </div>
           </div>
 
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <table className="w-full text-left border-collapse table-fixed min-w-[620px]">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse table-fixed min-w-[640px]">
               <thead>
-                <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="pb-3 pl-4 sm:pl-0 w-[30%]">Patient</th>
-                  <th className="pb-3 px-3 w-[22%]">Channel &amp; Token</th>
-                  <th className="pb-3 px-3 w-[16%]">Status</th>
-                  <th className="pb-3 px-3 w-[20%]">Cancellation Reason</th>
-                  <th className="pb-3 pr-4 sm:pr-0 text-right w-[12%]">Action</th>
+                <tr className="border-b border-slate-100 bg-slate-50/40 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="py-3 px-4 sm:px-6 w-[30%]">Patient</th>
+                  <th className="py-3 px-4 w-[22%]">Channel &amp; Token</th>
+                  <th className="py-3 px-4 w-[16%]">Status</th>
+                  <th className="py-3 px-4 w-[20%]">Cancellation Reason</th>
+                  <th className="py-3 px-4 sm:px-6 text-right w-[12%]">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody className="divide-y divide-slate-100">
                 {paginatedCancelled.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-xs text-slate-400">
+                    <td colSpan={5} className="py-10 text-center text-xs text-slate-400">
                       Zero appointment cancellations logged for this date.
                     </td>
                   </tr>
@@ -449,7 +449,7 @@ export function TablesView({
                         key={patient.id}
                         className="hover:bg-slate-50/70 transition-colors"
                       >
-                        <td className="py-3.5 pl-4 sm:pl-0">
+                        <td className="py-3.5 px-4 sm:px-6">
                           <div className="flex items-center gap-2.5">
                             <div className="w-8 h-8 rounded-lg bg-slate-300 text-slate-700 font-bold text-xs flex items-center justify-center flex-shrink-0">
                               {tokenDisplay}
@@ -465,7 +465,7 @@ export function TablesView({
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-3">
+                        <td className="py-3.5 px-4">
                           <div className="space-y-0.5">
                             <span className="inline-block text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200/60">
                               Token {tokenDisplay}
@@ -476,14 +476,14 @@ export function TablesView({
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-3">
+                        <td className="py-3.5 px-4">
                           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600">
                             <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                             Cancelled
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-3">
+                        <td className="py-3.5 px-4">
                           <span
                             className="text-xs text-slate-600 truncate block max-w-full"
                             title={patient.cancellationReason || 'Cancelled by clinic / patient'}
@@ -492,7 +492,7 @@ export function TablesView({
                           </span>
                         </td>
 
-                        <td className="py-3.5 pr-4 sm:pr-0 text-right">
+                        <td className="py-3.5 px-4 sm:px-6 text-right">
                           <button
                             type="button"
                             onClick={() => fetchFullPatientDetails(patient)}
@@ -511,7 +511,7 @@ export function TablesView({
           </div>
 
           {cancelledPatients.length > itemsPerPage && (
-            <div className="pt-2 border-t border-slate-100">
+            <div className="px-4 sm:px-6 py-3 border-t border-slate-100">
               <NumberedPagination
                 currentPage={cancelledPage}
                 totalPages={cancelledTotalPages}

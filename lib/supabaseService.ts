@@ -1,6 +1,7 @@
 import { Patient, PatientStatus } from '@/types';
 import bcrypt from 'bcryptjs';
 import { supabase } from './supabase';
+import { generateSafeUuid } from '@/lib/medicineService';
 import {
   DbDoctor,
   DbPatient,
@@ -87,7 +88,7 @@ export async function updateDoctorProfileDb(
       .update(payload)
       .eq('id', doctorId)
       .select('*')
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.warn('Error updating doctor profile:', error.message);
@@ -691,7 +692,7 @@ export async function registerWalkinPatientDb(params: {
           },
         ])
         .select('id, full_name, age, gender, phone_number, patient_number, display_id')
-        .single();
+        .maybeSingle();
 
       if (patientError || !patientData) {
         let errorMsg = patientError?.message || 'Error creating patient';
@@ -752,7 +753,7 @@ export async function registerWalkinPatientDb(params: {
         },
       ])
       .select()
-      .single();
+      .maybeSingle();
 
     if (apptError || !apptData) {
       const errorMsg = apptError?.message || 'Error creating appointment';
@@ -815,7 +816,7 @@ export async function reallocateSlotDb(appointmentId: string): Promise<string | 
       .from('appointments')
       .select('scheduled_time')
       .eq('id', appointmentId)
-      .single();
+      .maybeSingle();
 
     const oldTime = currentAppt?.scheduled_time || new Date().toISOString();
     const newDate = new Date(Date.now() + 20 * 60000);
@@ -1106,7 +1107,7 @@ export async function cascadeDoctorDelayDb(
         .from('appointments')
         .select('scheduled_time')
         .eq('id', apptId)
-        .single();
+        .maybeSingle();
 
       if (appt && appt.scheduled_time) {
         const currentDate = new Date(appt.scheduled_time);
@@ -1170,7 +1171,7 @@ export async function completeConsultationDb(params: {
         .from('inventory')
         .select('stock_quantity')
         .eq('id', rx.inventoryId)
-        .single();
+        .maybeSingle();
 
       if (invItem) {
         const newStock = Math.max(0, (invItem.stock_quantity || 0) - rx.qty);
@@ -1181,6 +1182,21 @@ export async function completeConsultationDb(params: {
             last_updated: new Date().toISOString(),
           })
           .eq('id', rx.inventoryId);
+      } else {
+        const { data: dbMed } = await supabase
+          .from('medicines')
+          .select('id, batches:medicine_batches(*)')
+          .eq('id', rx.inventoryId)
+          .maybeSingle();
+
+        if (dbMed && dbMed.batches && dbMed.batches.length > 0) {
+          const firstBatch = dbMed.batches[0];
+          const nextQty = Math.max(0, (Number(firstBatch.available_quantity) || 0) - rx.qty);
+          await supabase
+            .from('medicine_batches')
+            .update({ available_quantity: nextQty })
+            .eq('id', firstBatch.id);
+        }
       }
     }
 
@@ -1264,7 +1280,7 @@ export async function addInventoryItemDb(params: {
         },
       ])
       .select()
-      .single();
+      .maybeSingle();
 
     if (error || !data) {
       console.error('Error adding inventory item:', error);
@@ -1292,28 +1308,58 @@ export async function restockInventoryItemDb(
   addedQty: number
 ): Promise<number | null> {
   try {
+    const { data: dbMed } = await supabase
+      .from('medicines')
+      .select('id, brand_name, batches:medicine_batches(*)')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (dbMed) {
+      const batches: any[] = dbMed.batches || [];
+      if (batches.length > 0) {
+        const targetBatch = batches[0];
+        const nextBatchQty = (Number(targetBatch.available_quantity) || 0) + addedQty;
+        await supabase
+          .from('medicine_batches')
+          .update({ available_quantity: nextBatchQty })
+          .eq('id', targetBatch.id);
+
+        await supabase.from('stock_movements').insert([
+          {
+            id: generateSafeUuid(),
+            medicine_id: dbMed.id,
+            batch_id: targetBatch.id,
+            movement_type: 'Purchase',
+            quantity: addedQty,
+            reference_number: `RESTOCK-${Date.now().toString().slice(-6)}`,
+            responsible_user: 'Pharmacist',
+            date: new Date().toISOString(),
+            notes: 'Quick restock from pharmacy dashboard',
+          },
+        ]);
+        return nextBatchQty;
+      }
+    }
+
     const { data: current } = await supabase
       .from('inventory')
       .select('stock_quantity')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
-    const newStock = ((current?.stock_quantity) || 0) + addedQty;
-
-    const { error } = await supabase
-      .from('inventory')
-      .update({
-        stock_quantity: newStock,
-        last_updated: new Date().toISOString(),
-      })
-      .eq('id', id);
-
-    if (error) {
-      console.warn('Error restocking item in Supabase:', error);
-      return null;
+    if (current) {
+      const newStock = ((current?.stock_quantity) || 0) + addedQty;
+      await supabase
+        .from('inventory')
+        .update({
+          stock_quantity: newStock,
+          last_updated: new Date().toISOString(),
+        })
+        .eq('id', id);
+      return newStock;
     }
 
-    return newStock;
+    return null;
   } catch (err) {
     console.warn('Restock exception:', err);
     return null;
@@ -2180,7 +2226,7 @@ export async function bookAppointmentSlotDb(
           },
         ])
         .select()
-        .single();
+        .maybeSingle();
       if (newPatError) {
         if (newPatError.message?.includes('chk_patient_name_valid')) {
           return {
@@ -2220,7 +2266,7 @@ export async function bookAppointmentSlotDb(
         },
       ])
       .select()
-      .single();
+      .maybeSingle();
 
     if (fallbackAppt) {
       const actualQueueTokenNo = typeof fallbackAppt.queue_token_no === 'number' ? fallbackAppt.queue_token_no : nextQueueTokenNo;
@@ -2793,7 +2839,7 @@ export async function sendDoctorReplyToChat(
         },
       })
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.warn('Error inserting doctor reply into whatsapp_requests:', error);
