@@ -1193,6 +1193,28 @@ export async function completeConsultationDb(params: {
 
 export async function fetchInventoryFromDb(): Promise<FormattedInventoryItem[]> {
   try {
+    const { data: medData, error: medErr } = await supabase
+      .from('medicines')
+      .select('*, batches:medicine_batches(available_quantity)')
+      .order('brand_name', { ascending: true });
+
+    if (!medErr && Array.isArray(medData)) {
+      return medData.map((m: any) => {
+        const rawBatches: any[] = m.batches || [];
+        const stock = rawBatches.reduce((acc, b) => acc + (Number(b.available_quantity) || 0), 0);
+        return {
+          id: m.id,
+          brand: m.brand_name,
+          generic: m.generic_name,
+          stock,
+          unit: m.unit || 'Units',
+          category: m.category || 'General',
+          unitPrice: Number(m.selling_price) || 0,
+          reorderThreshold: Number(m.minimum_stock_level) || 10,
+        };
+      });
+    }
+
     const { data, error } = await supabase
       .from('inventory')
       .select('*')
