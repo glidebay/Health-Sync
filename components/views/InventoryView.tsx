@@ -20,6 +20,7 @@ import {
   ChevronDown,
   Check,
   Pill,
+  RefreshCw,
 } from 'lucide-react';
 import { InventoryItem } from '@/types';
 import { MedicineMaster, DosageForm, Supplier } from '@/types/medicine';
@@ -335,6 +336,8 @@ export function InventoryView({
       transition={{ duration: 0.25 }}
       className="space-y-5 pb-12"
     >
+      <EcgActionLoader isLoading={loadingMeds} fullscreen={true} text="Syncing pharmacy stock..." />
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-1 gap-3">
         <div>
           <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
@@ -346,6 +349,16 @@ export function InventoryView({
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          <motion.button
+            whileHover={{ y: -2, boxShadow: '0 4px 12px 0 rgba(0,0,0,0.05)' }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => loadData()}
+            className="p-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-500 hover:text-slate-800 rounded-xl transition cursor-pointer shadow-2xs"
+            title="Refresh Pharmacy Stock"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingMeds ? 'animate-spin text-[#2563EB]' : ''}`} />
+          </motion.button>
+
           {isDoctorUnlocked && (
             <motion.button
               whileHover={{ y: -2, boxShadow: '0 4px 12px 0 rgba(0,0,0,0.05)' }}
@@ -888,8 +901,6 @@ export function InventoryView({
       </AnimatePresence>
 
       <div className="relative space-y-5">
-        <EcgActionLoader isLoading={loadingMeds} fullscreen={false} text="Syncing pharmacy stock..." />
-
         <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] p-4 sm:p-5 overflow-hidden">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-4 border-b border-slate-100 gap-3">
             <div className="flex items-center gap-2">
