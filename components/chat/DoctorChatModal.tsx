@@ -215,8 +215,6 @@ function AudioVoiceMessagePlayer({
               aria-label="Seek voice note"
             />
           </div>
-
-          {/* Time & Duration */}
           <div className="flex items-center justify-between text-[10px] mt-0.5">
             <span
               className={
