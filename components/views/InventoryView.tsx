@@ -275,10 +275,14 @@ export function InventoryView({
       responsibleUser: isDoctorUnlocked ? 'Dr. Sunny' : 'Staff Pharmacist',
     });
 
-    setMedicines((prev) => [newMed, ...prev]);
-    if (onInventorySync) {
-      onInventorySync(convertMasterToInventoryItems([newMed, ...medicines]));
-    }
+    setMedicines((prev) => {
+      const idx = prev.findIndex((m) => m.id === newMed.id || m.sku.toUpperCase() === newMed.sku.toUpperCase());
+      const next = idx >= 0 ? prev.map((m, i) => (i === idx ? newMed : m)) : [newMed, ...prev];
+      if (onInventorySync) {
+        onInventorySync(convertMasterToInventoryItems(next));
+      }
+      return next;
+    });
 
     setNewBrand('');
     setNewGeneric('');

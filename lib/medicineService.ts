@@ -822,27 +822,67 @@ export async function addMedicineWithInitialBatch(params: {
     expiryStatus: calculateExpiryStatus([newBatch]),
   };
 
+  let actualMedId = medId;
+
   try {
-    await supabase.from('medicines').insert([
-      {
-        id: medId,
-        sku: newMedicine.sku,
-        brand_name: newMedicine.brandName,
-        generic_name: newMedicine.genericName,
-        manufacturer: newMedicine.manufacturer,
-        category: newMedicine.category,
-        dosage_form: newMedicine.dosageForm,
-        strength: newMedicine.strength,
-        unit: newMedicine.unit,
-        barcode: newMedicine.barcode,
-        minimum_stock_level: newMedicine.minimumStockLevel,
-        selling_price: newMedicine.sellingPrice,
-        supplier_id: supplierObj?.id || params.supplierId || null,
-      },
-    ]);
+    const { data: existingMed } = await supabase
+      .from('medicines')
+      .select('id')
+      .ilike('sku', newMedicine.sku)
+      .maybeSingle();
+
+    if (existingMed && existingMed.id) {
+      actualMedId = existingMed.id;
+      await supabase
+        .from('medicines')
+        .update({
+          brand_name: newMedicine.brandName,
+          generic_name: newMedicine.genericName,
+          manufacturer: newMedicine.manufacturer,
+          category: newMedicine.category,
+          dosage_form: newMedicine.dosageForm,
+          strength: newMedicine.strength,
+          unit: newMedicine.unit,
+          barcode: newMedicine.barcode || undefined,
+          minimum_stock_level: newMedicine.minimumStockLevel,
+          selling_price: newMedicine.sellingPrice,
+          supplier_id: supplierObj?.id || params.supplierId || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', actualMedId);
+    } else {
+      const { data: upsertData } = await supabase
+        .from('medicines')
+        .upsert(
+          [
+            {
+              id: medId,
+              sku: newMedicine.sku,
+              brand_name: newMedicine.brandName,
+              generic_name: newMedicine.genericName,
+              manufacturer: newMedicine.manufacturer,
+              category: newMedicine.category,
+              dosage_form: newMedicine.dosageForm,
+              strength: newMedicine.strength,
+              unit: newMedicine.unit,
+              barcode: newMedicine.barcode,
+              minimum_stock_level: newMedicine.minimumStockLevel,
+              selling_price: newMedicine.sellingPrice,
+              supplier_id: supplierObj?.id || params.supplierId || null,
+            },
+          ],
+          { onConflict: 'sku' }
+        )
+        .select('id')
+        .maybeSingle();
+
+      if (upsertData && upsertData.id) {
+        actualMedId = upsertData.id;
+      }
+    }
 
     const { error: rpcErr } = await supabase.rpc('procure_batch_atomic', {
-      p_medicine_id: medId,
+      p_medicine_id: actualMedId,
       p_batch_number: newBatch.batchNumber,
       p_manufacturing_date: newBatch.manufacturingDate,
       p_expiry_date: newBatch.expiryDate,
@@ -856,32 +896,89 @@ export async function addMedicineWithInitialBatch(params: {
     });
 
     if (rpcErr) {
-      await supabase.from('medicine_batches').insert([
-        {
-          id: batchId,
-          medicine_id: medId,
-          batch_number: newBatch.batchNumber,
-          manufacturing_date: newBatch.manufacturingDate,
-          expiry_date: newBatch.expiryDate,
-          purchase_price: newBatch.purchasePrice,
-          selling_price: newBatch.sellingPrice,
-          initial_quantity: newBatch.initialQuantity,
-          available_quantity: newBatch.availableQuantity,
-          supplier_id: newBatch.supplierId,
-          supplier_name: newBatch.supplierName,
-        },
-      ]);
+      await supabase.from('medicine_batches').upsert(
+        [
+          {
+            id: batchId,
+            medicine_id: actualMedId,
+            batch_number: newBatch.batchNumber,
+            manufacturing_date: newBatch.manufacturingDate,
+            expiry_date: newBatch.expiryDate,
+            purchase_price: newBatch.purchasePrice,
+            selling_price: newBatch.sellingPrice,
+            initial_quantity: newBatch.initialQuantity,
+            available_quantity: newBatch.availableQuantity,
+            supplier_id: newBatch.supplierId || null,
+            supplier_name: newBatch.supplierName || null,
+          },
+        ],
+        { onConflict: 'medicine_id,batch_number' }
+      );
     }
   } catch {}
 
   const currentMeds = loadStoredMedicines();
-  const updatedMeds = [newMedicine, ...currentMeds];
+  const existingIdx = currentMeds.findIndex(
+    (m) => m.sku.toUpperCase() === newMedicine.sku.toUpperCase() || m.id === actualMedId
+  );
+
+  let updatedMeds: MedicineMaster[];
+  let finalMedicine: MedicineMaster;
+
+  if (existingIdx >= 0) {
+    const existing = currentMeds[existingIdx];
+    const existingBatches = [...existing.batches];
+    const bIdx = existingBatches.findIndex(
+      (b) => b.batchNumber.toLowerCase() === newBatch.batchNumber.toLowerCase()
+    );
+
+    if (bIdx >= 0) {
+      existingBatches[bIdx] = {
+        ...existingBatches[bIdx],
+        availableQuantity: existingBatches[bIdx].availableQuantity + newBatch.availableQuantity,
+        initialQuantity: existingBatches[bIdx].initialQuantity + newBatch.initialQuantity,
+        purchasePrice: newBatch.purchasePrice,
+        sellingPrice: newBatch.sellingPrice,
+        expiryDate: newBatch.expiryDate,
+        supplierId: newBatch.supplierId || existingBatches[bIdx].supplierId,
+        supplierName: newBatch.supplierName || existingBatches[bIdx].supplierName,
+      };
+    } else {
+      existingBatches.push({ ...newBatch, medicineId: existing.id });
+    }
+
+    const totalStock = existingBatches.reduce((s, b) => s + b.availableQuantity, 0);
+    finalMedicine = {
+      ...existing,
+      brandName: newMedicine.brandName,
+      genericName: newMedicine.genericName,
+      manufacturer: newMedicine.manufacturer,
+      category: newMedicine.category,
+      dosageForm: newMedicine.dosageForm,
+      strength: newMedicine.strength,
+      unit: newMedicine.unit,
+      barcode: newMedicine.barcode || existing.barcode,
+      minimumStockLevel: newMedicine.minimumStockLevel,
+      sellingPrice: newMedicine.sellingPrice,
+      lastPurchasePrice: newMedicine.lastPurchasePrice,
+      lastPurchaseDate: newMedicine.lastPurchaseDate,
+      supplier: newMedicine.supplier || existing.supplier,
+      batches: existingBatches,
+      totalStock,
+      stockStatus: calculateStockStatus(totalStock, newMedicine.minimumStockLevel),
+      expiryStatus: calculateExpiryStatus(existingBatches),
+    };
+    updatedMeds = currentMeds.map((m, i) => (i === existingIdx ? finalMedicine : m));
+  } else {
+    finalMedicine = newMedicine;
+    updatedMeds = [newMedicine, ...currentMeds];
+  }
   saveStoredMedicines(updatedMeds);
 
   const purchaseRecord: PurchaseRecord = {
     id: `pur-${Date.now().toString(36)}`,
-    medicineId: medId,
-    medicineName: `${newMedicine.brandName} (${newMedicine.genericName})`,
+    medicineId: actualMedId,
+    medicineName: `${finalMedicine.brandName} (${finalMedicine.genericName})`,
     supplierId: supplierObj?.id || params.supplierId || '',
     supplierName: supplierObj?.name || params.supplierName || 'Self-Procured',
     batchNumber: newBatch.batchNumber,
@@ -897,8 +994,8 @@ export async function addMedicineWithInitialBatch(params: {
 
   const movement: StockMovement = {
     id: `mov-${Date.now().toString(36)}`,
-    medicineId: medId,
-    medicineName: newMedicine.brandName,
+    medicineId: actualMedId,
+    medicineName: finalMedicine.brandName,
     batchId: batchId,
     batchNumber: newBatch.batchNumber,
     movementType: 'Purchase',
@@ -911,7 +1008,7 @@ export async function addMedicineWithInitialBatch(params: {
   const movements = [movement, ...loadStoredMovements()];
   saveStoredMovements(movements);
 
-  return newMedicine;
+  return finalMedicine;
 }
 
 export async function addBatchToMedicine(params: {
@@ -943,8 +1040,19 @@ export async function addBatchToMedicine(params: {
   };
 
   try {
+    let targetMedId = params.medicineId;
+    const { data: medCheck } = await supabase
+      .from('medicines')
+      .select('id')
+      .or(`id.eq.${params.medicineId},sku.eq.${params.medicineId}`)
+      .maybeSingle();
+
+    if (medCheck && medCheck.id) {
+      targetMedId = medCheck.id;
+    }
+
     const { error: rpcErr } = await supabase.rpc('procure_batch_atomic', {
-      p_medicine_id: params.medicineId,
+      p_medicine_id: targetMedId,
       p_batch_number: newBatch.batchNumber,
       p_manufacturing_date: newBatch.manufacturingDate,
       p_expiry_date: newBatch.expiryDate,
@@ -958,21 +1066,24 @@ export async function addBatchToMedicine(params: {
     });
 
     if (rpcErr) {
-      await supabase.from('medicine_batches').insert([
-        {
-          id: batchId,
-          medicine_id: params.medicineId,
-          batch_number: newBatch.batchNumber,
-          manufacturing_date: newBatch.manufacturingDate,
-          expiry_date: newBatch.expiryDate,
-          purchase_price: newBatch.purchasePrice,
-          selling_price: newBatch.sellingPrice,
-          initial_quantity: newBatch.initialQuantity,
-          available_quantity: newBatch.availableQuantity,
-          supplier_id: newBatch.supplierId,
-          supplier_name: newBatch.supplierName,
-        },
-      ]);
+      await supabase.from('medicine_batches').upsert(
+        [
+          {
+            id: batchId,
+            medicine_id: targetMedId,
+            batch_number: newBatch.batchNumber,
+            manufacturing_date: newBatch.manufacturingDate,
+            expiry_date: newBatch.expiryDate,
+            purchase_price: newBatch.purchasePrice,
+            selling_price: newBatch.sellingPrice,
+            initial_quantity: newBatch.initialQuantity,
+            available_quantity: newBatch.availableQuantity,
+            supplier_id: newBatch.supplierId || null,
+            supplier_name: newBatch.supplierName || null,
+          },
+        ],
+        { onConflict: 'medicine_id,batch_number' }
+      );
     }
   } catch {}
 

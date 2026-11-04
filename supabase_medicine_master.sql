@@ -161,6 +161,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
+  v_actual_med_id TEXT;
   v_batch_id TEXT;
   v_purchase_id TEXT;
   v_movement_id TEXT;
@@ -169,9 +170,13 @@ DECLARE
   v_sup_name TEXT := p_supplier_name;
   v_invoice TEXT := COALESCE(p_invoice_number, 'INV-' || to_char(CURRENT_DATE, 'YYMM') || '-' || substr(md5(random()::text), 1, 5));
 BEGIN
-  SELECT brand_name INTO v_med_name FROM public.medicines WHERE id = p_medicine_id;
+  SELECT id, brand_name INTO v_actual_med_id, v_med_name
+  FROM public.medicines
+  WHERE id = p_medicine_id OR upper(sku) = upper(trim(p_medicine_id))
+  LIMIT 1;
+
   IF v_med_name IS NULL THEN
-    RAISE EXCEPTION 'Medicine with ID % does not exist.', p_medicine_id;
+    RAISE EXCEPTION 'Medicine with ID or SKU % does not exist.', p_medicine_id;
   END IF;
 
   IF v_sup_id IS NULL AND v_sup_name IS NOT NULL AND trim(v_sup_name) != '' THEN
@@ -193,10 +198,19 @@ BEGIN
     purchase_price, selling_price, initial_quantity, available_quantity,
     supplier_id, supplier_name
   ) VALUES (
-    v_batch_id, p_medicine_id, trim(p_batch_number), p_manufacturing_date, p_expiry_date,
+    v_batch_id, v_actual_med_id, trim(p_batch_number), p_manufacturing_date, p_expiry_date,
     p_purchase_price, p_selling_price, p_quantity, p_quantity,
     v_sup_id, v_sup_name
-  );
+  )
+  ON CONFLICT (medicine_id, batch_number) DO UPDATE
+  SET available_quantity = public.medicine_batches.available_quantity + EXCLUDED.available_quantity,
+      initial_quantity = public.medicine_batches.initial_quantity + EXCLUDED.initial_quantity,
+      purchase_price = EXCLUDED.purchase_price,
+      selling_price = EXCLUDED.selling_price,
+      expiry_date = EXCLUDED.expiry_date,
+      supplier_id = COALESCE(EXCLUDED.supplier_id, public.medicine_batches.supplier_id),
+      supplier_name = COALESCE(EXCLUDED.supplier_name, public.medicine_batches.supplier_name)
+  RETURNING id INTO v_batch_id;
 
   v_purchase_id := 'pur-' || substr(md5(random()::text), 1, 10);
   INSERT INTO public.purchase_records (
@@ -204,7 +218,7 @@ BEGIN
     batch_number, purchase_date, quantity_purchased, purchase_price,
     total_purchase_amount, invoice_number
   ) VALUES (
-    v_purchase_id, p_medicine_id, v_med_name, v_sup_id, COALESCE(v_sup_name, 'Self-Procured'),
+    v_purchase_id, v_actual_med_id, v_med_name, v_sup_id, COALESCE(v_sup_name, 'Self-Procured'),
     trim(p_batch_number), CURRENT_DATE, p_quantity, p_purchase_price,
     (p_quantity * p_purchase_price), v_invoice
   );
@@ -214,7 +228,7 @@ BEGIN
     id, medicine_id, batch_id, movement_type, quantity,
     reference_number, responsible_user, date, notes
   ) VALUES (
-    v_movement_id, p_medicine_id, v_batch_id, 'Purchase', p_quantity,
+    v_movement_id, v_actual_med_id, v_batch_id, 'Purchase', p_quantity,
     v_invoice, p_responsible_user, now(), 'Procurement intake for batch ' || trim(p_batch_number)
   );
 
@@ -227,7 +241,7 @@ BEGIN
 
   UPDATE public.medicines
   SET updated_at = now()
-  WHERE id = p_medicine_id;
+  WHERE id = v_actual_med_id;
 
   RETURN jsonb_build_object(
     'status', 'success',
@@ -252,6 +266,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
+  v_actual_med_id TEXT;
   v_remaining_needed INT := p_required_quantity;
   v_batch RECORD;
   v_deduct INT;
@@ -262,10 +277,19 @@ BEGIN
     RAISE EXCEPTION 'Dispensing quantity must be greater than zero.';
   END IF;
 
+  SELECT id INTO v_actual_med_id
+  FROM public.medicines
+  WHERE id = p_medicine_id OR upper(sku) = upper(trim(p_medicine_id))
+  LIMIT 1;
+
+  IF v_actual_med_id IS NULL THEN
+    v_actual_med_id := p_medicine_id;
+  END IF;
+
   SELECT COALESCE(SUM(available_quantity), 0)
   INTO v_total_available
   FROM public.medicine_batches
-  WHERE medicine_id = p_medicine_id
+  WHERE medicine_id = v_actual_med_id
     AND available_quantity > 0
     AND expiry_date >= CURRENT_DATE;
 
@@ -276,7 +300,7 @@ BEGIN
   FOR v_batch IN
     SELECT id, batch_number, available_quantity, expiry_date, selling_price
     FROM public.medicine_batches
-    WHERE medicine_id = p_medicine_id
+    WHERE medicine_id = v_actual_med_id
       AND available_quantity > 0
       AND expiry_date >= CURRENT_DATE
     ORDER BY expiry_date ASC, created_at ASC
@@ -297,7 +321,7 @@ BEGIN
       medicine_id, batch_id, movement_type, quantity,
       reference_number, responsible_user, date, notes
     ) VALUES (
-      p_medicine_id, v_batch.id, 'Dispensing', -v_deduct,
+      v_actual_med_id, v_batch.id, 'Dispensing', -v_deduct,
       p_reference_number, p_responsible_user, now(),
       COALESCE(p_notes, 'FEFO Patient Prescription Dispensing')
     );
@@ -315,11 +339,11 @@ BEGIN
 
   UPDATE public.medicines
   SET updated_at = now()
-  WHERE id = p_medicine_id;
+  WHERE id = v_actual_med_id;
 
   RETURN jsonb_build_object(
     'status', 'success',
-    'medicine_id', p_medicine_id,
+    'medicine_id', v_actual_med_id,
     'total_dispensed', p_required_quantity,
     'batches_used', v_dispensed_batches
   );
@@ -340,13 +364,23 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
+  v_actual_med_id TEXT;
   v_target_batch_id TEXT := p_batch_id;
   v_current_qty INT;
 BEGIN
+  SELECT id INTO v_actual_med_id
+  FROM public.medicines
+  WHERE id = p_medicine_id OR upper(sku) = upper(trim(p_medicine_id))
+  LIMIT 1;
+
+  IF v_actual_med_id IS NULL THEN
+    v_actual_med_id := p_medicine_id;
+  END IF;
+
   IF v_target_batch_id IS NULL THEN
     SELECT id INTO v_target_batch_id
     FROM public.medicine_batches
-    WHERE medicine_id = p_medicine_id
+    WHERE medicine_id = v_actual_med_id
     ORDER BY expiry_date ASC
     LIMIT 1;
   END IF;
@@ -369,17 +403,17 @@ BEGIN
     medicine_id, batch_id, movement_type, quantity,
     reference_number, responsible_user, date, notes
   ) VALUES (
-    p_medicine_id, v_target_batch_id, p_movement_type, p_quantity_change,
+    v_actual_med_id, v_target_batch_id, p_movement_type, p_quantity_change,
     p_reference_number, p_responsible_user, now(), p_notes
   );
 
   UPDATE public.medicines
   SET updated_at = now()
-  WHERE id = p_medicine_id;
+  WHERE id = v_actual_med_id;
 
   RETURN jsonb_build_object(
     'status', 'success',
-    'medicine_id', p_medicine_id,
+    'medicine_id', v_actual_med_id,
     'batch_id', v_target_batch_id,
     'quantity_change', p_quantity_change
   );
@@ -397,3 +431,5 @@ GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated;
+
+NOTIFY pgrst, 'reload schema';
