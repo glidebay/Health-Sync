@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Building2,
   UserCog,
@@ -264,9 +264,9 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
   return (
     <motion.div
       key="settings-catalog"
-      initial={{ opacity: 0, y: 14 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -14 }}
+      exit={{ opacity: 0, y: -12 }}
       transition={{ duration: 0.25 }}
       className={`space-y-6 ${isMobile ? 'pb-24' : 'pb-6'}`}
     >
@@ -274,89 +274,111 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
         variants={staggerContainer}
         initial="hidden"
         animate="visible"
-        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6"
+        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4"
       >
         <motion.div
           variants={fadeScale}
-          whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
+          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex justify-between items-start cursor-default min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5 truncate">
-              Total Parameters Configured
+              Parameters Configured
             </span>
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight block">
-              <AnimatedCounter target={SETTINGS_METADATA.length} />
-            </span>
-            <span className="text-xs text-slate-400 font-medium tracking-wide mt-1 block">
-              Parameters Active
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight block">
+                <AnimatedCounter target={SETTINGS_METADATA.length} />
+              </span>
+              <span className="text-[11px] text-slate-400 font-normal">Active</span>
+            </div>
+            <span className="text-[11px] text-blue-600 font-semibold flex items-center gap-1 mt-1">
+              <span>Operational controls</span>
+              <span className="text-slate-400 font-normal">in chamber</span>
             </span>
           </div>
           <motion.div
-            whileHover={{ rotate: 12, scale: 1.1 }}
-            className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/60 flex items-center justify-center text-blue-600 shadow-2xs flex-shrink-0"
+            whileHover={{ scale: 1.1, rotate: 6 }}
+            className="w-11 h-11 rounded-xl bg-gradient-to-tl from-blue-600 to-indigo-500 shadow-md shadow-blue-500/25 flex items-center justify-center text-white flex-shrink-0"
           >
-            <SlidersHorizontal className="w-4 h-4 stroke-[2]" />
+            <SlidersHorizontal className="w-5 h-5 stroke-[2.2]" />
           </motion.div>
         </motion.div>
 
         <motion.div
           variants={fadeScale}
-          whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
+          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex justify-between items-start cursor-default min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5 truncate">
-              Active Controls & Safeguards
+              Safeguards &amp; Controls
             </span>
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight block">
-              <AnimatedCounter target={activeControlsCount} />
-            </span>
-            <span className="text-xs text-slate-400 font-medium tracking-wide mt-1 block">
-              Rules Enforced
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight block">
+                <AnimatedCounter target={activeControlsCount} />
+              </span>
+              <span className="text-[11px] text-slate-400 font-normal">Rules</span>
+            </div>
+            <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-1">
+              <span>Automations</span>
+              <span className="text-slate-400 font-normal">enforced</span>
             </span>
           </div>
           <motion.div
-            whileHover={{ rotate: -12, scale: 1.1 }}
-            className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/60 flex items-center justify-center text-blue-600 shadow-2xs flex-shrink-0"
+            whileHover={{ scale: 1.1, rotate: -6 }}
+            className="w-11 h-11 rounded-xl bg-gradient-to-tl from-emerald-600 to-teal-500 shadow-md shadow-emerald-500/25 flex items-center justify-center text-white flex-shrink-0"
           >
-            <ShieldCheck className="w-4 h-4 stroke-[2]" />
+            <ShieldCheck className="w-5 h-5 stroke-[2.2]" />
           </motion.div>
         </motion.div>
 
         <motion.div
           variants={fadeScale}
-          whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
+          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] sm:col-span-2 xl:col-span-1 flex justify-between items-start cursor-default min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] sm:col-span-2 xl:col-span-1 flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5 truncate">
               Authorization Authority
             </span>
-            <span className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight block mt-1">
-              Admin & Doctor
-            </span>
-            <span className="text-xs text-slate-400 font-medium tracking-wide mt-1 block">
-              Privileges Enforced
+            <div className="flex items-baseline gap-2">
+              <span className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight block">
+                Admin &amp; Doctor
+              </span>
+            </div>
+            <span className="text-[11px] text-indigo-600 font-semibold flex items-center gap-1 mt-1">
+              <span>Security</span>
+              <span className="text-slate-400 font-normal">privileges locked</span>
             </span>
           </div>
           <motion.div
-            whileHover={{ rotate: 12, scale: 1.1 }}
-            className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/60 flex items-center justify-center text-blue-600 shadow-2xs flex-shrink-0"
+            whileHover={{ scale: 1.1, rotate: 6 }}
+            className="w-11 h-11 rounded-xl bg-gradient-to-tl from-indigo-600 to-violet-500 shadow-md shadow-indigo-500/25 flex items-center justify-center text-white flex-shrink-0"
           >
-            <Lock className="w-4 h-4 stroke-[2]" />
+            <Lock className="w-5 h-5 stroke-[2.2]" />
           </motion.div>
         </motion.div>
       </motion.section>
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
         <div className="min-w-0 flex-1">
-          <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight truncate">
-            Clinic Settings & Operational Controls
-          </h2>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight truncate">
+              Clinic Settings &amp; Operational Controls
+            </h2>
+            {hasUnsavedChanges && (
+              <motion.span
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shadow-2xs whitespace-nowrap"
+              >
+                {changedKeys.length} unsaved
+              </motion.span>
+            )}
+          </div>
           <p className="text-xs text-slate-400 mt-0.5">
             Configure clinic profile, daily consultation rules, queue behavior, and automation settings
           </p>
@@ -365,7 +387,7 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
         <div className="flex items-center space-x-2 flex-shrink-0 self-end sm:self-auto">
           {hasUnsavedChanges && (
             <motion.button
-              whileHover={{ scale: 1.02 }}
+              whileHover={{ y: -2, boxShadow: '0 4px 12px 0 rgba(0,0,0,0.05)' }}
               whileTap={{ scale: 0.98 }}
               onClick={handleDiscard}
               className="flex items-center space-x-1.5 text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:text-slate-800 hover:bg-slate-50 px-3.5 py-2 rounded-xl transition cursor-pointer shadow-2xs flex-shrink-0 whitespace-nowrap"
@@ -375,23 +397,25 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
             </motion.button>
           )}
 
-          <button
+          <motion.button
+            whileHover={{ y: -2, boxShadow: '0 4px 12px 0 rgba(0,0,0,0.05)' }}
+            whileTap={{ scale: 0.98 }}
             onClick={handleResetDefaults}
             className="flex items-center space-x-1.5 text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50/40 px-3.5 py-2 rounded-xl transition cursor-pointer shadow-2xs flex-shrink-0 whitespace-nowrap"
             title="Reset to default settings"
           >
             <RotateCcw className="w-3.5 h-3.5 flex-shrink-0" />
             <span className="hidden sm:inline whitespace-nowrap">Defaults</span>
-          </button>
+          </motion.button>
 
           <motion.button
-            whileHover={{ scale: 1.02 }}
+            whileHover={{ y: -2, boxShadow: hasUnsavedChanges ? '0 4px 14px 0 rgba(37,99,235,0.3)' : undefined }}
             whileTap={{ scale: 0.98 }}
             onClick={handleSave}
             disabled={isSaving || !hasUnsavedChanges}
             className={`flex items-center space-x-1.5 text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer shadow-xs flex-shrink-0 whitespace-nowrap ${
               hasUnsavedChanges
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white'
+                ? 'bg-[#2563EB] hover:bg-blue-700 text-white ring-2 ring-blue-500/30'
                 : isSaved
                   ? 'bg-emerald-600 text-white'
                   : 'bg-slate-100 text-slate-400 cursor-not-allowed'
@@ -406,22 +430,24 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
             ) : (
               <Save className="w-3.5 h-3.5 flex-shrink-0" />
             )}
-            <span className="whitespace-nowrap">{isSaving ? 'Saving...' : isSaved ? 'Saved' : 'Save Changes'}</span>
+            <span className="whitespace-nowrap">
+              {isSaving ? 'Saving...' : isSaved ? 'Saved' : hasUnsavedChanges ? `Save Changes (${changedKeys.length})` : 'Save Changes'}
+            </span>
           </motion.button>
         </div>
       </div>
 
-      <div className="space-y-3">
-        <div className="relative w-full sm:max-w-xs">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-blue-600">
-            <Search className="w-4 h-4 stroke-[2]" />
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="relative w-full sm:w-72">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+            <Search className="w-3.5 h-3.5" />
           </span>
           <input
             type="text"
             placeholder="Search parameter..."
             value={searchFilter}
             onChange={(e) => handleSearchChange(e.target.value)}
-            className="w-full h-10 pl-10 pr-9 bg-white border border-slate-200 rounded-xl text-xs placeholder:text-slate-400 text-slate-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs placeholder:text-slate-400 text-slate-800 shadow-2xs outline-none focus:border-blue-500 transition"
           />
           {searchFilter && (
             <button
@@ -436,7 +462,7 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
         </div>
 
         {!searchFilter && (
-          <div className="flex items-center space-x-2 overflow-x-auto pb-1.5 scroll-smooth">
+          <div className="flex items-center gap-1.5 p-1 bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-xs overflow-x-auto scrollbar-none max-w-full">
             {CATEGORIES.map((cat) => {
               const Icon = cat.icon;
               const isActive = activeCategory === cat.id;
@@ -444,14 +470,21 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
                 <button
                   key={cat.id}
                   onClick={() => setActiveCategory(cat.id)}
-                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex-shrink-0 ${
+                  className={`relative flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors cursor-pointer flex-shrink-0 select-none ${
                     isActive
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-white border border-slate-200 text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+                      ? 'text-white'
+                      : 'text-slate-600 hover:text-slate-800 hover:bg-slate-100/60'
                   }`}
                 >
-                  <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                  <span className="whitespace-nowrap">{cat.label}</span>
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeSettingsCategory"
+                      className="absolute inset-0 bg-[#2563EB] rounded-xl shadow-xs"
+                      transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+                    />
+                  )}
+                  <Icon className={`relative z-10 w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                  <span className="relative z-10 whitespace-nowrap">{cat.label}</span>
                 </button>
               );
             })}
@@ -459,245 +492,280 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
         )}
       </div>
 
-      <div className="relative grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 min-h-[140px]">
+      <div className="relative min-h-[160px]">
         <EcgActionLoader isLoading={isSaving} text="Saving configuration..." />
-        {filteredParameters.length === 0 ? (
-          <div className="col-span-full bg-white rounded-2xl p-12 text-center border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]">
-            <Search className="w-8 h-8 text-slate-300 mx-auto mb-2 stroke-[1.5]" />
-            <p className="text-sm font-bold text-slate-800">No parameters found</p>
-            <p className="text-xs text-slate-400 mt-1">Try searching for keywords like quota, pin, or whatsapp.</p>
-          </div>
-        ) : (
-          filteredParameters.map((meta) => {
-            const val = formData[meta.key];
-            const isDirty = formData[meta.key] !== config[meta.key];
+        <AnimatePresence mode="popLayout">
+          {filteredParameters.length === 0 ? (
+            <motion.div
+              key="empty-params"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="bg-white rounded-2xl p-12 text-center border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]"
+            >
+              <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-3 shadow-2xs border border-blue-100/60">
+                <Search className="w-6 h-6 stroke-[1.8]" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-800">No parameters found</h4>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                No clinic parameters matched "{searchFilter}". Try searching for keywords like quota, pin, or whatsapp.
+              </p>
+            </motion.div>
+          ) : (
+            <motion.div
+              key={activeCategory + (searchFilter || '')}
+              variants={staggerContainer}
+              initial="hidden"
+              animate="visible"
+              className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5"
+            >
+              {filteredParameters.map((meta) => {
+                const val = formData[meta.key];
+                const isDirty = formData[meta.key] !== config[meta.key];
 
-            return (
-              <motion.div
-                key={meta.key}
-                whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
-                transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-                className={`bg-white rounded-2xl p-5 border shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between transition-colors ${
-                  isDirty
-                    ? 'border-blue-400 bg-blue-50/[0.03]'
-                    : 'border-slate-100 hover:border-slate-200'
-                }`}
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                        <h3 className="text-sm font-bold text-slate-800">{meta.name}</h3>
-                        {isDirty && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-600">
-                            Modified
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-400 leading-relaxed">
-                        {meta.description}
-                      </p>
-                    </div>
+                return (
+                  <motion.div
+                    key={meta.key}
+                    variants={fadeScale}
+                    layout
+                    whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
+                    transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+                    className={`bg-white rounded-2xl p-5 border shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between transition-colors ${
+                      isDirty
+                        ? 'border-blue-400 bg-blue-50/[0.04] ring-1 ring-blue-400/20'
+                        : 'border-slate-100 hover:border-slate-200'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                            <h3 className="text-sm font-bold text-slate-800">{meta.name}</h3>
+                            {isDirty && (
+                              <motion.span
+                                initial={{ scale: 0.8 }}
+                                animate={{ scale: 1 }}
+                                className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-600 border border-blue-200/60 shadow-2xs"
+                              >
+                                Modified
+                              </motion.span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400 leading-relaxed">
+                            {meta.description}
+                          </p>
+                        </div>
 
-                    <span
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${
-                        meta.paramType === 'Control Parameter'
-                          ? 'bg-purple-50 text-purple-700 border border-purple-100'
-                          : 'bg-blue-50 text-blue-600 border border-blue-100'
-                      }`}
-                    >
-                      {meta.paramType === 'Control Parameter' ? 'Control Rule' : 'Setting'}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 mb-2">
-                    {meta.uiWidget === 'toggle' && (
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/80">
-                        <span className="text-xs font-semibold text-slate-800">
-                          {val ? 'Enabled' : 'Disabled'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleFieldChange(meta.key, !val)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
-                            val ? 'bg-blue-600' : 'bg-slate-300'
+                        <span
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${
+                            meta.paramType === 'Control Parameter'
+                              ? 'bg-purple-50 text-purple-700 border border-purple-100'
+                              : 'bg-blue-50 text-blue-600 border border-blue-100'
                           }`}
                         >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              val ? 'translate-x-6' : 'translate-x-1'
-                            }`}
-                          />
-                        </button>
+                          {meta.paramType === 'Control Parameter' ? 'Control Rule' : 'Setting'}
+                        </span>
                       </div>
-                    )}
 
-                    {meta.uiWidget === 'number' && (
-                      <div className="flex items-center space-x-3">
-                        <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const curr = Number(val) || 0;
-                              const min = meta.min ?? 0;
-                              if (curr > min) handleFieldChange(meta.key, curr - 1);
-                            }}
-                            className="px-3.5 py-2 hover:bg-slate-100 font-bold text-slate-600 transition cursor-pointer text-sm"
-                          >
-                            -
-                          </button>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={val === undefined || val === null ? '' : String(val)}
-                            onKeyDown={(e) => {
-                              if (
-                                !/[0-9]/.test(e.key) &&
-                                !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter', 'Escape'].includes(e.key) &&
-                                !e.ctrlKey &&
-                                !e.metaKey
-                              ) {
-                                e.preventDefault();
-                              }
-                            }}
-                            onChange={(e) => {
-                              const digitsOnly = e.target.value.replace(/[^0-9]/g, '');
-                              const numVal = digitsOnly === '' ? (meta.min ?? 0) : Number(digitsOnly);
-                              const max = meta.max ?? 9999;
-                              handleFieldChange(meta.key, Math.min(max, numVal));
-                            }}
-                            className="w-16 text-center text-xs font-bold py-2 focus:outline-none text-slate-800"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const curr = Number(val) || 0;
-                              const max = meta.max ?? 9999;
-                              if (curr < max) handleFieldChange(meta.key, curr + 1);
-                            }}
-                            className="px-3.5 py-2 hover:bg-slate-100 font-bold text-slate-600 transition cursor-pointer text-sm"
-                          >
-                            +
-                          </button>
-                        </div>
-                        {meta.min !== undefined && meta.max !== undefined && (
-                          <span className="text-xs text-slate-400 font-medium">
-                            Range: {meta.min} – {meta.max}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {meta.uiWidget === 'select' && (
-                      <CustomDropdownInput
-                        value={val}
-                        options={meta.options || []}
-                        isNumeric={typeof DEFAULT_APP_CONFIG[meta.key] === 'number'}
-                        placeholder={`Enter custom value or choose preset...`}
-                        onChange={(newVal) => handleFieldChange(meta.key, newVal)}
-                      />
-                    )}
-
-                    {(meta.uiWidget === 'text' || meta.uiWidget === 'phone') && (
-                      <input
-                        type={meta.uiWidget === 'phone' ? 'tel' : 'text'}
-                        value={String(val ?? '')}
-                        onChange={(e) => handleFieldChange(meta.key, e.target.value)}
-                        placeholder={`Enter ${meta.name}...`}
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
-                    )}
-
-                    {meta.uiWidget === 'textarea' && (
-                      <div className="space-y-1.5">
-                        <textarea
-                          rows={2}
-                          value={String(val ?? '')}
-                          onChange={(e) => handleFieldChange(meta.key, e.target.value)}
-                          className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-                    )}
-
-                    {meta.uiWidget === 'file' && (
-                      <div className="space-y-3">
-                        <input
-                          ref={(el) => {
-                            fileInputRefs.current[meta.key] = el;
-                          }}
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleFileUpload(meta.key, e)}
-                          className="hidden"
-                        />
-
-                        {val ? (
-                          <div className="flex items-center space-x-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                            <div className="w-14 h-14 rounded-xl border border-slate-200 bg-white overflow-hidden flex items-center justify-center p-1 flex-shrink-0">
-                              <img
-                                src={String(val)}
-                                alt={meta.name}
-                                className="w-full h-full object-contain"
+                      <div className="mt-4 mb-2">
+                        {meta.uiWidget === 'toggle' && (
+                          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                            <span className="text-xs font-semibold text-slate-800">
+                              {val ? 'Enabled' : 'Disabled'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleFieldChange(meta.key, !val)}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer p-0.5 shadow-2xs ${
+                                val ? 'bg-[#2563EB]' : 'bg-slate-300'
+                              }`}
+                            >
+                              <motion.span
+                                layout
+                                transition={{ type: 'spring', damping: 25, stiffness: 500 }}
+                                className={`block h-5 w-5 rounded-full bg-white shadow-xs ${
+                                  val ? 'translate-x-5' : 'translate-x-0'
+                                }`}
                               />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <span className="text-xs font-bold text-slate-800 block truncate">
-                                {meta.key === 'prescription_page_url'
-                                  ? 'Prescription Page Uploaded'
-                                  : 'Logo Uploaded'}
-                              </span>
-                              <span className="text-[11px] text-slate-400">
-                                {meta.key === 'prescription_page_url'
-                                  ? 'Used on prescription print layout & letterhead'
-                                  : 'Used on header & prescription prints'}
-                              </span>
-                            </div>
-                            <div className="flex items-center space-x-1.5">
-                              <button
-                                type="button"
-                                onClick={() => fileInputRefs.current[meta.key]?.click()}
-                                className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg text-xs font-semibold text-slate-800 transition cursor-pointer"
-                              >
-                                Change
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleFieldChange(meta.key, '')}
-                                className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg transition cursor-pointer"
-                                title="Remove logo"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
+                            </button>
                           </div>
-                        ) : (
-                          <div
-                            onClick={() => fileInputRefs.current[meta.key]?.click()}
-                            className="border-2 border-dashed border-slate-200 hover:border-blue-600 rounded-xl p-4 text-center cursor-pointer transition-colors bg-slate-50/60 hover:bg-blue-50/20"
-                          >
-                            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-2">
-                              <Upload className="w-4 h-4 stroke-[2]" />
+                        )}
+
+                        {meta.uiWidget === 'number' && (
+                          <div className="flex items-center space-x-3">
+                            <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                              <motion.button
+                                whileTap={{ scale: 0.92 }}
+                                type="button"
+                                onClick={() => {
+                                  const curr = Number(val) || 0;
+                                  const min = meta.min ?? 0;
+                                  if (curr > min) handleFieldChange(meta.key, curr - 1);
+                                }}
+                                className="px-3.5 py-2 hover:bg-slate-100 font-bold text-slate-600 transition cursor-pointer text-sm select-none"
+                              >
+                                -
+                              </motion.button>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={val === undefined || val === null ? '' : String(val)}
+                                onKeyDown={(e) => {
+                                  if (
+                                    !/[0-9]/.test(e.key) &&
+                                    !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter', 'Escape'].includes(e.key) &&
+                                    !e.ctrlKey &&
+                                    !e.metaKey
+                                  ) {
+                                    e.preventDefault();
+                                  }
+                                }}
+                                onChange={(e) => {
+                                  const digitsOnly = e.target.value.replace(/[^0-9]/g, '');
+                                  const numVal = digitsOnly === '' ? (meta.min ?? 0) : Number(digitsOnly);
+                                  const max = meta.max ?? 9999;
+                                  handleFieldChange(meta.key, Math.min(max, numVal));
+                                }}
+                                className="w-16 text-center text-xs font-bold py-2 focus:outline-none text-slate-800"
+                              />
+                              <motion.button
+                                whileTap={{ scale: 0.92 }}
+                                type="button"
+                                onClick={() => {
+                                  const curr = Number(val) || 0;
+                                  const max = meta.max ?? 9999;
+                                  if (curr < max) handleFieldChange(meta.key, curr + 1);
+                                }}
+                                className="px-3.5 py-2 hover:bg-slate-100 font-bold text-slate-600 transition cursor-pointer text-sm select-none"
+                              >
+                                +
+                              </motion.button>
                             </div>
-                            <span className="text-xs font-bold text-slate-800 block">
-                              {meta.key === 'prescription_page_url'
-                                ? 'Choose Prescription Printed Page'
-                                : 'Choose Clinic Logo'}
-                            </span>
-                            <span className="text-[11px] text-slate-400 mt-0.5 block">
-                              {meta.key === 'prescription_page_url'
-                                ? 'PNG, JPG, SVG or WebP letterhead or prescription pad'
-                                : 'PNG, JPG, SVG or WebP from your device'}
-                            </span>
+                            {meta.min !== undefined && meta.max !== undefined && (
+                              <span className="text-xs text-slate-400 font-medium">
+                                Range: {meta.min} – {meta.max}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {meta.uiWidget === 'select' && (
+                          <CustomDropdownInput
+                            value={val}
+                            options={meta.options || []}
+                            isNumeric={typeof DEFAULT_APP_CONFIG[meta.key] === 'number'}
+                            placeholder={`Enter custom value or choose preset...`}
+                            onChange={(newVal) => handleFieldChange(meta.key, newVal)}
+                          />
+                        )}
+
+                        {(meta.uiWidget === 'text' || meta.uiWidget === 'phone') && (
+                          <input
+                            type={meta.uiWidget === 'phone' ? 'tel' : 'text'}
+                            value={String(val ?? '')}
+                            onChange={(e) => handleFieldChange(meta.key, e.target.value)}
+                            placeholder={`Enter ${meta.name}...`}
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        )}
+
+                        {meta.uiWidget === 'textarea' && (
+                          <div className="space-y-1.5">
+                            <textarea
+                              rows={2}
+                              value={String(val ?? '')}
+                              onChange={(e) => handleFieldChange(meta.key, e.target.value)}
+                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                        )}
+
+                        {meta.uiWidget === 'file' && (
+                          <div className="space-y-3">
+                            <input
+                              ref={(el) => {
+                                fileInputRefs.current[meta.key] = el;
+                              }}
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleFileUpload(meta.key, e)}
+                              className="hidden"
+                            />
+
+                            {val ? (
+                              <div className="flex items-center space-x-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                                <div className="w-14 h-14 rounded-xl border border-slate-200 bg-white overflow-hidden flex items-center justify-center p-1 flex-shrink-0">
+                                  <img
+                                    src={String(val)}
+                                    alt={meta.name}
+                                    className="w-full h-full object-contain"
+                                  />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-xs font-bold text-slate-800 block truncate">
+                                    {meta.key === 'prescription_page_url'
+                                      ? 'Prescription Page Uploaded'
+                                      : 'Logo Uploaded'}
+                                  </span>
+                                  <span className="text-[11px] text-slate-400">
+                                    {meta.key === 'prescription_page_url'
+                                      ? 'Used on prescription print layout & letterhead'
+                                      : 'Used on header & prescription prints'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center space-x-1.5">
+                                  <motion.button
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    type="button"
+                                    onClick={() => fileInputRefs.current[meta.key]?.click()}
+                                    className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg text-xs font-semibold text-slate-800 transition cursor-pointer"
+                                  >
+                                    Change
+                                  </motion.button>
+                                  <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    type="button"
+                                    onClick={() => handleFieldChange(meta.key, '')}
+                                    className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg transition cursor-pointer"
+                                    title="Remove logo"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </motion.button>
+                                </div>
+                              </div>
+                            ) : (
+                              <motion.div
+                                whileHover={{ scale: 1.01 }}
+                                onClick={() => fileInputRefs.current[meta.key]?.click()}
+                                className="border-2 border-dashed border-slate-200 hover:border-blue-600 rounded-xl p-4 text-center cursor-pointer transition-colors bg-slate-50/60 hover:bg-blue-50/20"
+                              >
+                                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-2">
+                                  <Upload className="w-4 h-4 stroke-[2]" />
+                                </div>
+                                <span className="text-xs font-bold text-slate-800 block">
+                                  {meta.key === 'prescription_page_url'
+                                    ? 'Choose Prescription Printed Page'
+                                    : 'Choose Clinic Logo'}
+                                </span>
+                                <span className="text-[11px] text-slate-400 mt-0.5 block">
+                                  {meta.key === 'prescription_page_url'
+                                    ? 'PNG, JPG, SVG or WebP letterhead or prescription pad'
+                                    : 'PNG, JPG, SVG or WebP from your device'}
+                                </span>
+                              </motion.div>
+                            )}
                           </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })
-        )}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {(activeCategory === 'Clinic Identity & Branding' ||
@@ -705,8 +773,9 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
           searchFilter.toLowerCase().includes(k)
         )) && (
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
+          variants={fadeScale}
+          initial="hidden"
+          animate="visible"
           className="pt-2"
         >
           <PrescriptionTemplateCalibrator
@@ -727,9 +796,9 @@ export function SettingsView({ isMobile = false, onLogout, searchQuery = '', onS
 
       {onLogout && (
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
+          variants={fadeScale}
+          initial="hidden"
+          animate="visible"
           className="pt-6 border-t border-slate-100"
         >
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
