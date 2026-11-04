@@ -18,6 +18,7 @@ export interface Patient {
   priority?: 'Normal' | 'Urgent';
   visitType?: 'Walk-in' | 'WhatsApp' | 'WhatsApp Link' | string;
   cancellationReason?: string;
+  notes?: string;
   smsSent?: boolean;
   lastSmsType?: string;
 }

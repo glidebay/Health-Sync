@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus,
   Users,
@@ -9,6 +9,15 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  Clock,
+  Search,
+  X,
+  CheckCircle2,
+  AlertTriangle,
+  UserCheck,
+  Globe,
+  Sparkles,
+  Stethoscope,
 } from 'lucide-react';
 import { Patient } from '@/types';
 import { NumberedPagination } from '@/components/ui/pagination';
@@ -17,7 +26,8 @@ import { CancelModal } from './CancelModal';
 import { formatPatientToken } from '@/lib/utils';
 import { fetchPatientAppointmentsFromDb } from '@/lib/supabaseService';
 import { supabase } from '@/lib/supabaseClient';
-import EcgActionLoader from '@/components/loading/EcgActionLoader';
+import { EcgActionLoader } from '@/components/loading/EcgActionLoader';
+import { AnimatedCounter } from '@/components/common/AnimatedCounter';
 
 interface QueueListProps {
   queue: Patient[];
@@ -37,9 +47,6 @@ interface QueueListProps {
   itemsPerPage?: number;
 }
 
-/**
- * Helper: Today's date in Indian Standard Time (Asia/Kolkata) as YYYY-MM-DD
- */
 function getTodayIST(): string {
   try {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
@@ -49,9 +56,6 @@ function getTodayIST(): string {
   }
 }
 
-/**
- * Helper: Formats YYYY-MM-DD into a friendly label (e.g., "Today", "Wed, Oct 28")
- */
 function formatDisplayDate(dateStr: string, todayIST: string): string {
   try {
     if (dateStr === todayIST) return 'Today';
@@ -67,9 +71,6 @@ function formatDisplayDate(dateStr: string, todayIST: string): string {
   }
 }
 
-/**
- * Helper: Shifts a YYYY-MM-DD date by N days
- */
 function shiftDate(dateStr: string, days: number): string {
   try {
     const [y, m, d] = dateStr.split('-').map(Number);
@@ -81,11 +82,44 @@ function shiftDate(dateStr: string, days: number): string {
   }
 }
 
+function getInitials(name: string): string {
+  if (!name) return 'PT';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.04,
+    },
+  },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 12, scale: 0.98 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      duration: 0.28,
+      ease: [0.16, 1, 0.3, 1] as const,
+    },
+  },
+};
+
+type FilterType = 'All' | 'Waiting' | 'In Progress' | 'Completed' | 'Urgent' | 'Walk-in' | 'Online';
+
 export function QueueList({
   queue,
   onRegisterWalkin,
   onCancelAppointment,
   onReschedulePatient,
+  onStartConsultation,
   itemsPerPage = 10,
 }: QueueListProps) {
   const todayIST = useMemo(() => getTodayIST(), []);
@@ -93,16 +127,16 @@ export function QueueList({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [dbPatients, setDbPatients] = useState<Patient[] | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<FilterType>('All');
 
   const [selectedPatientForReschedule, setSelectedPatientForReschedule] = useState<Patient | null>(null);
   const [selectedPatientForCancel, setSelectedPatientForCancel] = useState<Patient | null>(null);
 
-  // Reset page when date changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedDate]);
+  }, [selectedDate, searchQuery, filterStatus]);
 
-  // Primary data loader querying Supabase RPC for the selected date
   const loadData = useCallback(
     async (silent: boolean = false) => {
       if (!silent) setIsLoading(true);
@@ -124,7 +158,6 @@ export function QueueList({
   useEffect(() => {
     loadData();
 
-    // High-performance continuous live polling every 2.5s
     const interval = setInterval(() => {
       loadData(true);
     }, 2500);
@@ -143,7 +176,6 @@ export function QueueList({
     };
   }, [loadData]);
 
-  // Real-time synchronization: listen for appointment changes
   useEffect(() => {
     const channel = supabase
       .channel('realtime-queue-list-date')
@@ -161,16 +193,63 @@ export function QueueList({
     };
   }, [loadData]);
 
-  // Filter out cancelled by default and put completed at the end
-  const currentPatients = useMemo(() => {
-    const list = dbPatients !== null ? dbPatients : queue;
-    const active = list.filter((p) => p.status !== 'Cancelled');
-    const notCompleted = active.filter((p) => p.status !== 'Completed');
-    const completed = active.filter((p) => p.status === 'Completed');
-    return [...notCompleted, ...completed];
+  const rawPatients = useMemo(() => {
+    return dbPatients !== null ? dbPatients : queue;
   }, [dbPatients, queue]);
 
-  const totalPages = Math.max(1, Math.ceil(currentPatients.length / itemsPerPage));
+  const activePatients = useMemo(() => {
+    return rawPatients.filter((p) => p.status !== 'Cancelled');
+  }, [rawPatients]);
+
+  const totalCount = activePatients.length;
+  const waitingCount = useMemo(() => activePatients.filter((p) => p.status === 'Waiting').length, [activePatients]);
+  const inProgressCount = useMemo(() => activePatients.filter((p) => p.status === 'In Progress').length, [activePatients]);
+  const completedCount = useMemo(() => activePatients.filter((p) => p.status === 'Completed').length, [activePatients]);
+  const urgentCount = useMemo(() => activePatients.filter((p) => p.priority === 'Urgent').length, [activePatients]);
+  const walkinCount = useMemo(() => activePatients.filter((p) => {
+    const vt = (p.visitType || '').toLowerCase();
+    return !vt.includes('online') && !vt.includes('whatsapp');
+  }).length, [activePatients]);
+  const onlineCount = useMemo(() => activePatients.filter((p) => {
+    const vt = (p.visitType || '').toLowerCase();
+    return vt.includes('online') || vt.includes('whatsapp');
+  }).length, [activePatients]);
+
+  const filteredPatients = useMemo(() => {
+    return activePatients.filter((p) => {
+      if (filterStatus === 'Waiting' && p.status !== 'Waiting') return false;
+      if (filterStatus === 'In Progress' && p.status !== 'In Progress') return false;
+      if (filterStatus === 'Completed' && p.status !== 'Completed') return false;
+      if (filterStatus === 'Urgent' && p.priority !== 'Urgent') return false;
+      if (filterStatus === 'Walk-in') {
+        const vt = (p.visitType || '').toLowerCase();
+        if (vt.includes('online') || vt.includes('whatsapp')) return false;
+      }
+      if (filterStatus === 'Online') {
+        const vt = (p.visitType || '').toLowerCase();
+        if (!vt.includes('online') && !vt.includes('whatsapp')) return false;
+      }
+
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      const token = formatPatientToken(p).toLowerCase();
+      const matchName = p.name.toLowerCase().includes(q);
+      const matchPhone = p.phone ? p.phone.toLowerCase().includes(q) : false;
+      const matchToken = token.includes(q);
+      const matchType = p.visitType ? p.visitType.toLowerCase().includes(q) : false;
+      const matchNotes = p.notes ? p.notes.toLowerCase().includes(q) : false;
+
+      return matchName || matchPhone || matchToken || matchType || matchNotes;
+    });
+  }, [activePatients, filterStatus, searchQuery]);
+
+  const sortedPatients = useMemo(() => {
+    const notCompleted = filteredPatients.filter((p) => p.status !== 'Completed');
+    const completed = filteredPatients.filter((p) => p.status === 'Completed');
+    return [...notCompleted, ...completed];
+  }, [filteredPatients]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedPatients.length / itemsPerPage));
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -180,41 +259,52 @@ export function QueueList({
 
   const paginatedQueue = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
-    return currentPatients.slice(start, start + itemsPerPage);
-  }, [currentPatients, currentPage, itemsPerPage]);
+    return sortedPatients.slice(start, start + itemsPerPage);
+  }, [sortedPatients, currentPage, itemsPerPage]);
+
+  const firstWaitingId = useMemo(() => {
+    return sortedPatients.find((p) => p.status === 'Waiting')?.id;
+  }, [sortedPatients]);
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Top Header with Date Pill & Register Walk-in */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="space-y-5 pb-10">
+      <EcgActionLoader isLoading={isLoading} fullscreen={true} text="Syncing appointments..." />
+
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold text-[#16191E]">Assistant Queue Oversight</h2>
-          <p className="text-xs text-[#8A909D]">
-            Coordinate incoming walk-in patients and manage token allocations
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
+              Assistant Desk & Reception
+            </h2>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-semibold border border-blue-200/60 shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+              Live Reception Desk
+            </div>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Coordinate incoming walk-in patients, manage token allocations, and reschedule slots
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
-          {/* Date Picker Pill from Image */}
-          <div className="relative flex items-center bg-[#F8F9FB] hover:bg-[#F0F2F5] rounded-2xl border border-[#ECEEF2] p-1 shadow-2xs transition">
+          <div className="relative flex items-center bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/80 p-1 shadow-xs hover:border-slate-300 transition-all">
             <button
               type="button"
               onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
-              className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-white text-gray-500 hover:text-[#16191E] transition cursor-pointer"
+              className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
               title="Previous day"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
 
             <div className="relative flex items-center gap-2 px-2.5 py-0.5 cursor-pointer">
-              <Calendar className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
-              <span className="text-xs font-bold text-[#16191E] select-none whitespace-nowrap">
+              <Calendar className="w-4 h-4 text-blue-600 flex-shrink-0" />
+              <span className="text-xs font-bold text-slate-800 select-none whitespace-nowrap">
                 {formatDisplayDate(selectedDate, todayIST)}
               </span>
-              <span className="text-xs font-normal text-[#8A909D] select-none whitespace-nowrap">
+              <span className="text-xs font-medium text-slate-400 select-none whitespace-nowrap">
                 {selectedDate}
               </span>
-              {/* Native date picker invisible overlay */}
               <input
                 type="date"
                 value={selectedDate}
@@ -227,19 +317,29 @@ export function QueueList({
             <button
               type="button"
               onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
-              className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-white text-gray-500 hover:text-[#16191E] transition cursor-pointer"
+              className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
               title="Next day"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
+          {selectedDate !== todayIST && (
+            <button
+              type="button"
+              onClick={() => setSelectedDate(todayIST)}
+              className="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition cursor-pointer shadow-2xs"
+            >
+              Today
+            </button>
+          )}
+
           {onRegisterWalkin && (
             <motion.button
-              whileHover={{ scale: 1.04, y: -1 }}
-              whileTap={{ scale: 0.96 }}
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
               onClick={onRegisterWalkin}
-              className="bg-[#2563EB] hover:bg-blue-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center space-x-1.5 shadow-sm self-start sm:self-auto"
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-xs px-4 py-2.5 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center space-x-1.5 self-start sm:self-auto"
             >
               <Plus className="w-4 h-4" />
               <span>Register Walk-in</span>
@@ -248,132 +348,339 @@ export function QueueList({
         </div>
       </div>
 
-      {/* Patient Cards Grid with Scoped ECG Action Loader */}
-      <div className="relative min-h-[180px]">
-        <EcgActionLoader isLoading={isLoading} fullscreen={true} text="Syncing appointments..." />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-          {paginatedQueue.length === 0 ? (
-            <div className="col-span-full bg-white rounded-2xl p-10 border border-[#ECEEF2] text-center shadow-xs">
-              <Users className="w-10 h-10 text-gray-300 mx-auto mb-3 stroke-[1.5]" />
-              <h3 className="text-sm font-bold text-[#16191E]">
-                No patients found for {formatDisplayDate(selectedDate, todayIST)}
-              </h3>
-              <p className="text-xs text-[#8A909D] mt-1 max-w-sm mx-auto">
-                Use the &quot;Register Walk-in&quot; button above or WhatsApp self-service booking to add patients.
-              </p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs hover:shadow-md hover:border-slate-200 transition-all duration-300">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Total Bookings</span>
+            <div className="w-9 h-9 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100/60">
+              <Users className="w-4 h-4" />
             </div>
-          ) : (
-          paginatedQueue.map((p) => {
-            const isWaiting = p.status === 'Waiting';
-            const tokenDisplay = formatPatientToken(p);
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
+              <AnimatedCounter target={totalCount} />
+            </span>
+            <span className="text-[11px] font-medium text-slate-400">for date</span>
+          </div>
+        </div>
 
-            return (
-              <motion.div
-                key={p.id}
-                whileHover={{ y: -2 }}
-                className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex items-center justify-between gap-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center space-x-2">
-                    <span className="font-bold text-sm text-[#16191E] truncate">{p.name}</span>
-                    <span className="text-xs text-[#8A909D] font-medium flex-shrink-0">
-                      ({tokenDisplay})
-                    </span>
-                    {p.priority === 'Urgent' && (
-                      <span className="bg-amber-100 text-amber-800 text-[9px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0">
-                        Urgent
-                      </span>
-                    )}
-                  </div>
+        <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs hover:shadow-md hover:border-slate-200 transition-all duration-300">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Waiting Room</span>
+            <div className="w-9 h-9 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100/60">
+              <Clock className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
+              <AnimatedCounter target={waitingCount} />
+            </span>
+            <span className="text-[11px] font-medium text-amber-600">in reception</span>
+          </div>
+        </div>
 
-                  <p className="text-xs text-[#8A909D] font-medium mt-1 truncate flex items-center flex-wrap gap-1">
-                    <span>
-                      {p.age} Yrs • {p.gender}
-                    </span>
-                    {p.phone && (
-                      <>
-                        <span>•</span>
-                        <a
-                          href={`tel:${p.phone}`}
-                          className="inline-flex items-center gap-1 text-[#5E6470] hover:text-[#2563EB] transition"
-                        >
-                          <Phone className="w-3 h-3 text-[#2563EB]" />
-                          {p.phone}
-                        </a>
-                      </>
-                    )}
-                    <span>• Slot: {p.time}</span>
-                  </p>
+        <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs hover:shadow-md hover:border-slate-200 transition-all duration-300">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Walk-in Patients</span>
+            <div className="w-9 h-9 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100/60">
+              <UserCheck className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
+              <AnimatedCounter target={walkinCount} />
+            </span>
+            <span className="text-[11px] font-medium text-indigo-600">direct desk</span>
+          </div>
+        </div>
 
-                  <div className="flex items-center flex-wrap gap-1.5 mt-2">
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${
-                        p.status === 'Completed'
-                          ? 'bg-gray-100 text-gray-600'
-                          : p.status === 'In Progress'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-blue-50 text-blue-700'
-                      }`}
-                    >
-                      {p.status}
-                    </span>
-
-                    {p.visitType && (
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 flex items-center gap-1 ${
-                          p.visitType.toLowerCase().includes('whatsapp') ||
-                          p.visitType.toLowerCase().includes('online')
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                        }`}
-                      >
-                        {p.visitType.toLowerCase().includes('whatsapp') ||
-                        p.visitType.toLowerCase().includes('online')
-                          ? 'Online'
-                          : 'Walk-in'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {isWaiting && (
-                  <div className="flex items-center space-x-2 flex-shrink-0">
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setSelectedPatientForCancel(p)}
-                      className="text-xs font-semibold px-3 py-1.5 border border-rose-200 text-rose-600 rounded-xl hover:bg-rose-50 transition cursor-pointer"
-                    >
-                      Cancel
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setSelectedPatientForReschedule(p)}
-                      className="text-xs font-semibold px-3 py-1.5 border border-blue-200 text-[#2563EB] rounded-xl hover:bg-blue-50 transition cursor-pointer"
-                    >
-                      Reschedule
-                    </motion.button>
-                  </div>
-                )}
-              </motion.div>
-            );
-          })
-        )}
+        <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs hover:shadow-md hover:border-slate-200 transition-all duration-300">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Urgent Triage</span>
+            <div className="w-9 h-9 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100/60">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
+              <AnimatedCounter target={urgentCount} />
+            </span>
+            <span className="text-[11px] font-medium text-rose-600">priority</span>
+          </div>
         </div>
       </div>
 
-      {/* Pagination */}
+      <div className="bg-white rounded-3xl p-4 border border-slate-100 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by patient name, token ID, phone, or visit type..."
+            className="w-full pl-10 pr-9 py-2 rounded-2xl bg-slate-50/80 border border-slate-200/70 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none flex-wrap">
+          {(['All', 'Waiting', 'In Progress', 'Completed', 'Urgent', 'Walk-in', 'Online'] as const).map((status) => {
+            const count =
+              status === 'All'
+                ? totalCount
+                : status === 'Waiting'
+                ? waitingCount
+                : status === 'In Progress'
+                ? inProgressCount
+                : status === 'Completed'
+                ? completedCount
+                : status === 'Urgent'
+                ? urgentCount
+                : status === 'Walk-in'
+                ? walkinCount
+                : onlineCount;
+
+            const isActive = filterStatus === status;
+
+            return (
+              <button
+                key={status}
+                onClick={() => setFilterStatus(status)}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
+                    : 'bg-slate-100/80 hover:bg-slate-200/80 text-slate-600'
+                }`}
+              >
+                <span>{status}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-white text-slate-500 border border-slate-200/50'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="relative min-h-[220px]">
+        {sortedPatients.length === 0 ? (
+          <div className="bg-white rounded-3xl p-10 sm:p-12 border border-slate-100 text-center shadow-xs">
+            <div className="w-14 h-14 rounded-3xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-3 shadow-2xs border border-blue-100/60">
+              <Users className="w-7 h-7 stroke-[1.75]" />
+            </div>
+            <h3 className="text-base font-bold text-slate-800">
+              {searchQuery || filterStatus !== 'All'
+                ? 'No matching patients found'
+                : `No patients registered for ${formatDisplayDate(selectedDate, todayIST)}`}
+            </h3>
+            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+              {searchQuery || filterStatus !== 'All'
+                ? 'Try adjusting your search terms or clearing status filters.'
+                : 'Click "Register Walk-in" above or encourage patients to book via WhatsApp self-service.'}
+            </p>
+            {searchQuery || filterStatus !== 'All' ? (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setFilterStatus('All');
+                }}
+                className="mt-4 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 px-3.5 py-1.5 rounded-xl transition cursor-pointer"
+              >
+                Reset Filters
+              </button>
+            ) : onRegisterWalkin ? (
+              <button
+                onClick={onRegisterWalkin}
+                className="mt-4 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-xl transition cursor-pointer shadow-sm"
+              >
+                Register First Patient
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="show"
+            className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4"
+          >
+            <AnimatePresence mode="popLayout">
+              {paginatedQueue.map((p) => {
+                const isWaiting = p.status === 'Waiting';
+                const isInProgress = p.status === 'In Progress';
+                const isCompleted = p.status === 'Completed';
+                const tokenDisplay = formatPatientToken(p);
+                const isFirstWaiting = p.id === firstWaitingId && isWaiting;
+                const isOnline =
+                  (p.visitType || '').toLowerCase().includes('whatsapp') ||
+                  (p.visitType || '').toLowerCase().includes('online');
+
+                return (
+                  <motion.div
+                    key={p.id}
+                    layout
+                    variants={cardVariants}
+                    whileHover={{ y: -3, transition: { duration: 0.2 } }}
+                    className={`bg-white rounded-3xl p-4 sm:p-5 border transition-all duration-300 shadow-xs hover:shadow-md flex flex-col justify-between gap-3 ${
+                      isFirstWaiting
+                        ? 'border-amber-300/80 ring-1 ring-amber-300/40'
+                        : isInProgress
+                        ? 'border-emerald-300/80 ring-1 ring-emerald-300/40'
+                        : 'border-slate-100 hover:border-slate-200'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 font-bold flex items-center justify-center text-xs border border-blue-100/80 shadow-2xs flex-shrink-0">
+                            {getInitials(p.name)}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-bold text-sm text-slate-800 truncate">{p.name}</h4>
+                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/60 flex-shrink-0">
+                                {tokenDisplay}
+                              </span>
+                              {p.priority === 'Urgent' && (
+                                <span className="bg-rose-50 text-rose-700 border border-rose-200/70 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 flex-shrink-0">
+                                  <AlertTriangle className="w-2.5 h-2.5 text-rose-500" />
+                                  Urgent
+                                </span>
+                              )}
+                              {isFirstWaiting && (
+                                <span className="bg-amber-50 text-amber-700 border border-amber-200/80 text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs flex-shrink-0">
+                                  <Sparkles className="w-2.5 h-2.5 text-amber-500" />
+                                  Next in Line
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1 text-xs text-slate-400 font-medium flex-wrap">
+                              <span>
+                                {p.age} Yrs • {p.gender}
+                              </span>
+                              {p.phone && (
+                                <>
+                                  <span>•</span>
+                                  <a
+                                    href={`tel:${p.phone}`}
+                                    className="inline-flex items-center gap-1 text-slate-500 hover:text-blue-600 transition"
+                                  >
+                                    <Phone className="w-3 h-3 text-blue-500" />
+                                    <span>{p.phone}</span>
+                                  </a>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <span
+                            className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                              isCompleted
+                                ? 'bg-slate-100 text-slate-600 border-slate-200/60'
+                                : isInProgress
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
+                                : 'bg-amber-50 text-amber-700 border-amber-200/60'
+                            }`}
+                          >
+                            {p.status}
+                          </span>
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1 border ${
+                              isOnline
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
+                                : 'bg-indigo-50 text-indigo-700 border-indigo-200/60'
+                            }`}
+                          >
+                            {isOnline ? (
+                              <>
+                                <Globe className="w-2.5 h-2.5" />
+                                <span>Online</span>
+                              </>
+                            ) : (
+                              <>
+                                <UserCheck className="w-2.5 h-2.5" />
+                                <span>Walk-in</span>
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <Clock className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Slot: {p.time}</span>
+                        </div>
+
+                        {p.notes && (
+                          <div className="text-[11px] text-slate-400 italic truncate max-w-[200px]">
+                            {p.notes}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {isWaiting && (
+                      <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100 flex-shrink-0">
+                        <motion.button
+                          whileHover={{ scale: 1.04 }}
+                          whileTap={{ scale: 0.96 }}
+                          onClick={() => setSelectedPatientForCancel(p)}
+                          className="text-xs font-semibold px-3 py-1.5 border border-rose-200/80 text-rose-600 rounded-2xl hover:bg-rose-50 transition cursor-pointer"
+                        >
+                          Cancel
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.04 }}
+                          whileTap={{ scale: 0.96 }}
+                          onClick={() => setSelectedPatientForReschedule(p)}
+                          className="text-xs font-semibold px-3 py-1.5 border border-blue-200/80 text-blue-600 rounded-2xl hover:bg-blue-50 transition cursor-pointer"
+                        >
+                          Reschedule
+                        </motion.button>
+                        {onStartConsultation && (
+                          <motion.button
+                            whileHover={{ scale: 1.04 }}
+                            whileTap={{ scale: 0.96 }}
+                            onClick={() => onStartConsultation(p.id)}
+                            className="text-xs font-semibold px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl shadow-2xs hover:shadow-sm transition cursor-pointer flex items-center gap-1"
+                          >
+                            <Stethoscope className="w-3 h-3" />
+                            <span>Consult</span>
+                          </motion.button>
+                        )}
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </div>
+
       <NumberedPagination
         currentPage={currentPage}
         totalPages={totalPages}
         onPageChange={setCurrentPage}
-        totalItems={currentPatients.length}
+        totalItems={sortedPatients.length}
         itemsPerPage={itemsPerPage}
         itemName="patients"
       />
 
-      {/* Modals */}
       <CancelModal
         isOpen={!!selectedPatientForCancel}
         patient={selectedPatientForCancel}
@@ -387,7 +694,7 @@ export function QueueList({
       <RescheduleModal
         isOpen={!!selectedPatientForReschedule}
         patient={selectedPatientForReschedule}
-        queue={currentPatients.length > 0 ? currentPatients : queue}
+        queue={sortedPatients.length > 0 ? sortedPatients : queue}
         onClose={() => setSelectedPatientForReschedule(null)}
         onReschedulePatient={async (params) => {
           await onReschedulePatient(params);
