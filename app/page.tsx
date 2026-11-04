@@ -316,9 +316,7 @@ function DashboardContent() {
         setInventory(dbInventory);
       } else {
         const meds = await fetchMedicinesMaster();
-        if (meds.length > 0) {
-          setInventory(convertMasterToInventoryItems(meds));
-        }
+        setInventory(convertMasterToInventoryItems(meds));
       }
       if (dbDoctors && dbDoctors.length > 0) {
         setAvailableDoctors(dbDoctors);
@@ -349,9 +347,7 @@ function DashboardContent() {
             setInventory(dbInventory);
           } else {
             const meds = await fetchMedicinesMaster();
-            if (meds.length > 0) {
-              setInventory(convertMasterToInventoryItems(meds));
-            }
+            setInventory(convertMasterToInventoryItems(meds));
           }
           if (dbDoctors && dbDoctors.length > 0) {
             setAvailableDoctors(dbDoctors);
@@ -1128,8 +1124,8 @@ function DashboardContent() {
         }
         return item;
       })
-    );
-
+    );
+
     for (const p of currentPrescription) {
       dispenseFefo({
         medicineId: String(p.med.id),

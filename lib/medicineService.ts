@@ -20,360 +20,10 @@ const STORAGE_KEY_SUPPLIERS = 'healthsync_suppliers_v1';
 const STORAGE_KEY_PURCHASES = 'healthsync_purchases_v1';
 const STORAGE_KEY_MOVEMENTS = 'healthsync_movements_v1';
 
-export const INITIAL_SUPPLIERS: Supplier[] = [
-  {
-    id: 'sup-001',
-    name: 'Apex Pharma Distributors',
-    contactPerson: 'Rajesh Kumar',
-    email: 'orders@apexpharma.in',
-    phone: '+91 98450 12345',
-    address: 'Plot 45, Industrial Area, Phase II, Bengaluru',
-    gstin: '29ABCDE1234F1Z5',
-    lastPurchaseDate: '2026-10-15',
-    lastPurchasePrice: 18.5,
-  },
-  {
-    id: 'sup-002',
-    name: 'MediCare Lifesciences',
-    contactPerson: 'Sunita Sharma',
-    email: 'supply@medicarelife.com',
-    phone: '+91 98110 54321',
-    address: '12 Medical Square, Andheri East, Mumbai',
-    gstin: '27AABCM8765P1Z8',
-    lastPurchaseDate: '2026-10-20',
-    lastPurchasePrice: 42.0,
-  },
-  {
-    id: 'sup-003',
-    name: 'Global BioTech Logistics',
-    contactPerson: 'Vikram Patel',
-    email: 'support@globalbiotech.co',
-    phone: '+91 99002 98765',
-    address: '88 Tech Zone, GIDC, Ahmedabad',
-    gstin: '24AAACG9999K1Z2',
-    lastPurchaseDate: '2026-10-28',
-    lastPurchasePrice: 65.0,
-  },
-];
-
-export const INITIAL_MEDICINES: MedicineMaster[] = [
-  {
-    id: 'med-001',
-    sku: 'MED-PAR-650',
-    brandName: 'Dolo 650',
-    genericName: 'Paracetamol 650mg',
-    manufacturer: 'Micro Labs Ltd',
-    category: 'Analgesics & Antipyretics',
-    dosageForm: 'Tablet',
-    strength: '650 mg',
-    unit: 'Strips',
-    barcode: '8901112223334',
-    minimumStockLevel: 25,
-    sellingPrice: 32.0,
-    lastPurchasePrice: 18.5,
-    lastPurchaseDate: '2026-10-15',
-    totalStock: 85,
-    stockStatus: 'Available',
-    expiryStatus: 'Valid',
-    supplier: INITIAL_SUPPLIERS[0],
-    batches: [
-      {
-        id: 'bat-001-a',
-        medicineId: 'med-001',
-        batchNumber: 'DL26J01',
-        manufacturingDate: '2026-01-10',
-        expiryDate: '2027-12-31',
-        purchasePrice: 18.5,
-        sellingPrice: 32.0,
-        initialQuantity: 100,
-        availableQuantity: 50,
-        supplierId: 'sup-001',
-        supplierName: 'Apex Pharma Distributors',
-      },
-      {
-        id: 'bat-001-b',
-        medicineId: 'med-001',
-        batchNumber: 'DL26K04',
-        manufacturingDate: '2026-03-15',
-        expiryDate: '2028-02-28',
-        purchasePrice: 19.0,
-        sellingPrice: 32.0,
-        initialQuantity: 50,
-        availableQuantity: 35,
-        supplierId: 'sup-001',
-        supplierName: 'Apex Pharma Distributors',
-      },
-    ],
-  },
-  {
-    id: 'med-002',
-    sku: 'MED-PAN-040',
-    brandName: 'Pan 40',
-    genericName: 'Pantoprazole 40mg',
-    manufacturer: 'Alkem Laboratories',
-    category: 'Gastrointestinal',
-    dosageForm: 'Tablet',
-    strength: '40 mg',
-    unit: 'Strips',
-    barcode: '8904445556667',
-    minimumStockLevel: 20,
-    sellingPrice: 95.0,
-    lastPurchasePrice: 62.0,
-    lastPurchaseDate: '2026-09-12',
-    totalStock: 42,
-    stockStatus: 'Available',
-    expiryStatus: 'Valid',
-    supplier: INITIAL_SUPPLIERS[1],
-    batches: [
-      {
-        id: 'bat-002-a',
-        medicineId: 'med-002',
-        batchNumber: 'PN40-881',
-        manufacturingDate: '2025-11-01',
-        expiryDate: '2027-10-31',
-        purchasePrice: 62.0,
-        sellingPrice: 95.0,
-        initialQuantity: 60,
-        availableQuantity: 42,
-        supplierId: 'sup-002',
-        supplierName: 'MediCare Lifesciences',
-      },
-    ],
-  },
-  {
-    id: 'med-003',
-    sku: 'MED-AUG-625',
-    brandName: 'Augmentin 625 Duo',
-    genericName: 'Amoxicillin 500mg + Clavulanic Acid 125mg',
-    manufacturer: 'GlaxoSmithKline Pharmaceuticals',
-    category: 'Antibiotics',
-    dosageForm: 'Tablet',
-    strength: '625 mg',
-    unit: 'Strips',
-    barcode: '8907778889990',
-    minimumStockLevel: 15,
-    sellingPrice: 205.0,
-    lastPurchasePrice: 145.0,
-    lastPurchaseDate: '2026-10-05',
-    totalStock: 12,
-    stockStatus: 'Low Stock',
-    expiryStatus: 'Near Expiry',
-    supplier: INITIAL_SUPPLIERS[1],
-    batches: [
-      {
-        id: 'bat-003-a',
-        medicineId: 'med-003',
-        batchNumber: 'AG26-M19',
-        manufacturingDate: '2025-05-10',
-        expiryDate: '2026-11-28',
-        purchasePrice: 145.0,
-        sellingPrice: 205.0,
-        initialQuantity: 30,
-        availableQuantity: 12,
-        supplierId: 'sup-002',
-        supplierName: 'MediCare Lifesciences',
-      },
-    ],
-  },
-  {
-    id: 'med-004',
-    sku: 'MED-AZI-500',
-    brandName: 'Azithral 500',
-    genericName: 'Azithromycin 500mg',
-    manufacturer: 'Alembic Pharmaceuticals',
-    category: 'Antibiotics',
-    dosageForm: 'Tablet',
-    strength: '500 mg',
-    unit: 'Strips',
-    barcode: '8901234567891',
-    minimumStockLevel: 20,
-    sellingPrice: 120.0,
-    lastPurchasePrice: 78.0,
-    lastPurchaseDate: '2026-08-20',
-    totalStock: 0,
-    stockStatus: 'Out of Stock',
-    expiryStatus: 'Expired',
-    supplier: INITIAL_SUPPLIERS[2],
-    batches: [
-      {
-        id: 'bat-004-a',
-        medicineId: 'med-004',
-        batchNumber: 'AZ25-X02',
-        manufacturingDate: '2024-08-01',
-        expiryDate: '2026-08-01',
-        purchasePrice: 78.0,
-        sellingPrice: 120.0,
-        initialQuantity: 50,
-        availableQuantity: 0,
-        supplierId: 'sup-003',
-        supplierName: 'Global BioTech Logistics',
-      },
-    ],
-  },
-  {
-    id: 'med-005',
-    sku: 'MED-MON-010',
-    brandName: 'Montair LC',
-    genericName: 'Montelukast 10mg + Levocetirizine 5mg',
-    manufacturer: 'Cipla Ltd',
-    category: 'Respiratory & Anti-Allergic',
-    dosageForm: 'Tablet',
-    strength: '10mg/5mg',
-    unit: 'Strips',
-    barcode: '8909876543210',
-    minimumStockLevel: 20,
-    sellingPrice: 165.0,
-    lastPurchasePrice: 110.0,
-    lastPurchaseDate: '2026-10-18',
-    totalStock: 58,
-    stockStatus: 'Available',
-    expiryStatus: 'Valid',
-    supplier: INITIAL_SUPPLIERS[0],
-    batches: [
-      {
-        id: 'bat-005-a',
-        medicineId: 'med-005',
-        batchNumber: 'ML26-P09',
-        manufacturingDate: '2026-02-14',
-        expiryDate: '2028-01-31',
-        purchasePrice: 110.0,
-        sellingPrice: 165.0,
-        initialQuantity: 70,
-        availableQuantity: 58,
-        supplierId: 'sup-001',
-        supplierName: 'Apex Pharma Distributors',
-      },
-    ],
-  },
-];
-
-export const INITIAL_PURCHASES: PurchaseRecord[] = [
-  {
-    id: 'pur-101',
-    medicineId: 'med-001',
-    medicineName: 'Dolo 650 (Paracetamol 650mg)',
-    supplierId: 'sup-001',
-    supplierName: 'Apex Pharma Distributors',
-    batchNumber: 'DL26J01',
-    purchaseDate: '2026-01-15',
-    quantityPurchased: 100,
-    purchasePrice: 18.5,
-    totalPurchaseAmount: 1850.0,
-    invoiceNumber: 'INV-APX-8821',
-    expiryDate: '2027-12-31',
-  },
-  {
-    id: 'pur-102',
-    medicineId: 'med-001',
-    medicineName: 'Dolo 650 (Paracetamol 650mg)',
-    supplierId: 'sup-001',
-    supplierName: 'Apex Pharma Distributors',
-    batchNumber: 'DL26K04',
-    purchaseDate: '2026-03-20',
-    quantityPurchased: 50,
-    purchasePrice: 19.0,
-    totalPurchaseAmount: 950.0,
-    invoiceNumber: 'INV-APX-9140',
-    expiryDate: '2028-02-28',
-  },
-  {
-    id: 'pur-103',
-    medicineId: 'med-002',
-    medicineName: 'Pan 40 (Pantoprazole 40mg)',
-    supplierId: 'sup-002',
-    supplierName: 'MediCare Lifesciences',
-    batchNumber: 'PN40-881',
-    purchaseDate: '2026-09-12',
-    quantityPurchased: 60,
-    purchasePrice: 62.0,
-    totalPurchaseAmount: 3720.0,
-    invoiceNumber: 'MCL-2026-551',
-    expiryDate: '2027-10-31',
-  },
-  {
-    id: 'pur-104',
-    medicineId: 'med-003',
-    medicineName: 'Augmentin 625 Duo',
-    supplierId: 'sup-002',
-    supplierName: 'MediCare Lifesciences',
-    batchNumber: 'AG26-M19',
-    purchaseDate: '2026-10-05',
-    quantityPurchased: 30,
-    purchasePrice: 145.0,
-    totalPurchaseAmount: 4350.0,
-    invoiceNumber: 'MCL-2026-789',
-    expiryDate: '2026-11-28',
-  },
-  {
-    id: 'pur-105',
-    medicineId: 'med-005',
-    medicineName: 'Montair LC',
-    supplierId: 'sup-001',
-    supplierName: 'Apex Pharma Distributors',
-    batchNumber: 'ML26-P09',
-    purchaseDate: '2026-10-18',
-    quantityPurchased: 70,
-    purchasePrice: 110.0,
-    totalPurchaseAmount: 7700.0,
-    invoiceNumber: 'INV-APX-9988',
-    expiryDate: '2028-01-31',
-  },
-];
-
-export const INITIAL_MOVEMENTS: StockMovement[] = [
-  {
-    id: 'mov-201',
-    medicineId: 'med-001',
-    medicineName: 'Dolo 650',
-    batchId: 'bat-001-a',
-    batchNumber: 'DL26J01',
-    movementType: 'Purchase',
-    quantity: 100,
-    referenceNumber: 'INV-APX-8821',
-    responsibleUser: 'Dr. Sunny',
-    date: '2026-01-15T10:30:00Z',
-    notes: 'Initial opening stock procurement',
-  },
-  {
-    id: 'mov-202',
-    medicineId: 'med-001',
-    medicineName: 'Dolo 650',
-    batchId: 'bat-001-a',
-    batchNumber: 'DL26J01',
-    movementType: 'Dispensing',
-    quantity: -50,
-    referenceNumber: 'RX-CLINIC-2026-01',
-    responsibleUser: 'Dr. Sunny',
-    date: '2026-04-10T14:15:00Z',
-    notes: 'Outpatient prescription fulfillment',
-  },
-  {
-    id: 'mov-203',
-    medicineId: 'med-003',
-    medicineName: 'Augmentin 625 Duo',
-    batchId: 'bat-003-a',
-    batchNumber: 'AG26-M19',
-    movementType: 'Dispensing',
-    quantity: -18,
-    referenceNumber: 'RX-CLINIC-2026-89',
-    responsibleUser: 'Dr. Sunny',
-    date: '2026-10-22T16:00:00Z',
-    notes: 'Dispensed for acute bronchitis treatment',
-  },
-  {
-    id: 'mov-204',
-    medicineId: 'med-004',
-    medicineName: 'Azithral 500',
-    batchId: 'bat-004-a',
-    batchNumber: 'AZ25-X02',
-    movementType: 'Expired Stock',
-    quantity: -50,
-    referenceNumber: 'EXP-AUDIT-2026-08',
-    responsibleUser: 'Staff Admin',
-    date: '2026-08-05T09:00:00Z',
-    notes: 'Batch past expiry quarantine write-off',
-  },
-];
+export const INITIAL_SUPPLIERS: Supplier[] = [];
+export const INITIAL_MEDICINES: MedicineMaster[] = [];
+export const INITIAL_PURCHASES: PurchaseRecord[] = [];
+export const INITIAL_MOVEMENTS: StockMovement[] = [];
 
 export function calculateStockStatus(totalStock: number, minStockLevel: number): StockStatus {
   if (totalStock <= 0) return 'Out of Stock';
@@ -415,17 +65,14 @@ export function calculateExpiryStatus(batches: MedicineBatch[]): ExpiryStatus {
 }
 
 export function loadStoredMedicines(): MedicineMaster[] {
-  if (typeof window === 'undefined') return INITIAL_MEDICINES;
+  if (typeof window === 'undefined') return [];
   try {
     const data = localStorage.getItem(STORAGE_KEY_MEDICINES);
-    if (!data) {
-      saveStoredMedicines(INITIAL_MEDICINES);
-      return INITIAL_MEDICINES;
-    }
+    if (!data) return [];
     const parsed = JSON.parse(data);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_MEDICINES;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return INITIAL_MEDICINES;
+    return [];
   }
 }
 
@@ -437,17 +84,14 @@ export function saveStoredMedicines(medicines: MedicineMaster[]) {
 }
 
 export function loadStoredSuppliers(): Supplier[] {
-  if (typeof window === 'undefined') return INITIAL_SUPPLIERS;
+  if (typeof window === 'undefined') return [];
   try {
     const data = localStorage.getItem(STORAGE_KEY_SUPPLIERS);
-    if (!data) {
-      saveStoredSuppliers(INITIAL_SUPPLIERS);
-      return INITIAL_SUPPLIERS;
-    }
+    if (!data) return [];
     const parsed = JSON.parse(data);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_SUPPLIERS;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return INITIAL_SUPPLIERS;
+    return [];
   }
 }
 
@@ -459,17 +103,14 @@ export function saveStoredSuppliers(suppliers: Supplier[]) {
 }
 
 export function loadStoredPurchases(): PurchaseRecord[] {
-  if (typeof window === 'undefined') return INITIAL_PURCHASES;
+  if (typeof window === 'undefined') return [];
   try {
     const data = localStorage.getItem(STORAGE_KEY_PURCHASES);
-    if (!data) {
-      saveStoredPurchases(INITIAL_PURCHASES);
-      return INITIAL_PURCHASES;
-    }
+    if (!data) return [];
     const parsed = JSON.parse(data);
-    return Array.isArray(parsed) ? parsed : INITIAL_PURCHASES;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return INITIAL_PURCHASES;
+    return [];
   }
 }
 
@@ -481,17 +122,14 @@ export function saveStoredPurchases(purchases: PurchaseRecord[]) {
 }
 
 export function loadStoredMovements(): StockMovement[] {
-  if (typeof window === 'undefined') return INITIAL_MOVEMENTS;
+  if (typeof window === 'undefined') return [];
   try {
     const data = localStorage.getItem(STORAGE_KEY_MOVEMENTS);
-    if (!data) {
-      saveStoredMovements(INITIAL_MOVEMENTS);
-      return INITIAL_MOVEMENTS;
-    }
+    if (!data) return [];
     const parsed = JSON.parse(data);
-    return Array.isArray(parsed) ? parsed : INITIAL_MOVEMENTS;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return INITIAL_MOVEMENTS;
+    return [];
   }
 }
 
@@ -509,7 +147,7 @@ export async function fetchMedicinesMaster(): Promise<MedicineMaster[]> {
       .select('*, batches:medicine_batches(*)')
       .order('brand_name', { ascending: true });
 
-    if (!medError && dbMeds && dbMeds.length > 0) {
+    if (!medError && Array.isArray(dbMeds)) {
       const suppliers = await fetchSuppliers();
       const mapped: MedicineMaster[] = dbMeds.map((m: any) => {
         const rawBatches: any[] = m.batches || [];
@@ -574,7 +212,7 @@ export async function fetchMedicinesMaster(): Promise<MedicineMaster[]> {
 export async function fetchSuppliers(): Promise<Supplier[]> {
   try {
     const { data, error } = await supabase.from('suppliers').select('*').order('name');
-    if (!error && data && data.length > 0) {
+    if (!error && Array.isArray(data)) {
       const mapped: Supplier[] = data.map((s: any) => ({
         id: s.id,
         name: s.name,
@@ -686,7 +324,7 @@ export async function fetchPurchaseHistory(medicineId?: string): Promise<Purchas
       query = query.eq('medicine_id', medicineId);
     }
     const { data, error } = await query;
-    if (!error && data && data.length > 0) {
+    if (!error && Array.isArray(data)) {
       const mapped: PurchaseRecord[] = data.map((p: any) => ({
         id: p.id,
         medicineId: p.medicine_id,
@@ -718,7 +356,7 @@ export async function fetchStockMovements(medicineId?: string): Promise<StockMov
       query = query.eq('medicine_id', medicineId);
     }
     const { data, error } = await query;
-    if (!error && data && data.length > 0) {
+    if (!error && Array.isArray(data)) {
       const mapped: StockMovement[] = data.map((m: any) => ({
         id: m.id,
         medicineId: m.medicine_id,

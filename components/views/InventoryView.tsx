@@ -37,6 +37,7 @@ import {
   addMedicineWithInitialBatch,
   convertMasterToInventoryItems,
 } from '@/lib/medicineService';
+import { supabase } from '@/lib/supabaseClient';
 
 interface InventoryViewProps {
   inventory: InventoryItem[];
@@ -140,8 +141,8 @@ export function InventoryView({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const loadData = async () => {
-    setLoadingMeds(true);
+  const loadData = async (silent = false) => {
+    if (!silent) setLoadingMeds(true);
     try {
       const [data, sups] = await Promise.all([
         fetchMedicinesMaster(),
@@ -153,12 +154,29 @@ export function InventoryView({
         onInventorySync(convertMasterToInventoryItems(data));
       }
     } finally {
-      setLoadingMeds(false);
+      if (!silent) setLoadingMeds(false);
     }
   };
 
   useEffect(() => {
     loadData();
+
+    const channel = supabase
+      .channel(`realtime-inventory-view-${Date.now()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'medicines' }, () => {
+        loadData(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'medicine_batches' }, () => {
+        loadData(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers' }, () => {
+        loadData(true);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
