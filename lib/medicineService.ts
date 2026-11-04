@@ -530,7 +530,7 @@ export async function fetchMedicinesMaster(): Promise<MedicineMaster[]> {
         const totalStock = batches.reduce((sum, b) => sum + (b.availableQuantity || 0), 0);
         const minLevel = Number(m.minimum_stock_level) || 20;
 
-        const primarySupplierId = batches.find((b) => b.supplierId)?.supplierId;
+        const primarySupplierId = m.supplier_id || batches.find((b) => b.supplierId)?.supplierId;
         const primarySupplierName = batches.find((b) => b.supplierName)?.supplierName;
         const primarySupplier = primarySupplierId
           ? suppliers.find((s) => s.id === primarySupplierId)
@@ -668,7 +668,7 @@ export async function linkSupplierToMedicine(
   try {
     await supabase
       .from('medicines')
-      .update({ updated_at: new Date().toISOString() })
+      .update({ supplier_id: supplier.id, updated_at: new Date().toISOString() })
       .eq('id', medicineId);
   } catch {}
 
@@ -837,23 +837,41 @@ export async function addMedicineWithInitialBatch(params: {
         barcode: newMedicine.barcode,
         minimum_stock_level: newMedicine.minimumStockLevel,
         selling_price: newMedicine.sellingPrice,
+        supplier_id: supplierObj?.id || params.supplierId || null,
       },
     ]);
 
-    await supabase.from('medicine_batches').insert([
-      {
-        id: batchId,
-        medicine_id: medId,
-        batch_number: newBatch.batchNumber,
-        manufacturing_date: newBatch.manufacturingDate,
-        expiry_date: newBatch.expiryDate,
-        purchase_price: newBatch.purchasePrice,
-        selling_price: newBatch.sellingPrice,
-        initial_quantity: newBatch.initialQuantity,
-        available_quantity: newBatch.availableQuantity,
-        supplier_id: newBatch.supplierId,
-      },
-    ]);
+    const { error: rpcErr } = await supabase.rpc('procure_batch_atomic', {
+      p_medicine_id: medId,
+      p_batch_number: newBatch.batchNumber,
+      p_manufacturing_date: newBatch.manufacturingDate,
+      p_expiry_date: newBatch.expiryDate,
+      p_purchase_price: newBatch.purchasePrice,
+      p_selling_price: newBatch.sellingPrice,
+      p_quantity: newBatch.initialQuantity,
+      p_supplier_id: newBatch.supplierId || null,
+      p_supplier_name: newBatch.supplierName || null,
+      p_invoice_number: params.invoiceNumber || null,
+      p_responsible_user: params.responsibleUser || 'Doctor/Pharmacist',
+    });
+
+    if (rpcErr) {
+      await supabase.from('medicine_batches').insert([
+        {
+          id: batchId,
+          medicine_id: medId,
+          batch_number: newBatch.batchNumber,
+          manufacturing_date: newBatch.manufacturingDate,
+          expiry_date: newBatch.expiryDate,
+          purchase_price: newBatch.purchasePrice,
+          selling_price: newBatch.sellingPrice,
+          initial_quantity: newBatch.initialQuantity,
+          available_quantity: newBatch.availableQuantity,
+          supplier_id: newBatch.supplierId,
+          supplier_name: newBatch.supplierName,
+        },
+      ]);
+    }
   } catch {}
 
   const currentMeds = loadStoredMedicines();
@@ -925,20 +943,37 @@ export async function addBatchToMedicine(params: {
   };
 
   try {
-    await supabase.from('medicine_batches').insert([
-      {
-        id: batchId,
-        medicine_id: params.medicineId,
-        batch_number: newBatch.batchNumber,
-        manufacturing_date: newBatch.manufacturingDate,
-        expiry_date: newBatch.expiryDate,
-        purchase_price: newBatch.purchasePrice,
-        selling_price: newBatch.sellingPrice,
-        initial_quantity: newBatch.initialQuantity,
-        available_quantity: newBatch.availableQuantity,
-        supplier_id: newBatch.supplierId,
-      },
-    ]);
+    const { error: rpcErr } = await supabase.rpc('procure_batch_atomic', {
+      p_medicine_id: params.medicineId,
+      p_batch_number: newBatch.batchNumber,
+      p_manufacturing_date: newBatch.manufacturingDate,
+      p_expiry_date: newBatch.expiryDate,
+      p_purchase_price: newBatch.purchasePrice,
+      p_selling_price: newBatch.sellingPrice,
+      p_quantity: newBatch.initialQuantity,
+      p_supplier_id: newBatch.supplierId || null,
+      p_supplier_name: newBatch.supplierName || null,
+      p_invoice_number: params.invoiceNumber || null,
+      p_responsible_user: params.responsibleUser || 'Doctor/Pharmacist',
+    });
+
+    if (rpcErr) {
+      await supabase.from('medicine_batches').insert([
+        {
+          id: batchId,
+          medicine_id: params.medicineId,
+          batch_number: newBatch.batchNumber,
+          manufacturing_date: newBatch.manufacturingDate,
+          expiry_date: newBatch.expiryDate,
+          purchase_price: newBatch.purchasePrice,
+          selling_price: newBatch.sellingPrice,
+          initial_quantity: newBatch.initialQuantity,
+          available_quantity: newBatch.availableQuantity,
+          supplier_id: newBatch.supplierId,
+          supplier_name: newBatch.supplierName,
+        },
+      ]);
+    }
   } catch {}
 
   const currentMeds = loadStoredMedicines();
@@ -1071,6 +1106,18 @@ export async function recordStockAdjustment(params: {
   };
   saveStoredMovements([movement, ...loadStoredMovements()]);
 
+  try {
+    await supabase.rpc('record_stock_adjustment_atomic', {
+      p_medicine_id: params.medicineId,
+      p_batch_id: targetBatchId || null,
+      p_movement_type: params.movementType,
+      p_quantity_change: params.quantityChange,
+      p_reference_number: params.referenceNumber,
+      p_responsible_user: params.responsibleUser,
+      p_notes: params.notes || null,
+    });
+  } catch {}
+
   return true;
 }
 
@@ -1155,6 +1202,20 @@ export function dispenseFefo(params: {
 
   const existingMovements = loadStoredMovements();
   saveStoredMovements([...newMovements, ...existingMovements]);
+
+  try {
+    supabase
+      .rpc('dispense_fefo_atomic', {
+        p_medicine_id: med.id,
+        p_required_quantity: params.requestedQty,
+        p_reference_number: params.referenceNumber,
+        p_responsible_user: params.responsibleUser,
+      })
+      .then(
+        () => {},
+        () => {}
+      );
+  } catch {}
 
   return { success: true, dispensedQty: params.requestedQty };
 }
