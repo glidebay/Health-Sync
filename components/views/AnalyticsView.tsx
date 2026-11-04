@@ -286,7 +286,9 @@ return (
                   key={period.id}
                   type="button"
                   onClick={() => setSelectedPeriod(period.id)}
-                      }`}
+                  className={`relative px-3.5 py-1.5 text-xs font-bold rounded-xl transition-colors cursor-pointer select-none ${
+                    isActive ? 'text-white' : 'text-slate-600 hover:text-slate-800'
+                  }`}
                 >
                   {isActive && (
                     <motion.div
