@@ -10,13 +10,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Search,
-  X,
-  CheckCircle2,
   AlertTriangle,
   UserCheck,
   Globe,
-  Sparkles,
   Stethoscope,
 } from 'lucide-react';
 import { Patient } from '@/types';
@@ -27,7 +23,6 @@ import { formatPatientToken } from '@/lib/utils';
 import { fetchPatientAppointmentsFromDb } from '@/lib/supabaseService';
 import { supabase } from '@/lib/supabaseClient';
 import { EcgActionLoader } from '@/components/loading/EcgActionLoader';
-import { AnimatedCounter } from '@/components/common/AnimatedCounter';
 
 interface QueueListProps {
   queue: Patient[];
@@ -112,8 +107,6 @@ const cardVariants = {
   },
 };
 
-type FilterType = 'All' | 'Waiting' | 'In Progress' | 'Completed' | 'Urgent' | 'Walk-in' | 'Online';
-
 export function QueueList({
   queue,
   onRegisterWalkin,
@@ -127,15 +120,13 @@ export function QueueList({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [dbPatients, setDbPatients] = useState<Patient[] | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [filterStatus, setFilterStatus] = useState<FilterType>('All');
 
   const [selectedPatientForReschedule, setSelectedPatientForReschedule] = useState<Patient | null>(null);
   const [selectedPatientForCancel, setSelectedPatientForCancel] = useState<Patient | null>(null);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedDate, searchQuery, filterStatus]);
+  }, [selectedDate]);
 
   const loadData = useCallback(
     async (silent: boolean = false) => {
@@ -197,59 +188,14 @@ export function QueueList({
     return dbPatients !== null ? dbPatients : queue;
   }, [dbPatients, queue]);
 
-  const activePatients = useMemo(() => {
-    return rawPatients.filter((p) => p.status !== 'Cancelled');
+  const currentPatients = useMemo(() => {
+    const active = rawPatients.filter((p) => p.status !== 'Cancelled');
+    const notCompleted = active.filter((p) => p.status !== 'Completed');
+    const completed = active.filter((p) => p.status === 'Completed');
+    return [...notCompleted, ...completed];
   }, [rawPatients]);
 
-  const totalCount = activePatients.length;
-  const waitingCount = useMemo(() => activePatients.filter((p) => p.status === 'Waiting').length, [activePatients]);
-  const inProgressCount = useMemo(() => activePatients.filter((p) => p.status === 'In Progress').length, [activePatients]);
-  const completedCount = useMemo(() => activePatients.filter((p) => p.status === 'Completed').length, [activePatients]);
-  const urgentCount = useMemo(() => activePatients.filter((p) => p.priority === 'Urgent').length, [activePatients]);
-  const walkinCount = useMemo(() => activePatients.filter((p) => {
-    const vt = (p.visitType || '').toLowerCase();
-    return !vt.includes('online') && !vt.includes('whatsapp');
-  }).length, [activePatients]);
-  const onlineCount = useMemo(() => activePatients.filter((p) => {
-    const vt = (p.visitType || '').toLowerCase();
-    return vt.includes('online') || vt.includes('whatsapp');
-  }).length, [activePatients]);
-
-  const filteredPatients = useMemo(() => {
-    return activePatients.filter((p) => {
-      if (filterStatus === 'Waiting' && p.status !== 'Waiting') return false;
-      if (filterStatus === 'In Progress' && p.status !== 'In Progress') return false;
-      if (filterStatus === 'Completed' && p.status !== 'Completed') return false;
-      if (filterStatus === 'Urgent' && p.priority !== 'Urgent') return false;
-      if (filterStatus === 'Walk-in') {
-        const vt = (p.visitType || '').toLowerCase();
-        if (vt.includes('online') || vt.includes('whatsapp')) return false;
-      }
-      if (filterStatus === 'Online') {
-        const vt = (p.visitType || '').toLowerCase();
-        if (!vt.includes('online') && !vt.includes('whatsapp')) return false;
-      }
-
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase().trim();
-      const token = formatPatientToken(p).toLowerCase();
-      const matchName = p.name.toLowerCase().includes(q);
-      const matchPhone = p.phone ? p.phone.toLowerCase().includes(q) : false;
-      const matchToken = token.includes(q);
-      const matchType = p.visitType ? p.visitType.toLowerCase().includes(q) : false;
-      const matchNotes = p.notes ? p.notes.toLowerCase().includes(q) : false;
-
-      return matchName || matchPhone || matchToken || matchType || matchNotes;
-    });
-  }, [activePatients, filterStatus, searchQuery]);
-
-  const sortedPatients = useMemo(() => {
-    const notCompleted = filteredPatients.filter((p) => p.status !== 'Completed');
-    const completed = filteredPatients.filter((p) => p.status === 'Completed');
-    return [...notCompleted, ...completed];
-  }, [filteredPatients]);
-
-  const totalPages = Math.max(1, Math.ceil(sortedPatients.length / itemsPerPage));
+  const totalPages = Math.max(1, Math.ceil(currentPatients.length / itemsPerPage));
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -259,30 +205,20 @@ export function QueueList({
 
   const paginatedQueue = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
-    return sortedPatients.slice(start, start + itemsPerPage);
-  }, [sortedPatients, currentPage, itemsPerPage]);
-
-  const firstWaitingId = useMemo(() => {
-    return sortedPatients.find((p) => p.status === 'Waiting')?.id;
-  }, [sortedPatients]);
+    return currentPatients.slice(start, start + itemsPerPage);
+  }, [currentPatients, currentPage, itemsPerPage]);
 
   return (
-    <div className="space-y-5 pb-10">
+    <div className="space-y-4 sm:space-y-6 pb-10">
       <EcgActionLoader isLoading={isLoading} fullscreen={true} text="Syncing appointments..." />
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
-              Assistant Desk & Reception
-            </h2>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-semibold border border-blue-200/60 shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-              Live Reception Desk
-            </div>
-          </div>
+          <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
+            Assistant Queue Oversight
+          </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Coordinate incoming walk-in patients, manage token allocations, and reschedule slots
+            Coordinate incoming walk-in patients and manage token allocations
           </p>
         </div>
 
@@ -348,165 +284,18 @@ export function QueueList({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs hover:shadow-md hover:border-slate-200 transition-all duration-300">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Total Bookings</span>
-            <div className="w-9 h-9 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100/60">
-              <Users className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
-              <AnimatedCounter target={totalCount} />
-            </span>
-            <span className="text-[11px] font-medium text-slate-400">for date</span>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs hover:shadow-md hover:border-slate-200 transition-all duration-300">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Waiting Room</span>
-            <div className="w-9 h-9 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100/60">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
-              <AnimatedCounter target={waitingCount} />
-            </span>
-            <span className="text-[11px] font-medium text-amber-600">in reception</span>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs hover:shadow-md hover:border-slate-200 transition-all duration-300">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Walk-in Patients</span>
-            <div className="w-9 h-9 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100/60">
-              <UserCheck className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
-              <AnimatedCounter target={walkinCount} />
-            </span>
-            <span className="text-[11px] font-medium text-indigo-600">direct desk</span>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs hover:shadow-md hover:border-slate-200 transition-all duration-300">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Urgent Triage</span>
-            <div className="w-9 h-9 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100/60">
-              <AlertTriangle className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
-              <AnimatedCounter target={urgentCount} />
-            </span>
-            <span className="text-[11px] font-medium text-rose-600">priority</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-3xl p-4 border border-slate-100 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by patient name, token ID, phone, or visit type..."
-            className="w-full pl-10 pr-9 py-2 rounded-2xl bg-slate-50/80 border border-slate-200/70 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none flex-wrap">
-          {(['All', 'Waiting', 'In Progress', 'Completed', 'Urgent', 'Walk-in', 'Online'] as const).map((status) => {
-            const count =
-              status === 'All'
-                ? totalCount
-                : status === 'Waiting'
-                ? waitingCount
-                : status === 'In Progress'
-                ? inProgressCount
-                : status === 'Completed'
-                ? completedCount
-                : status === 'Urgent'
-                ? urgentCount
-                : status === 'Walk-in'
-                ? walkinCount
-                : onlineCount;
-
-            const isActive = filterStatus === status;
-
-            return (
-              <button
-                key={status}
-                onClick={() => setFilterStatus(status)}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-                  isActive
-                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
-                    : 'bg-slate-100/80 hover:bg-slate-200/80 text-slate-600'
-                }`}
-              >
-                <span>{status}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
-                    isActive ? 'bg-white/20 text-white' : 'bg-white text-slate-500 border border-slate-200/50'
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="relative min-h-[220px]">
-        {sortedPatients.length === 0 ? (
+      <div className="relative min-h-[200px]">
+        {currentPatients.length === 0 ? (
           <div className="bg-white rounded-3xl p-10 sm:p-12 border border-slate-100 text-center shadow-xs">
             <div className="w-14 h-14 rounded-3xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-3 shadow-2xs border border-blue-100/60">
               <Users className="w-7 h-7 stroke-[1.75]" />
             </div>
             <h3 className="text-base font-bold text-slate-800">
-              {searchQuery || filterStatus !== 'All'
-                ? 'No matching patients found'
-                : `No patients registered for ${formatDisplayDate(selectedDate, todayIST)}`}
+              No patients found for {formatDisplayDate(selectedDate, todayIST)}
             </h3>
             <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-              {searchQuery || filterStatus !== 'All'
-                ? 'Try adjusting your search terms or clearing status filters.'
-                : 'Click "Register Walk-in" above or encourage patients to book via WhatsApp self-service.'}
+              Use the &quot;Register Walk-in&quot; button above or WhatsApp self-service booking to add patients.
             </p>
-            {searchQuery || filterStatus !== 'All' ? (
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setFilterStatus('All');
-                }}
-                className="mt-4 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 px-3.5 py-1.5 rounded-xl transition cursor-pointer"
-              >
-                Reset Filters
-              </button>
-            ) : onRegisterWalkin ? (
-              <button
-                onClick={onRegisterWalkin}
-                className="mt-4 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-xl transition cursor-pointer shadow-sm"
-              >
-                Register First Patient
-              </button>
-            ) : null}
           </div>
         ) : (
           <motion.div
@@ -521,7 +310,7 @@ export function QueueList({
                 const isInProgress = p.status === 'In Progress';
                 const isCompleted = p.status === 'Completed';
                 const tokenDisplay = formatPatientToken(p);
-                const isFirstWaiting = p.id === firstWaitingId && isWaiting;
+                const initials = getInitials(p.name);
                 const isOnline =
                   (p.visitType || '').toLowerCase().includes('whatsapp') ||
                   (p.visitType || '').toLowerCase().includes('online');
@@ -531,37 +320,27 @@ export function QueueList({
                     key={p.id}
                     layout
                     variants={cardVariants}
-                    whileHover={{ y: -3, transition: { duration: 0.2 } }}
-                    className={`bg-white rounded-3xl p-4 sm:p-5 border transition-all duration-300 shadow-xs hover:shadow-md flex flex-col justify-between gap-3 ${
-                      isFirstWaiting
-                        ? 'border-amber-300/80 ring-1 ring-amber-300/40'
-                        : isInProgress
-                        ? 'border-emerald-300/80 ring-1 ring-emerald-300/40'
-                        : 'border-slate-100 hover:border-slate-200'
+                    whileHover={{ y: -2, transition: { duration: 0.2 } }}
+                    className={`bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs hover:border-slate-200 hover:shadow-md transition-all duration-300 flex flex-col justify-between gap-3 ${
+                      isCompleted ? 'opacity-65' : ''
                     }`}
                   >
                     <div>
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 font-bold flex items-center justify-center text-xs border border-blue-100/80 shadow-2xs flex-shrink-0">
-                            {getInitials(p.name)}
+                          <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 font-bold flex items-center justify-center text-xs border border-blue-100/60 shadow-2xs flex-shrink-0">
+                            {initials}
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <h4 className="font-bold text-sm text-slate-800 truncate">{p.name}</h4>
-                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/60 flex-shrink-0">
+                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/60 flex-shrink-0">
                                 {tokenDisplay}
                               </span>
                               {p.priority === 'Urgent' && (
-                                <span className="bg-rose-50 text-rose-700 border border-rose-200/70 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 flex-shrink-0">
+                                <span className="bg-rose-50 text-rose-700 border border-rose-200/70 text-[10px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1 flex-shrink-0">
                                   <AlertTriangle className="w-2.5 h-2.5 text-rose-500" />
                                   Urgent
-                                </span>
-                              )}
-                              {isFirstWaiting && (
-                                <span className="bg-amber-50 text-amber-700 border border-amber-200/80 text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs flex-shrink-0">
-                                  <Sparkles className="w-2.5 h-2.5 text-amber-500" />
-                                  Next in Line
                                 </span>
                               )}
                             </div>
@@ -587,12 +366,12 @@ export function QueueList({
 
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
                           <span
-                            className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
                               isCompleted
                                 ? 'bg-slate-100 text-slate-600 border-slate-200/60'
                                 : isInProgress
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
-                                : 'bg-amber-50 text-amber-700 border-amber-200/60'
+                                : 'bg-blue-50 text-blue-700 border-blue-200/60'
                             }`}
                           >
                             {p.status}
@@ -624,12 +403,6 @@ export function QueueList({
                           <Clock className="w-3.5 h-3.5 text-slate-400" />
                           <span>Slot: {p.time}</span>
                         </div>
-
-                        {p.notes && (
-                          <div className="text-[11px] text-slate-400 italic truncate max-w-[200px]">
-                            {p.notes}
-                          </div>
-                        )}
                       </div>
                     </div>
 
@@ -676,7 +449,7 @@ export function QueueList({
         currentPage={currentPage}
         totalPages={totalPages}
         onPageChange={setCurrentPage}
-        totalItems={sortedPatients.length}
+        totalItems={currentPatients.length}
         itemsPerPage={itemsPerPage}
         itemName="patients"
       />
@@ -694,7 +467,7 @@ export function QueueList({
       <RescheduleModal
         isOpen={!!selectedPatientForReschedule}
         patient={selectedPatientForReschedule}
-        queue={sortedPatients.length > 0 ? sortedPatients : queue}
+        queue={currentPatients.length > 0 ? currentPatients : queue}
         onClose={() => setSelectedPatientForReschedule(null)}
         onReschedulePatient={async (params) => {
           await onReschedulePatient(params);
