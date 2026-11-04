@@ -19,6 +19,9 @@ import {
   TrendingUp,
   Barcode,
   Building,
+  Pencil,
+  ArrowLeftRight,
+  Check,
 } from 'lucide-react';
 import {
   MedicineMaster,
@@ -34,6 +37,8 @@ import {
   fetchSuppliers,
   addBatchToMedicine,
   recordStockAdjustment,
+  saveOrUpdateSupplier,
+  linkSupplierToMedicine,
 } from '@/lib/medicineService';
 
 interface MedicineDetailsModalProps {
@@ -75,6 +80,16 @@ export function MedicineDetailsModal({
   const [adjustRef, setAdjustRef] = useState('');
   const [adjustNotes, setAdjustNotes] = useState('');
   const [adjustBatchId, setAdjustBatchId] = useState('');
+
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [showLinkSupplierModal, setShowLinkSupplierModal] = useState(false);
+  const [supplierIdEdit, setSupplierIdEdit] = useState<string | undefined>(undefined);
+  const [supplierNameEdit, setSupplierNameEdit] = useState('');
+  const [supplierContactEdit, setSupplierContactEdit] = useState('');
+  const [supplierPhoneEdit, setSupplierPhoneEdit] = useState('');
+  const [supplierEmailEdit, setSupplierEmailEdit] = useState('');
+  const [supplierGstinEdit, setSupplierGstinEdit] = useState('');
+  const [supplierAddressEdit, setSupplierAddressEdit] = useState('');
 
   useEffect(() => {
     if (!medicine || !isOpen) return;
@@ -183,6 +198,60 @@ export function MedicineDetailsModal({
 
     return Array.from(map.values());
   }, [batches, purchases]);
+
+  const handleOpenEditSupplier = () => {
+    if (activeSupplier) {
+      setSupplierIdEdit(activeSupplier.id);
+      setSupplierNameEdit(activeSupplier.name);
+      setSupplierContactEdit(activeSupplier.contactPerson || '');
+      setSupplierPhoneEdit(activeSupplier.phone || '');
+      setSupplierEmailEdit(activeSupplier.email || '');
+      setSupplierGstinEdit(activeSupplier.gstin || '');
+      setSupplierAddressEdit(activeSupplier.address || '');
+    } else {
+      setSupplierIdEdit(undefined);
+      setSupplierNameEdit('');
+      setSupplierContactEdit('');
+      setSupplierPhoneEdit('');
+      setSupplierEmailEdit('');
+      setSupplierGstinEdit('');
+      setSupplierAddressEdit('');
+    }
+    setShowSupplierModal(true);
+  };
+
+  const handleSaveSupplier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!medicine || !supplierNameEdit.trim()) return;
+
+    const savedSup = await saveOrUpdateSupplier({
+      id: supplierIdEdit,
+      name: supplierNameEdit.trim(),
+      contactPerson: supplierContactEdit.trim() || undefined,
+      phone: supplierPhoneEdit.trim() || '+91 00000 00000',
+      email: supplierEmailEdit.trim() || undefined,
+      gstin: supplierGstinEdit.trim() || undefined,
+      address: supplierAddressEdit.trim() || undefined,
+      lastPurchaseDate: medicine.lastPurchaseDate,
+      lastPurchasePrice: medicine.lastPurchasePrice,
+    });
+
+    await linkSupplierToMedicine(medicine.id, savedSup);
+
+    const sups = await fetchSuppliers();
+    setSuppliersList(sups);
+    setShowSupplierModal(false);
+    onMedicineUpdated();
+  };
+
+  const handleSelectExistingSupplier = async (sup: Supplier) => {
+    if (!medicine) return;
+    await linkSupplierToMedicine(medicine.id, sup);
+    const sups = await fetchSuppliers();
+    setSuppliersList(sups);
+    setShowLinkSupplierModal(false);
+    onMedicineUpdated();
+  };
 
   const handleCreateBatch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -656,14 +725,36 @@ export function MedicineDetailsModal({
 
             {activeTab === 'supplier' && (
               <div className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                    Vendor & Procurement Logistics
-                  </h3>
-                  {activeSupplier && (
-                    <span className="text-[11px] text-slate-500 font-medium">
-                      Source: Batches & Purchase Invoices
-                    </span>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      Vendor & Procurement Logistics
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Verified vendor records mapped to this medicine and its procurement batches
+                    </p>
+                  </div>
+                  {isDoctorUnlocked && (
+                    <div className="flex items-center gap-2">
+                      {activeSupplier && (
+                        <button
+                          type="button"
+                          onClick={handleOpenEditSupplier}
+                          className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                        >
+                          <Pencil className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Edit Supplier</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowLinkSupplierModal(true)}
+                        className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                      >
+                        <ArrowLeftRight className="w-3.5 h-3.5 text-slate-500" />
+                        <span>{activeSupplier ? 'Change Vendor' : 'Link Supplier'}</span>
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -684,9 +775,21 @@ export function MedicineDetailsModal({
                             </p>
                           </div>
                         </div>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          Active Supplier
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Active Supplier
+                          </span>
+                          {isDoctorUnlocked && (
+                            <button
+                              type="button"
+                              onClick={handleOpenEditSupplier}
+                              className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer ml-1"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              <span>Edit</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-2">
@@ -804,17 +907,28 @@ export function MedicineDetailsModal({
                     <div>
                       <h4 className="font-bold text-sm text-slate-800">No Supplier Linked Yet</h4>
                       <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
-                        No vendor or distributor is currently linked to this medicine. When you add a new procurement batch, you can select or enter a supplier.
+                        No vendor or distributor is currently linked to this medicine. You can add supplier details or link an existing supplier below.
                       </p>
                     </div>
                     {isDoctorUnlocked && (
-                      <button
-                        onClick={() => setShowAddBatchModal(true)}
-                        className="px-4 py-2 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs inline-flex items-center gap-1.5"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Add Procurement Batch</span>
-                      </button>
+                      <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={handleOpenEditSupplier}
+                          className="px-4 py-2 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs inline-flex items-center gap-1.5"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Supplier Details</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowLinkSupplierModal(true)}
+                          className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer shadow-2xs inline-flex items-center gap-1.5"
+                        >
+                          <ArrowLeftRight className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Link Existing Wholesaler</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
@@ -824,7 +938,7 @@ export function MedicineDetailsModal({
 
           <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-between bg-[#FAFBFD]">
             <div className="text-xs text-slate-500 font-medium">
-              Medicine ID: <span className="font-mono text-slate-700">{medicine.id}</span>
+              Medicine SKU: <span className="font-mono text-slate-700 font-bold">{medicine.sku}</span>
             </div>
             <button
               onClick={onClose}
@@ -834,6 +948,219 @@ export function MedicineDetailsModal({
             </button>
           </div>
         </motion.div>
+
+        {showSupplierModal && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-lg shadow-2xl border border-slate-100"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <Building className="w-4 h-4" />
+                  </div>
+                  <h3 className="font-bold text-base text-slate-800">
+                    {supplierIdEdit ? 'Edit Supplier Information' : 'Add New Supplier / Vendor'}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSupplierModal(false)}
+                  className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveSupplier} className="space-y-3.5 mt-4 text-xs">
+                <div>
+                  <label className="block text-slate-500 font-semibold mb-1">Company / Supplier Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Apex Pharma Distributors"
+                    value={supplierNameEdit}
+                    onChange={(e) => setSupplierNameEdit(e.target.value)}
+                    className="w-full p-2.5 bg-[#F8F9FB] border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Contact Person</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Rajesh Kumar"
+                      value={supplierContactEdit}
+                      onChange={(e) => setSupplierContactEdit(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Contact Phone</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. +91 98450 12345"
+                      value={supplierPhoneEdit}
+                      onChange={(e) => setSupplierPhoneEdit(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      placeholder="e.g. orders@apexpharma.in"
+                      value={supplierEmailEdit}
+                      onChange={(e) => setSupplierEmailEdit(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">GSTIN Number</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 29ABCDE1234F1Z5"
+                      value={supplierGstinEdit}
+                      onChange={(e) => setSupplierGstinEdit(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-500 font-semibold mb-1">Registered Warehouse Address</label>
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. Plot 45, Industrial Area, Phase II, Bengaluru"
+                    value={supplierAddressEdit}
+                    onChange={(e) => setSupplierAddressEdit(e.target.value)}
+                    className="w-full p-2.5 bg-[#F8F9FB] border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowSupplierModal(false)}
+                    className="px-4 py-2 border border-slate-200 rounded-xl font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-[#2563EB] hover:bg-blue-700 text-white rounded-xl font-semibold shadow-xs cursor-pointer"
+                  >
+                    Save Supplier Details
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {showLinkSupplierModal && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-lg shadow-2xl border border-slate-100"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <ArrowLeftRight className="w-4 h-4" />
+                  </div>
+                  <h3 className="font-bold text-base text-slate-800">
+                    Select Wholesaler / Supplier
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowLinkSupplierModal(false)}
+                  className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 mt-4 text-xs max-h-72 overflow-y-auto">
+                {suppliersList.length === 0 ? (
+                  <p className="text-center text-slate-400 py-6">No suppliers registered yet.</p>
+                ) : (
+                  suppliersList.map((s) => {
+                    const isSelected = activeSupplier?.id === s.id;
+                    return (
+                      <div
+                        key={s.id}
+                        className={`p-3.5 rounded-2xl border transition flex items-center justify-between gap-3 ${
+                          isSelected
+                            ? 'bg-blue-50/70 border-blue-200 text-blue-900'
+                            : 'bg-[#F8F9FB] border-slate-100 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="font-bold text-sm text-slate-800 truncate">{s.name}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            {s.contactPerson ? `${s.contactPerson} &bull; ` : ''}
+                            {s.phone}
+                          </p>
+                          {s.gstin && (
+                            <p className="text-[10px] text-slate-400 font-mono mt-0.5">GSTIN: {s.gstin}</p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectExistingSupplier(s)}
+                          className={`px-3 py-1.5 rounded-xl font-bold transition text-xs cursor-pointer flex-shrink-0 ${
+                            isSelected
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}
+                        >
+                          {isSelected ? 'Current Vendor' : 'Link to Medicine'}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="flex items-center justify-between pt-4 mt-2 border-t border-slate-100 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLinkSupplierModal(false);
+                    setSupplierIdEdit(undefined);
+                    setSupplierNameEdit('');
+                    setSupplierContactEdit('');
+                    setSupplierPhoneEdit('');
+                    setSupplierEmailEdit('');
+                    setSupplierGstinEdit('');
+                    setSupplierAddressEdit('');
+                    setShowSupplierModal(true);
+                  }}
+                  className="font-bold text-blue-600 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Register Brand New Supplier</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowLinkSupplierModal(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-xl font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
 
         {showAddBatchModal && (
           <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">

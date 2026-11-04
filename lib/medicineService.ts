@@ -590,6 +590,91 @@ export async function fetchSuppliers(): Promise<Supplier[]> {
   return loadStoredSuppliers();
 }
 
+export async function saveOrUpdateSupplier(data: {
+  id?: string;
+  name: string;
+  contactPerson?: string;
+  phone: string;
+  email?: string;
+  gstin?: string;
+  address?: string;
+  lastPurchaseDate?: string;
+  lastPurchasePrice?: number;
+}): Promise<Supplier> {
+  const currentSuppliers = loadStoredSuppliers();
+  let supId = data.id;
+
+  if (!supId) {
+    const existing = currentSuppliers.find(
+      (s) => s.name.toLowerCase() === data.name.trim().toLowerCase()
+    );
+    supId = existing?.id || `sup-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 5)}`;
+  }
+
+  const newSupplier: Supplier = {
+    id: supId,
+    name: data.name.trim(),
+    contactPerson: data.contactPerson?.trim(),
+    phone: data.phone.trim(),
+    email: data.email?.trim(),
+    gstin: data.gstin?.trim(),
+    address: data.address?.trim(),
+    lastPurchaseDate: data.lastPurchaseDate,
+    lastPurchasePrice: data.lastPurchasePrice,
+    createdAt: new Date().toISOString(),
+  };
+
+  const idx = currentSuppliers.findIndex((s) => s.id === supId);
+  let updatedSuppliers: Supplier[];
+  if (idx >= 0) {
+    updatedSuppliers = currentSuppliers.map((s, i) => (i === idx ? newSupplier : s));
+  } else {
+    updatedSuppliers = [newSupplier, ...currentSuppliers];
+  }
+  saveStoredSuppliers(updatedSuppliers);
+
+  try {
+    await supabase.from('suppliers').upsert({
+      id: newSupplier.id,
+      name: newSupplier.name,
+      contact_person: newSupplier.contactPerson,
+      phone: newSupplier.phone,
+      email: newSupplier.email,
+      gstin: newSupplier.gstin,
+      address: newSupplier.address,
+      last_purchase_date: newSupplier.lastPurchaseDate,
+      last_purchase_price: newSupplier.lastPurchasePrice,
+    });
+  } catch {}
+
+  return newSupplier;
+}
+
+export async function linkSupplierToMedicine(
+  medicineId: string,
+  supplier: Supplier
+): Promise<MedicineMaster | null> {
+  const currentMeds = loadStoredMedicines();
+  const medIdx = currentMeds.findIndex((m) => m.id === medicineId);
+  if (medIdx === -1) return null;
+
+  const updatedMed: MedicineMaster = {
+    ...currentMeds[medIdx],
+    supplier,
+  };
+  currentMeds[medIdx] = updatedMed;
+  saveStoredMedicines(currentMeds);
+
+  try {
+    await supabase
+      .from('medicines')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', medicineId);
+  } catch {}
+
+  return updatedMed;
+}
+
 export async function fetchPurchaseHistory(medicineId?: string): Promise<PurchaseRecord[]> {
   try {
     let query = supabase.from('purchase_records').select('*').order('purchase_date', { ascending: false });
