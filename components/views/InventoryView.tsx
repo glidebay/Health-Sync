@@ -209,7 +209,7 @@ export function InventoryView({
       purchasePrice: buyPrice,
       sellingPrice: sellPrice,
       quantity: qty,
-      supplierName: addSupplierName.trim() || 'Primary Distributor',
+      supplierName: addSupplierName.trim() || undefined,
       responsibleUser: isDoctorUnlocked ? 'Dr. Sunny' : 'Staff Pharmacist',
     });
 
@@ -491,7 +491,7 @@ export function InventoryView({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3 pt-2 border-t border-slate-100">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3 pt-2 border-t border-slate-100">
                   <div>
                     <label className="block text-slate-500 font-semibold mb-1">Batch Number *</label>
                     <input
@@ -544,6 +544,16 @@ export function InventoryView({
                       placeholder="e.g. 32.00"
                       value={addSellPrice}
                       onChange={(e) => setAddSellPrice(e.target.value)}
+                      className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-semibold mb-1">Supplier / Wholesaler</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Apex Pharma"
+                      value={addSupplierName}
+                      onChange={(e) => setAddSupplierName(e.target.value)}
                       className="w-full p-2.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl font-medium outline-none focus:border-blue-500"
                     />
                   </div>

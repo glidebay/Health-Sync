@@ -11,9 +11,7 @@ import {
   CheckCircle,
   AlertTriangle,
   RefreshCw,
-  FileText,
   ChevronRight,
-  Filter,
   ArrowRight,
   Check,
 } from 'lucide-react';
@@ -196,12 +194,12 @@ export function MedicineCsvImportModal({
 
           <div className="p-4 sm:p-6 overflow-y-auto flex-1">
             {currentStep === 'upload' && (
-              <div className="space-y-6">
+              <div className="space-y-5">
                 <div
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-3xl p-8 sm:p-12 flex flex-col items-center justify-center text-center cursor-pointer transition bg-[#FAFBFD] hover:bg-blue-50/20 group"
+                  className="border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-3xl p-8 sm:p-14 flex flex-col items-center justify-center text-center cursor-pointer transition bg-[#FAFBFD] hover:bg-blue-50/20 group"
                 >
                   <input
                     ref={fileInputRef}
@@ -210,7 +208,7 @@ export function MedicineCsvImportModal({
                     onChange={handleFileChange}
                     className="hidden"
                   />
-                  <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#2563EB] flex items-center justify-center mb-4 group-hover:scale-110 transition">
+                  <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#2563EB] flex items-center justify-center mb-4 group-hover:scale-110 transition shadow-2xs">
                     <UploadCloud className="w-7 h-7" />
                   </div>
                   <h3 className="text-base font-bold text-slate-800">
@@ -231,7 +229,7 @@ export function MedicineCsvImportModal({
                       Download Pre-Formatted Medicine CSV Template
                     </h4>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Includes 19 pre-defined columns: SKU, Brand, Generic, Manufacturer, Category, Batch#, Mfg/Exp dates, Prices, and Supplier fields.
+                      Pre-formatted template with all supported columns and realistic sample medicines ready for editing.
                     </p>
                   </div>
                   <button
@@ -241,46 +239,6 @@ export function MedicineCsvImportModal({
                     <Download className="w-3.5 h-3.5 text-blue-600" />
                     Download Sample CSV
                   </button>
-                </div>
-
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                    Required Column Headers
-                  </h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono text-slate-600">
-                    {[
-                      'sku *',
-                      'brand_name *',
-                      'generic_name *',
-                      'batch_number *',
-                      'expiry_date *',
-                      'purchase_price *',
-                      'selling_price *',
-                      'quantity *',
-                      'manufacturer',
-                      'category',
-                      'dosage_form',
-                      'strength',
-                      'unit',
-                      'barcode',
-                      'mfg_date',
-                      'min_stock_level',
-                      'supplier_name',
-                      'supplier_phone',
-                      'invoice_number',
-                    ].map((col) => (
-                      <div
-                        key={col}
-                        className={`p-2 rounded-lg border text-center ${
-                          col.includes('*')
-                            ? 'bg-blue-50/60 border-blue-200 text-blue-800 font-bold'
-                            : 'bg-white border-slate-200 text-slate-600'
-                        }`}
-                      >
-                        {col}
-                      </div>
-                    ))}
-                  </div>
                 </div>
               </div>
             )}

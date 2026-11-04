@@ -18,7 +18,6 @@ import {
   TrendingDown,
   TrendingUp,
   Barcode,
-  ShieldCheck,
   Building,
 } from 'lucide-react';
 import {
@@ -27,10 +26,12 @@ import {
   PurchaseRecord,
   StockMovement,
   MovementType,
+  Supplier,
 } from '@/types/medicine';
 import {
   fetchPurchaseHistory,
   fetchStockMovements,
+  fetchSuppliers,
   addBatchToMedicine,
   recordStockAdjustment,
 } from '@/lib/medicineService';
@@ -55,6 +56,7 @@ export function MedicineDetailsModal({
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
   const [movements, setMovements] = useState<StockMovement[]>([]);
+  const [suppliersList, setSuppliersList] = useState<Supplier[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   const [showAddBatchModal, setShowAddBatchModal] = useState(false);
@@ -81,15 +83,106 @@ export function MedicineDetailsModal({
     Promise.all([
       fetchPurchaseHistory(medicine.id),
       fetchStockMovements(medicine.id),
+      fetchSuppliers(),
     ])
-      .then(([pur, mov]) => {
+      .then(([pur, mov, sups]) => {
         setPurchases(pur);
         setMovements(mov);
+        setSuppliersList(sups);
       })
       .finally(() => setLoadingHistory(false));
   }, [medicine, isOpen]);
 
   const batches = useMemo(() => medicine?.batches || [], [medicine]);
+
+  const activeSupplier = useMemo<Supplier | null>(() => {
+    if (medicine?.supplier && medicine.supplier.name) {
+      const match = suppliersList.find(
+        (s) =>
+          s.id === medicine.supplier?.id ||
+          s.name.toLowerCase() === medicine.supplier?.name.toLowerCase()
+      );
+      if (match) return match;
+      return medicine.supplier;
+    }
+
+    const latestBatchWithSup = batches.find((b) => b.supplierId || b.supplierName);
+    if (latestBatchWithSup) {
+      if (latestBatchWithSup.supplierId) {
+        const match = suppliersList.find((s) => s.id === latestBatchWithSup.supplierId);
+        if (match) return match;
+      }
+      if (latestBatchWithSup.supplierName) {
+        const match = suppliersList.find(
+          (s) => s.name.toLowerCase() === latestBatchWithSup.supplierName?.toLowerCase()
+        );
+        if (match) return match;
+        return {
+          id: latestBatchWithSup.supplierId || 'sup-batch',
+          name: latestBatchWithSup.supplierName,
+          phone: '',
+          lastPurchaseDate: latestBatchWithSup.manufacturingDate,
+          lastPurchasePrice: latestBatchWithSup.purchasePrice,
+        };
+      }
+    }
+
+    const latestPurchase = purchases.find((p) => p.supplierName);
+    if (latestPurchase && latestPurchase.supplierName) {
+      const match = suppliersList.find(
+        (s) => s.name.toLowerCase() === latestPurchase.supplierName.toLowerCase()
+      );
+      if (match) return match;
+      return {
+        id: latestPurchase.supplierId || 'sup-pur',
+        name: latestPurchase.supplierName,
+        phone: '',
+        lastPurchaseDate: latestPurchase.purchaseDate,
+        lastPurchasePrice: latestPurchase.purchasePrice,
+      };
+    }
+
+    return null;
+  }, [medicine, batches, purchases, suppliersList]);
+
+  const supplierBatches = useMemo(() => {
+    if (!activeSupplier) return [];
+    return batches.filter(
+      (b) =>
+        (b.supplierId && b.supplierId === activeSupplier.id) ||
+        (b.supplierName && b.supplierName.toLowerCase() === activeSupplier.name.toLowerCase())
+    );
+  }, [batches, activeSupplier]);
+
+  const allRecordedSuppliers = useMemo(() => {
+    const map = new Map<string, { name: string; count: number; lastDate: string }>();
+
+    batches.forEach((b) => {
+      if (b.supplierName) {
+        const key = b.supplierName.toLowerCase();
+        const prev = map.get(key);
+        map.set(key, {
+          name: b.supplierName,
+          count: (prev?.count || 0) + 1,
+          lastDate: b.manufacturingDate || prev?.lastDate || '',
+        });
+      }
+    });
+
+    purchases.forEach((p) => {
+      if (p.supplierName) {
+        const key = p.supplierName.toLowerCase();
+        const prev = map.get(key);
+        map.set(key, {
+          name: p.supplierName,
+          count: (prev?.count || 0) + 1,
+          lastDate: p.purchaseDate || prev?.lastDate || '',
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [batches, purchases]);
 
   const handleCreateBatch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,7 +200,7 @@ export function MedicineDetailsModal({
       purchasePrice: buyPrice,
       sellingPrice: sellPrice,
       quantity: qty,
-      supplierName: supplierNameInput.trim() || medicine.supplier?.name || 'Standard Distributor',
+      supplierName: supplierNameInput.trim() || undefined,
       invoiceNumber: invoiceNo.trim() || `INV-${Date.now().toString().slice(-6)}`,
       responsibleUser: isDoctorUnlocked ? 'Dr. Sunny' : 'Staff Pharmacist',
     });
@@ -119,15 +212,18 @@ export function MedicineDetailsModal({
     setBatchBuyPrice('');
     setBatchSellPrice('');
     setInvoiceNo('');
+    setSupplierNameInput('');
     setShowAddBatchModal(false);
 
     onMedicineUpdated();
-    const [pur, mov] = await Promise.all([
+    const [pur, mov, sups] = await Promise.all([
       fetchPurchaseHistory(medicine.id),
       fetchStockMovements(medicine.id),
+      fetchSuppliers(),
     ]);
     setPurchases(pur);
     setMovements(mov);
+    setSuppliersList(sups);
   };
 
   const handleRecordAdjustment = async (e: React.FormEvent) => {
@@ -249,7 +345,11 @@ export function MedicineDetailsModal({
               { key: 'overview', label: 'Basic Info & Batches', icon: Layers },
               { key: 'purchases', label: `Purchase History (${purchases.length})`, icon: FileText },
               { key: 'movements', label: `Stock Movements (${movements.length})`, icon: Activity },
-              { key: 'supplier', label: 'Supplier Info', icon: Truck },
+              {
+                key: 'supplier',
+                label: activeSupplier ? `Supplier: ${activeSupplier.name}` : 'Supplier Info',
+                icon: Truck,
+              },
             ].map((tab) => {
               const Icon = tab.icon;
               const isSelected = activeTab === tab.key;
@@ -352,13 +452,14 @@ export function MedicineDetailsModal({
                           <th className="py-2.5 px-3">Available Qty</th>
                           <th className="py-2.5 px-3">Buy Price</th>
                           <th className="py-2.5 px-3">Sell Price</th>
+                          <th className="py-2.5 px-3">Supplier Tag</th>
                           <th className="py-2.5 px-3">Expiry Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {batches.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="py-6 text-center text-slate-400">
+                            <td colSpan={8} className="py-6 text-center text-slate-400">
                               No batches recorded yet. Add a batch to initiate inventory.
                             </td>
                           </tr>
@@ -392,6 +493,9 @@ export function MedicineDetailsModal({
                                 </td>
                                 <td className="py-2.5 px-3 text-slate-600">₹{b.purchasePrice.toFixed(2)}</td>
                                 <td className="py-2.5 px-3 text-slate-800 font-semibold">₹{b.sellingPrice.toFixed(2)}</td>
+                                <td className="py-2.5 px-3 text-slate-600 truncate max-w-[120px]">
+                                  {b.supplierName || 'Self-Procured'}
+                                </td>
                                 <td className="py-2.5 px-3">
                                   {isExp ? (
                                     <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-100 text-red-700">
@@ -551,71 +655,169 @@ export function MedicineDetailsModal({
             )}
 
             {activeTab === 'supplier' && (
-              <div className="space-y-4">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Registered Supplier & Logistics Information
-                </h3>
-                <div className="bg-[#F8F9FB] rounded-2xl border border-slate-100 p-5 space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-[#2563EB]">
-                      <Building className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h4 className="font-extrabold text-sm text-slate-800">
-                        {medicine.supplier?.name || 'Primary Clinic Pharmacy Distributor'}
-                      </h4>
-                      <p className="text-xs text-slate-500">Authorized Medical Wholesaler</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-2">
-                    <div>
-                      <p className="text-[11px] text-slate-400 font-medium">Contact Person</p>
-                      <p className="font-bold text-slate-700 mt-0.5">
-                        {medicine.supplier?.contactPerson || 'Vendor Dispatch Office'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] text-slate-400 font-medium">Contact Phone</p>
-                      <p className="font-bold text-slate-700 mt-0.5">
-                        {medicine.supplier?.phone || '+91 98450 12345'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] text-slate-400 font-medium">Email Address</p>
-                      <p className="font-bold text-slate-700 mt-0.5">
-                        {medicine.supplier?.email || 'sales@pharmadistributor.in'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] text-slate-400 font-medium">GSTIN Registration</p>
-                      <p className="font-bold text-slate-700 mt-0.5">
-                        {medicine.supplier?.gstin || '29ABCDE1234F1Z5'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] text-slate-400 font-medium">Last Purchase Date</p>
-                      <p className="font-bold text-slate-700 mt-0.5">
-                        {medicine.lastPurchaseDate || '2026-10-15'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] text-slate-400 font-medium">Last Purchase Unit Price</p>
-                      <p className="font-bold text-emerald-700 mt-0.5">
-                        ₹{Number(medicine.lastPurchasePrice || 0).toFixed(2)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {medicine.supplier?.address && (
-                    <div className="pt-2 border-t border-slate-200/60">
-                      <p className="text-[11px] text-slate-400 font-medium">Registered Warehouse Address</p>
-                      <p className="text-xs text-slate-700 font-medium mt-0.5">
-                        {medicine.supplier.address}
-                      </p>
-                    </div>
+              <div className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Vendor & Procurement Logistics
+                  </h3>
+                  {activeSupplier && (
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      Source: Batches & Purchase Invoices
+                    </span>
                   )}
                 </div>
+
+                {activeSupplier ? (
+                  <div className="space-y-4">
+                    <div className="bg-[#F8F9FB] rounded-2xl border border-slate-100 p-5 space-y-4">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-[#2563EB]">
+                            <Building className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h4 className="font-extrabold text-sm text-slate-800">
+                              {activeSupplier.name}
+                            </h4>
+                            <p className="text-xs text-slate-500">
+                              Primary Vendor mapped to this molecule
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Active Supplier
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-2">
+                        <div>
+                          <p className="text-[11px] text-slate-400 font-medium">Contact Person</p>
+                          <p className="font-bold text-slate-700 mt-0.5">
+                            {activeSupplier.contactPerson || 'Not provided'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-slate-400 font-medium">Contact Phone</p>
+                          <p className="font-bold text-slate-700 mt-0.5">
+                            {activeSupplier.phone || 'Not provided'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-slate-400 font-medium">Email Address</p>
+                          <p className="font-bold text-slate-700 mt-0.5">
+                            {activeSupplier.email || 'Not provided'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-slate-400 font-medium">GSTIN Registration</p>
+                          <p className="font-bold text-slate-700 mt-0.5">
+                            {activeSupplier.gstin || 'Not provided'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-slate-400 font-medium">Last Purchase Date</p>
+                          <p className="font-bold text-slate-700 mt-0.5">
+                            {activeSupplier.lastPurchaseDate || medicine.lastPurchaseDate || 'N/A'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-slate-400 font-medium">Last Purchase Unit Price</p>
+                          <p className="font-bold text-emerald-700 mt-0.5">
+                            {activeSupplier.lastPurchasePrice || medicine.lastPurchasePrice
+                              ? `₹${Number(activeSupplier.lastPurchasePrice || medicine.lastPurchasePrice).toFixed(2)}`
+                              : 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {activeSupplier.address && (
+                        <div className="pt-2 border-t border-slate-200/60">
+                          <p className="text-[11px] text-slate-400 font-medium">Registered Warehouse Address</p>
+                          <p className="text-xs text-slate-700 font-medium mt-0.5">
+                            {activeSupplier.address}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {supplierBatches.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          Batches Procured from {activeSupplier.name} ({supplierBatches.length})
+                        </h4>
+                        <div className="overflow-x-auto border border-slate-100 rounded-2xl">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-[#F8F9FB] text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-100">
+                              <tr>
+                                <th className="py-2 px-3">Batch Number</th>
+                                <th className="py-2 px-3">Mfg Date</th>
+                                <th className="py-2 px-3">Expiry Date</th>
+                                <th className="py-2 px-3">Available Qty</th>
+                                <th className="py-2 px-3">Purchase Price</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {supplierBatches.map((b) => (
+                                <tr key={b.id} className="hover:bg-slate-50/70 transition">
+                                  <td className="py-2 px-3 font-mono font-bold text-slate-800">{b.batchNumber}</td>
+                                  <td className="py-2 px-3 text-slate-500">{b.manufacturingDate || 'N/A'}</td>
+                                  <td className="py-2 px-3 text-slate-700 font-semibold">{b.expiryDate}</td>
+                                  <td className="py-2 px-3 font-bold text-slate-800">{b.availableQuantity} units</td>
+                                  <td className="py-2 px-3 text-slate-600">₹{b.purchasePrice.toFixed(2)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {allRecordedSuppliers.length > 1 && (
+                      <div className="space-y-2 pt-2 border-t border-slate-100">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          All Wholesalers on Record for this Medicine
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                          {allRecordedSuppliers.map((s, idx) => (
+                            <div
+                              key={idx}
+                              className="p-3 bg-[#F8F9FB] rounded-xl border border-slate-100 flex items-center justify-between"
+                            >
+                              <div>
+                                <p className="font-bold text-slate-800">{s.name}</p>
+                                <p className="text-[11px] text-slate-400">{s.count} batch procurements recorded</p>
+                              </div>
+                              <span className="text-[10px] text-slate-500 font-medium">
+                                Last: {s.lastDate || 'Recent'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-[#F8F9FB] rounded-2xl border border-slate-100 p-8 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                      <Truck className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-800">No Supplier Linked Yet</h4>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
+                        No vendor or distributor is currently linked to this medicine. When you add a new procurement batch, you can select or enter a supplier.
+                      </p>
+                    </div>
+                    {isDoctorUnlocked && (
+                      <button
+                        onClick={() => setShowAddBatchModal(true)}
+                        className="px-4 py-2 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs inline-flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Procurement Batch</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -738,14 +940,20 @@ export function MedicineDetailsModal({
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Supplier Name</label>
+                    <label className="block text-slate-500 font-semibold mb-1">Supplier / Wholesaler</label>
                     <input
                       type="text"
-                      placeholder="e.g. Apex Pharma"
+                      list="suppliers-datalist"
+                      placeholder="e.g. Apex Pharma Distributors"
                       value={supplierNameInput}
                       onChange={(e) => setSupplierNameInput(e.target.value)}
                       className="w-full p-2.5 bg-[#F8F9FB] border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500"
                     />
+                    <datalist id="suppliers-datalist">
+                      {suppliersList.map((s) => (
+                        <option key={s.id} value={s.name} />
+                      ))}
+                    </datalist>
                   </div>
                 </div>
 

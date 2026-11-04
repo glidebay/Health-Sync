@@ -530,6 +530,14 @@ export async function fetchMedicinesMaster(): Promise<MedicineMaster[]> {
         const totalStock = batches.reduce((sum, b) => sum + (b.availableQuantity || 0), 0);
         const minLevel = Number(m.minimum_stock_level) || 20;
 
+        const primarySupplierId = batches.find((b) => b.supplierId)?.supplierId;
+        const primarySupplierName = batches.find((b) => b.supplierName)?.supplierName;
+        const primarySupplier = primarySupplierId
+          ? suppliers.find((s) => s.id === primarySupplierId)
+          : primarySupplierName
+          ? suppliers.find((s) => s.name.toLowerCase() === primarySupplierName.toLowerCase())
+          : undefined;
+
         return {
           id: m.id,
           sku: m.sku,
@@ -547,6 +555,7 @@ export async function fetchMedicinesMaster(): Promise<MedicineMaster[]> {
           stockStatus: calculateStockStatus(totalStock, minLevel),
           expiryStatus: calculateExpiryStatus(batches),
           sellingPrice: Number(m.selling_price) || 0,
+          supplier: primarySupplier,
         };
       });
 
@@ -669,6 +678,29 @@ export async function addMedicineWithInitialBatch(params: {
   const medId = `med-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
   const batchId = `bat-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
 
+  const currentSuppliers = loadStoredSuppliers();
+  const matchedSup = params.supplierId
+    ? currentSuppliers.find((s) => s.id === params.supplierId)
+    : params.supplierName
+    ? currentSuppliers.find((s) => s.name.toLowerCase() === params.supplierName?.toLowerCase())
+    : undefined;
+
+  const supplierObj: Supplier | undefined = matchedSup
+    ? matchedSup
+    : params.supplierName?.trim()
+    ? {
+        id: `sup-${Date.now().toString(36)}`,
+        name: params.supplierName.trim(),
+        phone: '',
+        lastPurchaseDate: new Date().toISOString().split('T')[0],
+        lastPurchasePrice: params.purchasePrice,
+      }
+    : undefined;
+
+  if (supplierObj && !matchedSup) {
+    saveStoredSuppliers([...currentSuppliers, supplierObj]);
+  }
+
   const newBatch: MedicineBatch = {
     id: batchId,
     medicineId: medId,
@@ -679,8 +711,8 @@ export async function addMedicineWithInitialBatch(params: {
     sellingPrice: params.sellingPrice,
     initialQuantity: params.quantity,
     availableQuantity: params.quantity,
-    supplierId: params.supplierId,
-    supplierName: params.supplierName,
+    supplierId: supplierObj?.id || params.supplierId,
+    supplierName: supplierObj?.name || params.supplierName,
   };
 
   const newMedicine: MedicineMaster = {
@@ -698,6 +730,7 @@ export async function addMedicineWithInitialBatch(params: {
     sellingPrice: params.sellingPrice,
     lastPurchasePrice: params.purchasePrice,
     lastPurchaseDate: new Date().toISOString().split('T')[0],
+    supplier: supplierObj,
     batches: [newBatch],
     totalStock: params.quantity,
     stockStatus: calculateStockStatus(params.quantity, params.minimumStockLevel),
@@ -746,8 +779,8 @@ export async function addMedicineWithInitialBatch(params: {
     id: `pur-${Date.now().toString(36)}`,
     medicineId: medId,
     medicineName: `${newMedicine.brandName} (${newMedicine.genericName})`,
-    supplierId: params.supplierId || 'sup-unknown',
-    supplierName: params.supplierName || 'General Supplier',
+    supplierId: supplierObj?.id || params.supplierId || '',
+    supplierName: supplierObj?.name || params.supplierName || 'Self-Procured',
     batchNumber: newBatch.batchNumber,
     purchaseDate: new Date().toISOString().split('T')[0],
     quantityPurchased: params.quantity,
@@ -864,8 +897,8 @@ export async function addBatchToMedicine(params: {
     id: `pur-${Date.now().toString(36)}`,
     medicineId: params.medicineId,
     medicineName: targetMed ? `${targetMed.brandName} (${targetMed.genericName})` : 'Medicine',
-    supplierId: params.supplierId || 'sup-unknown',
-    supplierName: params.supplierName || 'Distributor',
+    supplierId: params.supplierId || '',
+    supplierName: params.supplierName || 'Self-Procured',
     batchNumber: newBatch.batchNumber,
     purchaseDate: new Date().toISOString().split('T')[0],
     quantityPurchased: params.quantity,
@@ -1379,7 +1412,7 @@ export function executeCsvImport(
         medicineId: existingMed.id,
         medicineName: `${row.brandName} (${row.genericName})`,
         supplierId: 'sup-import',
-        supplierName: row.supplierName || 'Import Distributor',
+        supplierName: row.supplierName || 'Self-Procured',
         batchNumber: row.batchNumber,
         purchaseDate: new Date().toISOString().split('T')[0],
         quantityPurchased: row.quantity,
@@ -1539,3 +1572,4 @@ export function convertMasterToInventoryItems(medicines: MedicineMaster[]): Inve
     batchNo: m.batches && m.batches.length > 0 ? m.batches[0].batchNumber : undefined,
   }));
 }
+
