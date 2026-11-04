@@ -367,62 +367,64 @@ export function QueueList({
                             </div>
                           </div>
                         </div>
-
-                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
-                              isCompleted
-                                ? 'bg-slate-100 text-slate-600 border-slate-200/60'
-                                : isInProgress
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
-                                : 'bg-blue-50 text-blue-700 border-blue-200/60'
-                            }`}
-                          >
-                            {p.status}
-                          </span>
-                          <span
-                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1 border ${
-                              isOnline
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
-                                : 'bg-indigo-50 text-indigo-700 border-indigo-200/60'
-                            }`}
-                          >
-                            {isOnline ? (
-                              <>
-                                <Globe className="w-2.5 h-2.5" />
-                                <span>Online</span>
-                              </>
-                            ) : (
-                              <>
-                                <UserCheck className="w-2.5 h-2.5" />
-                                <span>Walk-in</span>
-                              </>
-                            )}
-                          </span>
-                        </div>
                       </div>
                     </div>
 
-                    {isWaiting && (
-                      <div className="flex items-center justify-end space-x-2 pt-1 flex-shrink-0">
-                        <motion.button
-                          whileHover={{ scale: 1.04 }}
-                          whileTap={{ scale: 0.96 }}
-                          onClick={() => setSelectedPatientForCancel(p)}
-                          className="text-xs font-semibold px-3 py-1.5 border border-rose-200/80 text-rose-600 rounded-2xl hover:bg-rose-50 transition cursor-pointer"
+                    <div className="flex items-center justify-between gap-3 pt-1 mt-auto">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                            isCompleted
+                              ? 'bg-slate-100 text-slate-600 border-slate-200/60'
+                              : isInProgress
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
+                              : 'bg-blue-50 text-blue-700 border-blue-200/60'
+                          }`}
                         >
-                          Cancel
-                        </motion.button>
-                        <motion.button
-                          whileHover={{ scale: 1.04 }}
-                          whileTap={{ scale: 0.96 }}
-                          onClick={() => setSelectedPatientForReschedule(p)}
-                          className="text-xs font-semibold px-3 py-1.5 border border-blue-200/80 text-blue-600 rounded-2xl hover:bg-blue-50 transition cursor-pointer"
+                          {p.status}
+                        </span>
+                        <span
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1 border ${
+                            isOnline
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
+                              : 'bg-indigo-50 text-indigo-700 border-indigo-200/60'
+                          }`}
                         >
-                          Reschedule
-                        </motion.button>
+                          {isOnline ? (
+                            <>
+                              <Globe className="w-2.5 h-2.5" />
+                              <span>Online</span>
+                            </>
+                          ) : (
+                            <>
+                              <UserCheck className="w-2.5 h-2.5" />
+                              <span>Walk-in</span>
+                            </>
+                          )}
+                        </span>
                       </div>
-                    )}
+
+                      {isWaiting && (
+                        <div className="flex items-center space-x-2 flex-shrink-0">
+                          <motion.button
+                            whileHover={{ scale: 1.04 }}
+                            whileTap={{ scale: 0.96 }}
+                            onClick={() => setSelectedPatientForCancel(p)}
+                            className="text-xs font-semibold px-3 py-1.5 border border-rose-200/80 text-rose-600 rounded-2xl hover:bg-rose-50 transition cursor-pointer"
+                          >
+                            Cancel
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ scale: 1.04 }}
+                            whileTap={{ scale: 0.96 }}
+                            onClick={() => setSelectedPatientForReschedule(p)}
+                            className="text-xs font-semibold px-3 py-1.5 border border-blue-200/80 text-blue-600 rounded-2xl hover:bg-blue-50 transition cursor-pointer"
+                          >
+                            Reschedule
+                          </motion.button>
+                        </div>
+                      )}
+                    </div>
                   </motion.div>
                 );
               })}
