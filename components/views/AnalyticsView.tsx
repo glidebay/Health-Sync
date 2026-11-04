@@ -16,6 +16,7 @@ import { ChartLine } from '@/components/ui/chart-line';
 import { RankBarChart, type RankBarItem } from '@/components/ui/rank-bars';
 import { Patient } from '@/types';
 import { formatPatientToken } from '@/lib/utils';
+import { AnimatedCounter } from '@/components/common/AnimatedCounter';
 
 interface AnalyticsViewProps {
   totalPatientsCount: number;
@@ -42,6 +43,7 @@ export function AnalyticsView({
     setInternalSearch(val);
     onSearchChange?.(val);
   };
+
   const cancelledList = useMemo(() => {
     if (cancelledAppointments !== undefined) {
       return cancelledAppointments;
@@ -138,11 +140,11 @@ export function AnalyticsView({
   ];
 
   const casesData = [
-    { label: 'Viral Fever & URI', pct: '45%', color: 'bg-[#2563EB]' },
-    { label: 'Gastric & Reflux', pct: '25%', color: 'bg-[#3B82F6]' },
-    { label: 'Allergies & Skin', pct: '15%', color: 'bg-[#60A5FA]' },
-    { label: 'Routine Vitals', pct: '10%', color: 'bg-[#93C5FD]' },
-    { label: 'Orthopedic / Joints', pct: '5%', color: 'bg-[#BFDBFE]' },
+    { label: 'Viral Fever & URI', pct: '45%', color: 'bg-blue-600' },
+    { label: 'Gastric & Reflux', pct: '25%', color: 'bg-blue-500' },
+    { label: 'Allergies & Skin', pct: '15%', color: 'bg-blue-400' },
+    { label: 'Routine Vitals', pct: '10%', color: 'bg-blue-300' },
+    { label: 'Orthopedic / Joints', pct: '5%', color: 'bg-blue-200' },
   ];
 
   const filteredMedicines = useMemo(() => {
@@ -177,32 +179,34 @@ export function AnalyticsView({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -14 }}
       transition={{ duration: 0.25 }}
-      className="space-y-5 sm:space-y-6"
+      className="space-y-5 sm:space-y-6 pb-10"
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
         <div>
-          <h2 className="text-base sm:text-lg font-bold text-[#16191E]">Clinic Analytics & Practice Insights</h2>
-          <p className="text-xs text-[#8A909D] font-medium">
+          <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
+            Clinic Analytics &amp; Practice Insights
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
             Monitor patient volume trends, consultation dynamics, digital adoption, and pharmacy metrics
           </p>
         </div>
 
         <div className="relative w-full sm:w-72">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
             <Search className="w-3.5 h-3.5" />
           </span>
           <input
             type="text"
             value={internalSearch}
             onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="Search analytics & insights..."
-            className="w-full pl-9 pr-8 py-2 bg-white border border-[#ECEEF2] rounded-xl text-xs text-[#16191E] placeholder:text-gray-400 outline-none focus:border-[#2563EB] shadow-2xs transition"
+            placeholder="Search analytics &amp; insights..."
+            className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-500 shadow-2xs transition"
           />
           {internalSearch && (
             <button
               type="button"
               onClick={() => handleSearchChange('')}
-              className="absolute right-2.5 inset-y-0 flex items-center text-gray-400 hover:text-gray-600 transition cursor-pointer"
+              className="absolute right-2.5 inset-y-0 flex items-center text-slate-400 hover:text-slate-600 transition cursor-pointer"
               title="Clear search"
             >
               <X className="w-3.5 h-3.5" />
@@ -212,98 +216,98 @@ export function AnalyticsView({
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* 1. Walking Patients */}
         <motion.div
-          whileHover={{ y: -3 }}
-          className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
+          whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
+          transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
               Walking Patients
             </span>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB]">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100/60 flex items-center justify-center text-blue-600">
               <Users className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <span className="text-2xl sm:text-3xl font-extrabold text-[#16191E] block">
-              {walkinCount}
+            <span className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight block">
+              <AnimatedCounter target={walkinCount} />
             </span>
-            <span className="text-[10px] text-blue-600 font-bold flex items-center gap-1 mt-0.5">
+            <span className="text-[11px] text-blue-600 font-semibold flex items-center gap-1 mt-0.5">
               <span>{activeCount > 0 ? `${Math.round((walkinCount / activeCount) * 100)}%` : '0%'}</span>
-              <span className="text-[#8A909D] font-normal">of active queue walk-ins</span>
+              <span className="text-slate-400 font-normal">of active queue walk-ins</span>
             </span>
           </div>
         </motion.div>
 
-        {/* 2. WhatsApp Booking Patients */}
         <motion.div
-          whileHover={{ y: -3 }}
-          className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
+          whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
+          transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
               WhatsApp Bookings
             </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100/60 flex items-center justify-center text-emerald-600">
               <MessageSquare className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600 block">
-              {whatsappCount}
+            <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight block">
+              <AnimatedCounter target={whatsappCount} />
             </span>
-            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 mt-0.5">
+            <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
               <span>{activeCount > 0 ? `${Math.round((whatsappCount / activeCount) * 100)}%` : '0%'}</span>
-              <span className="text-[#8A909D] font-normal">digital self-service</span>
+              <span className="text-slate-400 font-normal">digital self-service</span>
             </span>
           </div>
         </motion.div>
 
-        {/* 3. Completed Patients */}
         <motion.div
-          whileHover={{ y: -3 }}
-          className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
+          whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
+          transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
               Completed Patients
             </span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100/60 flex items-center justify-center text-indigo-600">
               <CheckCircle2 className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <span className="text-2xl sm:text-3xl font-extrabold text-indigo-600 block">
-              {completedCount}
+            <span className="text-2xl sm:text-3xl font-extrabold text-indigo-600 tracking-tight block">
+              <AnimatedCounter target={completedCount} />
             </span>
-            <span className="text-[10px] text-indigo-600 font-bold flex items-center gap-1 mt-0.5">
+            <span className="text-[11px] text-indigo-600 font-semibold flex items-center gap-1 mt-0.5">
               <span>{activeCount > 0 ? `${Math.round((completedCount / activeCount) * 100)}%` : '0%'}</span>
-              <span className="text-[#8A909D] font-normal">consultations concluded</span>
+              <span className="text-slate-400 font-normal">consultations concluded</span>
             </span>
           </div>
         </motion.div>
 
-        {/* 4. Cancelled Patients */}
         <motion.div
-          whileHover={{ y: -3 }}
-          className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
+          whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
+          transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] sm:text-xs font-semibold text-[#8A909D] uppercase tracking-wider">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
               Cancelled Patients
             </span>
-            <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
+            <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-100/60 flex items-center justify-center text-rose-600">
               <CalendarX className="w-4 h-4 stroke-[2.2]" />
             </div>
           </div>
           <div>
-            <span className="text-2xl sm:text-3xl font-extrabold text-rose-600 block">
-              {cancelledCount}
+            <span className="text-2xl sm:text-3xl font-extrabold text-rose-600 tracking-tight block">
+              <AnimatedCounter target={cancelledCount} />
             </span>
-            <span className="text-[10px] text-rose-600 font-bold flex items-center gap-1 mt-0.5">
+            <span className="text-[11px] text-rose-600 font-semibold flex items-center gap-1 mt-0.5">
               <span>{cancelledCount > 0 ? `${cancellationRate}%` : '0%'}</span>
-              <span className="text-[#8A909D] font-normal">cancellation rate today</span>
+              <span className="text-slate-400 font-normal">cancellation rate today</span>
             </span>
           </div>
         </motion.div>
@@ -311,7 +315,7 @@ export function AnalyticsView({
 
       <div className="w-full">
         <ChartLine
-          title="Patient Footfall & Booking Channel Trends"
+          title="Patient Footfall &amp; Booking Channel Trends"
           description="Comparison of Walk-in Registrations vs WhatsApp Self-Service Appointments (2025 – 2026)"
           data={patientVolumeData}
           index="month"
@@ -328,25 +332,26 @@ export function AnalyticsView({
           height={240}
           showTooltip={true}
           showLegend={true}
-          icon={<TrendingUp className="w-4 h-4 text-[#2563EB]" />}
+          icon={<TrendingUp className="w-4 h-4 text-blue-600" />}
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <motion.div
-          whileHover={{ y: -2 }}
-          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
+          whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
+          transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+          className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between"
         >
           <div className="flex items-start justify-between gap-3 mb-5">
             <div>
-              <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
-                Top Selling & Dispensed Medicines
+              <h3 className="text-base font-bold text-slate-800 tracking-tight">
+                Top Selling &amp; Dispensed Medicines
               </h3>
-              <p className="text-xs text-[#8A909D] font-medium mt-0.5">
+              <p className="text-xs text-slate-400 mt-0.5">
                 Pharmacy dispensation leaderboard · Current monthly volume
               </p>
             </div>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB] flex-shrink-0 shadow-2xs">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100/60 flex items-center justify-center text-blue-600 flex-shrink-0 shadow-2xs">
               <Pill className="w-4 h-4" />
             </div>
           </div>
@@ -361,14 +366,15 @@ export function AnalyticsView({
         </motion.div>
 
         <motion.div
-          whileHover={{ y: -2 }}
-          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col justify-between"
+          whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
+          transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+          className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between"
         >
           <div className="mb-5">
-            <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+            <h3 className="text-base font-bold text-slate-800 tracking-tight">
               Consultation Case Breakdown
             </h3>
-            <p className="text-xs text-[#8A909D] font-medium mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5">
               Distribution of symptoms and clinical diagnostic categories
             </p>
           </div>
@@ -428,8 +434,8 @@ export function AnalyticsView({
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-base sm:text-lg font-bold text-[#16191E]">100%</span>
-                <span className="text-[9px] text-[#8A909D] font-bold uppercase tracking-wider">Cases</span>
+                <span className="text-base sm:text-lg font-bold text-slate-800">100%</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Cases</span>
               </div>
             </div>
 
@@ -441,9 +447,9 @@ export function AnalyticsView({
                 >
                   <div className="flex items-center space-x-2.5">
                     <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${item.color}`} />
-                    <span className="text-[#16191E] font-medium">{item.label}</span>
+                    <span className="text-slate-700 font-medium">{item.label}</span>
                   </div>
-                  <span className="text-[#8A909D] font-bold ml-6">{item.pct}</span>
+                  <span className="text-slate-400 font-bold ml-6">{item.pct}</span>
                 </div>
               ))}
             </div>
@@ -451,29 +457,29 @@ export function AnalyticsView({
         </motion.div>
       </div>
 
-      <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
+      <div className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2.5">
-            <h3 className="text-sm sm:text-base font-bold text-[#16191E]">
+            <h3 className="text-base font-bold text-slate-800">
               Cancelled Appointments
             </h3>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-[#5E6470]">
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">
               {cancelledCount}
             </span>
           </div>
           {cancelledCount > 0 && (
-            <span className="text-xs text-[#8A909D]">
+            <span className="text-xs text-slate-400 font-medium">
               {cancellationRate}% cancellation rate
             </span>
           )}
         </div>
 
         {cancelledCount === 0 ? (
-          <div className="py-8 text-center text-[#8A909D]">
+          <div className="py-8 text-center text-slate-400">
             <p className="text-xs font-medium">No cancelled appointments recorded today.</p>
           </div>
         ) : (
-          <div className="divide-y divide-[#ECEEF2]">
+          <div className="divide-y divide-slate-100">
             {filteredCancelled.map((p) => {
               const tokenDisplay = formatPatientToken(p);
               const visitTypeDisplay =
@@ -484,28 +490,28 @@ export function AnalyticsView({
               return (
                 <div
                   key={p.id}
-                  className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs hover:bg-[#F8F9FB] -mx-2 px-2 rounded-xl transition-colors"
+                  className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs hover:bg-slate-50/80 -mx-2 px-3 rounded-xl transition-colors"
                 >
                   <div className="flex items-center space-x-3 min-w-0">
-                    <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 flex-shrink-0">
+                    <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/60 flex-shrink-0">
                       {tokenDisplay}
                     </span>
                     <div className="min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-semibold text-sm text-[#16191E] truncate">
+                      <div className="flex items-center space-x-2 flex-wrap">
+                        <span className="font-semibold text-xs sm:text-sm text-slate-800 truncate">
                           {p.name}
                         </span>
-                        <span className="text-[11px] text-[#8A909D]">
+                        <span className="text-[11px] text-slate-400">
                           {p.age}y · {p.gender}
                         </span>
                         {p.phone && (
-                          <span className="text-[11px] text-[#5E6470] hidden md:inline">
+                          <span className="text-[11px] text-slate-400 hidden md:inline">
                             · {p.phone}
                           </span>
                         )}
                       </div>
                       {p.cancellationReason && (
-                        <p className="text-[11px] text-[#8A909D] truncate mt-0.5">
+                        <p className="text-[11px] text-slate-400 truncate mt-0.5">
                           Reason: {p.cancellationReason}
                         </p>
                       )}
@@ -513,13 +519,13 @@ export function AnalyticsView({
                   </div>
 
                   <div className="flex items-center space-x-3 self-end sm:self-auto flex-shrink-0">
-                    <span className="text-[11px] text-[#5E6470]">
+                    <span className="text-[11px] text-slate-400">
                       Slot: {p.time}
                     </span>
-                    <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-gray-50 border border-gray-200 text-gray-600">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200 text-slate-600">
                       {visitTypeDisplay}
                     </span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-100">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200/70">
                       Cancelled
                     </span>
                   </div>

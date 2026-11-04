@@ -121,7 +121,6 @@ export function PrescriptionTemplateCalibrator({
         return { ...DEFAULT_RX_TEMPLATE_FIELDS, ...parsed };
       }
     } catch {
-      // Fallback
     }
     return DEFAULT_RX_TEMPLATE_FIELDS;
   }, [fieldsJson]);
@@ -144,13 +143,11 @@ export function PrescriptionTemplateCalibrator({
           rx_template_fields: json,
         });
       } catch {
-        // ignore
       }
     },
     [fields, onUpdateFields]
   );
 
-  // Arrow Keys Navigation to Nudge Active Field
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeTag = (document.activeElement?.tagName || '').toLowerCase();
@@ -160,7 +157,7 @@ export function PrescriptionTemplateCalibrator({
 
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         e.preventDefault();
-        const step = e.shiftKey ? 1.0 : 0.2; // Shift gives larger steps, normal gives fine 0.2% steps
+        const step = e.shiftKey ? 1.0 : 0.2;
         const currentCoord = fields[activeField] || DEFAULT_RX_TEMPLATE_FIELDS[activeField];
         let newX = currentCoord.x;
         let newY = currentCoord.y;
@@ -181,7 +178,6 @@ export function PrescriptionTemplateCalibrator({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeField, fields, updateSingleField]);
 
-  // Nudge Helper Function
   const nudgeActiveField = (dx: number, dy: number) => {
     const currentCoord = fields[activeField] || DEFAULT_RX_TEMPLATE_FIELDS[activeField];
     const newX = Math.max(0, Math.min(95, currentCoord.x + dx));
@@ -210,7 +206,6 @@ export function PrescriptionTemplateCalibrator({
             rx_template_enabled: true,
           });
         } catch {
-          // ignore
         }
       }
     };
@@ -228,12 +223,10 @@ export function PrescriptionTemplateCalibrator({
           rx_template_fields: defaultStr,
         });
       } catch {
-        // ignore
       }
     }
   };
 
-  // Smooth Dragging with Cursor Offset to Prevent Jumping
   const handlePointerDown = (key: FieldKey, e: React.PointerEvent) => {
     e.stopPropagation();
     setActiveField(key);
@@ -246,11 +239,9 @@ export function PrescriptionTemplateCalibrator({
     const rect = canvas.getBoundingClientRect();
     const currentCoord = fields[key] || DEFAULT_RX_TEMPLATE_FIELDS[key];
 
-    // Calculate current element position in pixels relative to canvas
     const initialElemLeftPx = (currentCoord.x / 100) * rect.width;
     const initialElemTopPx = (currentCoord.y / 100) * rect.height;
 
-    // Offset of cursor relative to element's top-left corner
     const cursorOffsetX = e.clientX - (rect.left + initialElemLeftPx);
     const cursorOffsetY = e.clientY - (rect.top + initialElemTopPx);
 
@@ -282,22 +273,21 @@ export function PrescriptionTemplateCalibrator({
 
   return (
     <div className="space-y-6">
-      {/* Top Banner & Upload Controls */}
-      <div className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2.5">
-            <h3 className="text-sm font-bold text-[#16191E]">Custom Prescription Pad / Letterhead Design</h3>
+            <h3 className="text-sm font-bold text-slate-800">Custom Prescription Pad / Letterhead Design</h3>
             <span
               className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                 enabled && templateUrl
                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                  : 'bg-gray-100 text-gray-500'
+                  : 'bg-slate-100 text-slate-500'
               }`}
             >
               {enabled && templateUrl ? 'Active in Consultation' : 'Disabled'}
             </span>
           </div>
-          <p className="text-xs text-[#8A909D] mt-1 max-w-xl">
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">
             Upload your clinic's custom prescription pad or letterhead image. Drag or use arrow keys to calibrate where
             patient details and prescribed medicines print on the page.
           </p>
@@ -315,9 +305,9 @@ export function PrescriptionTemplateCalibrator({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 bg-white border border-[#ECEEF2] hover:bg-gray-50 text-gray-800 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-2xs"
+            className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-2xs"
           >
-            <Upload className="w-3.5 h-3.5 text-[#2563EB]" />
+            <Upload className="w-3.5 h-3.5 text-blue-600" />
             <span>{templateUrl ? 'Replace Pad Image' : 'Upload Prescription Pad'}</span>
           </button>
 
@@ -326,10 +316,10 @@ export function PrescriptionTemplateCalibrator({
               type="button"
               onClick={onSaveImmediate}
               disabled={isSaving}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer shadow-sm ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer shadow-xs ${
                 isSaved
                   ? 'bg-emerald-600 text-white'
-                  : 'bg-[#2563EB] hover:bg-blue-700 text-white'
+                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white'
               }`}
             >
               {isSaving ? (
@@ -357,7 +347,7 @@ export function PrescriptionTemplateCalibrator({
                   onUpdateEnabled(false);
                 }
               }}
-              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer"
+              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer"
               title="Remove template"
             >
               <Trash2 className="w-4 h-4" />
@@ -366,13 +356,12 @@ export function PrescriptionTemplateCalibrator({
         </div>
       </div>
 
-      {/* Switches & Print Options */}
       {templateUrl && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="flex items-center justify-between p-4 rounded-xl bg-white border border-[#ECEEF2] shadow-xs">
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]">
             <div>
-              <span className="text-xs font-bold text-[#16191E] block">Enable Custom Prescription Template</span>
-              <span className="text-[11px] text-[#8A909D] block mt-0.5">
+              <span className="text-xs font-bold text-slate-800 block">Enable Custom Prescription Template</span>
+              <span className="text-[11px] text-slate-400 block mt-0.5">
                 Automatically formats all consultation prints onto this uploaded template
               </span>
             </div>
@@ -380,7 +369,7 @@ export function PrescriptionTemplateCalibrator({
               type="button"
               onClick={() => onUpdateEnabled(!enabled)}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
-                enabled ? 'bg-[#2563EB]' : 'bg-gray-300'
+                enabled ? 'bg-blue-600' : 'bg-slate-300'
               }`}
             >
               <span
@@ -391,10 +380,10 @@ export function PrescriptionTemplateCalibrator({
             </button>
           </div>
 
-          <div className="flex items-center justify-between p-4 rounded-xl bg-white border border-[#ECEEF2] shadow-xs">
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]">
             <div>
-              <span className="text-xs font-bold text-[#16191E] block">Print Background Graphic</span>
-              <span className="text-[11px] text-[#8A909D] block mt-0.5">
+              <span className="text-xs font-bold text-slate-800 block">Print Background Graphic</span>
+              <span className="text-[11px] text-slate-400 block mt-0.5">
                 {printBg
                   ? 'Prints background image (recommended for blank paper)'
                   : 'Transparent background (for physical pre-printed pad paper in printer)'}
@@ -404,7 +393,7 @@ export function PrescriptionTemplateCalibrator({
               type="button"
               onClick={() => onUpdatePrintBg(!printBg)}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
-                printBg ? 'bg-[#2563EB]' : 'bg-gray-300'
+                printBg ? 'bg-blue-600' : 'bg-slate-300'
               }`}
             >
               <span
@@ -417,43 +406,37 @@ export function PrescriptionTemplateCalibrator({
         </div>
       )}
 
-      {/* Main Interactive Calibrator Workspace */}
       {templateUrl ? (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Canvas: A4 Visual Template Preview */}
           <div className="lg:col-span-7 xl:col-span-8 flex flex-col items-center">
-            <div className="w-full flex items-center justify-between pb-2 mb-2 text-xs text-[#5E6470]">
-              <div className="flex items-center space-x-1.5 font-bold text-[#16191E]">
-                <Move className="w-4 h-4 text-[#2563EB]" />
+            <div className="w-full flex items-center justify-between pb-2 mb-2 text-xs text-slate-500">
+              <div className="flex items-center space-x-1.5 font-bold text-slate-800">
+                <Move className="w-4 h-4 text-blue-600" />
                 <span>Interactive Pad View</span>
-                <span className="hidden sm:inline text-[10px] text-[#8A909D] font-normal">
-                  (Drag markers or use Arrow keys ↑ ↓ ← → to position)
+                <span className="hidden sm:inline text-[10px] text-slate-400 font-normal">
+                  (Drag markers or use Arrow keys to position)
                 </span>
               </div>
               <button
                 type="button"
                 onClick={handleResetFields}
-                className="text-[11px] font-semibold text-gray-500 hover:text-[#2563EB] flex items-center space-x-1 transition cursor-pointer"
+                className="text-[11px] font-semibold text-slate-500 hover:text-blue-600 flex items-center space-x-1 transition cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span>Reset Coordinates</span>
               </button>
             </div>
 
-            {/* A4 Container (Exact Aspect Ratio: 210 : 297) */}
             <div
               ref={canvasRef}
-              className="relative w-full max-w-xl aspect-[210/297] bg-white rounded-2xl border-2 border-gray-300 shadow-xl overflow-hidden select-none"
+              className="relative w-full max-w-xl aspect-[210/297] bg-white rounded-2xl border-2 border-slate-200 shadow-xl overflow-hidden select-none"
             >
-              {/* Background Image Element */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={templateUrl}
                 alt="Prescription Template Background"
                 className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0"
               />
 
-              {/* Overlay Fields */}
               {(Object.keys(fields) as FieldKey[]).map((key) => {
                 const coord = fields[key];
                 if (!coord || coord.visible === false) return null;
@@ -472,26 +455,24 @@ export function PrescriptionTemplateCalibrator({
                       fontSize: `${coord.fontSize || 12}px`,
                       fontWeight: coord.fontWeight || 'normal',
                       textAlign: coord.align || 'left',
-                      color: coord.color || '#16191E',
+                      color: coord.color || '#1e293b',
                     }}
                     className={`absolute cursor-move transition-none z-20 group select-none ${
                       isSelected
-                        ? 'ring-2 ring-[#2563EB] bg-blue-500/15'
+                        ? 'ring-2 ring-blue-600 bg-blue-500/15'
                         : 'hover:ring-1 hover:ring-blue-400'
                     }`}
                   >
-                    {/* Badge Pill for Field Identifier */}
                     <div
                       className={`absolute -top-3.5 left-0 px-1 py-0.2 rounded text-[8px] font-bold tracking-tight whitespace-nowrap shadow-xs pointer-events-none ${
                         isSelected
-                          ? 'bg-[#2563EB] text-white ring-1 ring-white'
-                          : 'bg-gray-800/80 text-white opacity-0 group-hover:opacity-100 transition-opacity'
+                          ? 'bg-blue-600 text-white ring-1 ring-white'
+                          : 'bg-slate-800/80 text-white opacity-0 group-hover:opacity-100 transition-opacity'
                       }`}
                     >
                       {fieldInfo.label}
                     </div>
 
-                    {/* Live Sample Content */}
                     <div className="leading-normal whitespace-pre-line pointer-events-none font-sans">
                       {fieldInfo.sample}
                     </div>
@@ -499,7 +480,6 @@ export function PrescriptionTemplateCalibrator({
                 );
               })}
 
-              {/* Help notification badge */}
               <div className="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-black/70 text-white text-[10px] pointer-events-none flex items-center space-x-1 shadow-sm">
                 <Keyboard className="w-3 h-3" />
                 <span>Selected: {FIELD_LABELS[activeField].label} (Use Arrow Keys to Nudge)</span>
@@ -507,23 +487,21 @@ export function PrescriptionTemplateCalibrator({
             </div>
           </div>
 
-          {/* Right Panel: Selected Field Fine-Tuning Controls */}
           <div className="lg:col-span-5 xl:col-span-4 space-y-4">
-            <div className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-sm space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-[#ECEEF2]">
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div className="flex items-center space-x-2">
-                  <Sliders className="w-4 h-4 text-[#2563EB]" />
-                  <h4 className="text-xs font-bold text-[#16191E]">Field Calibrator Controls</h4>
+                  <Sliders className="w-4 h-4 text-blue-600" />
+                  <h4 className="text-xs font-bold text-slate-800">Field Calibrator Controls</h4>
                 </div>
-                <span className="text-[10px] text-[#2563EB] font-mono font-bold bg-blue-50 px-2 py-0.5 rounded-md">
+                <span className="text-[10px] text-blue-600 font-mono font-bold bg-blue-50 px-2 py-0.5 rounded-md">
                   X: {activeCoord.x}% • Y: {activeCoord.y}%
                 </span>
               </div>
 
-              {/* Field Selector */}
               <div>
-                <label className="text-[11px] font-bold text-[#16191E] block mb-1.5">Select Field to Adjust</label>
-                <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-1 bg-[#F8F9FB] rounded-xl border border-[#ECEEF2]">
+                <label className="text-[11px] font-bold text-slate-800 block mb-1.5">Select Field to Adjust</label>
+                <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200/80">
                   {(Object.keys(FIELD_LABELS) as FieldKey[]).map((key) => {
                     const isSelected = activeField === key;
                     const isVisible = fields[key]?.visible !== false;
@@ -534,36 +512,35 @@ export function PrescriptionTemplateCalibrator({
                         onClick={() => setActiveField(key)}
                         className={`text-left px-2.5 py-2 rounded-lg text-[11px] font-semibold transition cursor-pointer flex items-center justify-between ${
                           isSelected
-                            ? 'bg-[#2563EB] text-white font-bold shadow-xs'
-                            : 'bg-white hover:bg-gray-100 text-[#16191E] border border-gray-100'
+                            ? 'bg-blue-600 text-white font-bold shadow-xs'
+                            : 'bg-white hover:bg-slate-100 text-slate-800 border border-slate-100'
                         }`}
                       >
                         <span className="truncate">{FIELD_LABELS[key].label}</span>
-                        {!isVisible && <EyeOff className="w-3 h-3 text-gray-400 flex-shrink-0 ml-1" />}
+                        {!isVisible && <EyeOff className="w-3 h-3 text-slate-400 flex-shrink-0 ml-1" />}
                       </button>
                     );
                   })}
                 </div>
-                <p className="text-[10px] text-[#8A909D] mt-1.5 italic">
+                <p className="text-[10px] text-slate-400 mt-1.5 italic">
                   💡 {FIELD_LABELS[activeField].hint}
                 </p>
               </div>
 
-              {/* Directional Nudge Pad (Arrow Keys) */}
-              <div className="p-3 bg-[#F8F9FB] rounded-xl border border-[#ECEEF2] space-y-2">
-                <div className="flex items-center justify-between text-[11px] font-bold text-[#16191E]">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-800">
                   <span className="flex items-center space-x-1">
-                    <Keyboard className="w-3.5 h-3.5 text-[#2563EB]" />
+                    <Keyboard className="w-3.5 h-3.5 text-blue-600" />
                     <span>Nudge Position</span>
                   </span>
-                  <span className="text-[9px] text-[#8A909D] font-normal">Use Arrow keys (↑ ↓ ← →) or Shift+Arrow</span>
+                  <span className="text-[9px] text-slate-400 font-normal">Use Arrow keys or Shift+Arrow</span>
                 </div>
                 <div className="flex items-center justify-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => nudgeActiveField(-0.5, 0)}
                     title="Nudge Left"
-                    className="w-8 h-8 rounded-lg bg-white border border-[#ECEEF2] hover:bg-gray-100 flex items-center justify-center text-gray-700 transition cursor-pointer shadow-2xs font-bold"
+                    className="w-8 h-8 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-700 transition cursor-pointer shadow-2xs font-bold"
                   >
                     <ArrowLeft className="w-4 h-4" />
                   </button>
@@ -572,7 +549,7 @@ export function PrescriptionTemplateCalibrator({
                       type="button"
                       onClick={() => nudgeActiveField(0, -0.5)}
                       title="Nudge Up"
-                      className="w-8 h-8 rounded-lg bg-white border border-[#ECEEF2] hover:bg-gray-100 flex items-center justify-center text-gray-700 transition cursor-pointer shadow-2xs font-bold"
+                      className="w-8 h-8 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-700 transition cursor-pointer shadow-2xs font-bold"
                     >
                       <ArrowUp className="w-4 h-4" />
                     </button>
@@ -580,7 +557,7 @@ export function PrescriptionTemplateCalibrator({
                       type="button"
                       onClick={() => nudgeActiveField(0, 0.5)}
                       title="Nudge Down"
-                      className="w-8 h-8 rounded-lg bg-white border border-[#ECEEF2] hover:bg-gray-100 flex items-center justify-center text-gray-700 transition cursor-pointer shadow-2xs font-bold"
+                      className="w-8 h-8 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-700 transition cursor-pointer shadow-2xs font-bold"
                     >
                       <ArrowDown className="w-4 h-4" />
                     </button>
@@ -589,19 +566,18 @@ export function PrescriptionTemplateCalibrator({
                     type="button"
                     onClick={() => nudgeActiveField(0.5, 0)}
                     title="Nudge Right"
-                    className="w-8 h-8 rounded-lg bg-white border border-[#ECEEF2] hover:bg-gray-100 flex items-center justify-center text-gray-700 transition cursor-pointer shadow-2xs font-bold"
+                    className="w-8 h-8 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-700 transition cursor-pointer shadow-2xs font-bold"
                   >
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
 
-              {/* Coordinates Sliders */}
               <div className="space-y-3 pt-1">
                 <div>
-                  <div className="flex justify-between text-[11px] font-semibold text-[#16191E] mb-1">
+                  <div className="flex justify-between text-[11px] font-semibold text-slate-800 mb-1">
                     <span>Horizontal Position (X)</span>
-                    <span className="text-[#2563EB] font-mono">{activeCoord.x}%</span>
+                    <span className="text-blue-600 font-mono">{activeCoord.x}%</span>
                   </div>
                   <input
                     type="range"
@@ -610,14 +586,14 @@ export function PrescriptionTemplateCalibrator({
                     step="0.2"
                     value={activeCoord.x}
                     onChange={(e) => updateSingleField(activeField, { x: parseFloat(e.target.value) })}
-                    className="w-full accent-[#2563EB] cursor-pointer"
+                    className="w-full accent-blue-600 cursor-pointer"
                   />
                 </div>
 
                 <div>
-                  <div className="flex justify-between text-[11px] font-semibold text-[#16191E] mb-1">
+                  <div className="flex justify-between text-[11px] font-semibold text-slate-800 mb-1">
                     <span>Vertical Position (Y)</span>
-                    <span className="text-[#2563EB] font-mono">{activeCoord.y}%</span>
+                    <span className="text-blue-600 font-mono">{activeCoord.y}%</span>
                   </div>
                   <input
                     type="range"
@@ -626,15 +602,15 @@ export function PrescriptionTemplateCalibrator({
                     step="0.2"
                     value={activeCoord.y}
                     onChange={(e) => updateSingleField(activeField, { y: parseFloat(e.target.value) })}
-                    className="w-full accent-[#2563EB] cursor-pointer"
+                    className="w-full accent-blue-600 cursor-pointer"
                   />
                 </div>
 
                 {(activeField === 'medications' || activeField === 'diagnostics' || activeField === 'consultationDate' || activeField === 'doctorSignature') && (
                   <div>
-                    <div className="flex justify-between text-[11px] font-semibold text-[#16191E] mb-1">
+                    <div className="flex justify-between text-[11px] font-semibold text-slate-800 mb-1">
                       <span>Field Width (%)</span>
-                      <span className="text-[#2563EB] font-mono">{activeCoord.width || 70}%</span>
+                      <span className="text-blue-600 font-mono">{activeCoord.width || 70}%</span>
                     </div>
                     <input
                       type="range"
@@ -643,15 +619,14 @@ export function PrescriptionTemplateCalibrator({
                       step="1"
                       value={activeCoord.width || 70}
                       onChange={(e) => updateSingleField(activeField, { width: parseInt(e.target.value, 10) })}
-                      className="w-full accent-[#2563EB] cursor-pointer"
+                      className="w-full accent-blue-600 cursor-pointer"
                     />
                   </div>
                 )}
 
-                {/* Typography Controls */}
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <div>
-                    <label className="text-[11px] font-semibold text-[#16191E] block mb-1">
+                    <label className="text-[11px] font-semibold text-slate-800 block mb-1">
                       Font Size ({activeCoord.fontSize || 12}px)
                     </label>
                     <input
@@ -661,12 +636,12 @@ export function PrescriptionTemplateCalibrator({
                       step="1"
                       value={activeCoord.fontSize || 12}
                       onChange={(e) => updateSingleField(activeField, { fontSize: parseInt(e.target.value, 10) })}
-                      className="w-full accent-[#2563EB] cursor-pointer"
+                      className="w-full accent-blue-600 cursor-pointer"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-semibold text-[#16191E] block mb-1">Font Weight</label>
+                    <label className="text-[11px] font-semibold text-slate-800 block mb-1">Font Weight</label>
                     <select
                       value={activeCoord.fontWeight || 'normal'}
                       onChange={(e) =>
@@ -674,7 +649,7 @@ export function PrescriptionTemplateCalibrator({
                           fontWeight: e.target.value as 'normal' | 'medium' | 'semibold' | 'bold',
                         })
                       }
-                      className="w-full px-2.5 py-1.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-lg text-xs font-semibold text-[#16191E]"
+                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
                     >
                       <option value="normal">Normal</option>
                       <option value="medium">Medium</option>
@@ -686,8 +661,8 @@ export function PrescriptionTemplateCalibrator({
 
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <div>
-                    <label className="text-[11px] font-semibold text-[#16191E] block mb-1">Text Alignment</label>
-                    <div className="flex border border-[#ECEEF2] rounded-lg overflow-hidden bg-[#F8F9FB]">
+                    <label className="text-[11px] font-semibold text-slate-800 block mb-1">Text Alignment</label>
+                    <div className="flex border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
                       {(['left', 'center', 'right'] as const).map((align) => (
                         <button
                           key={align}
@@ -695,8 +670,8 @@ export function PrescriptionTemplateCalibrator({
                           onClick={() => updateSingleField(activeField, { align })}
                           className={`flex-1 py-1 text-[10px] font-bold uppercase transition ${
                             (activeCoord.align || 'left') === align
-                              ? 'bg-[#2563EB] text-white'
-                              : 'text-gray-600 hover:bg-gray-200'
+                              ? 'bg-blue-600 text-white'
+                              : 'text-slate-600 hover:bg-slate-200'
                           }`}
                         >
                           {align}
@@ -706,14 +681,14 @@ export function PrescriptionTemplateCalibrator({
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-semibold text-[#16191E] block mb-1">Visibility</label>
+                    <label className="text-[11px] font-semibold text-slate-800 block mb-1">Visibility</label>
                     <button
                       type="button"
                       onClick={() => updateSingleField(activeField, { visible: activeCoord.visible === false ? true : false })}
                       className={`w-full py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 border transition ${
                         activeCoord.visible !== false
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : 'bg-gray-100 text-gray-500 border-gray-200'
+                          : 'bg-slate-100 text-slate-500 border-slate-200'
                       }`}
                     >
                       {activeCoord.visible !== false ? (
@@ -739,7 +714,7 @@ export function PrescriptionTemplateCalibrator({
                     className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-sm mt-4 ${
                       isSaved
                         ? 'bg-emerald-600 text-white'
-                        : 'bg-[#2563EB] hover:bg-blue-700 text-white'
+                        : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white'
                     }`}
                   >
                     {isSaving ? (
@@ -762,23 +737,22 @@ export function PrescriptionTemplateCalibrator({
           </div>
         </div>
       ) : (
-        /* Empty State / Initial Upload Prompt */
         <div
           onClick={() => fileInputRef.current?.click()}
-          className="bg-white rounded-2xl p-10 sm:p-14 text-center border-2 border-dashed border-[#ECEEF2] hover:border-[#2563EB] transition-colors cursor-pointer shadow-sm group"
+          className="bg-white rounded-2xl p-10 sm:p-14 text-center border-2 border-dashed border-slate-200 hover:border-blue-600 transition-colors cursor-pointer shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] group"
         >
-          <div className="w-16 h-16 rounded-2xl bg-blue-50 text-[#2563EB] group-hover:scale-105 flex items-center justify-center mx-auto mb-4 transition-transform shadow-sm">
+          <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 group-hover:scale-105 flex items-center justify-center mx-auto mb-4 transition-transform shadow-2xs">
             <FileImage className="w-8 h-8 stroke-[1.8]" />
           </div>
-          <h4 className="text-base font-bold text-[#16191E]">Upload Clinic Prescription Pad or Letterhead</h4>
-          <p className="text-xs text-[#8A909D] max-w-md mx-auto mt-1 mb-5">
+          <h4 className="text-base font-bold text-slate-800">Upload Clinic Prescription Pad or Letterhead</h4>
+          <p className="text-xs text-slate-400 max-w-md mx-auto mt-1 mb-5">
             Upload your clinic's designed prescription pad, letterhead, or stationery image (PNG, JPG). HealthSync
             will auto-fill each patient's details and medicines onto your custom design.
           </p>
           <div className="flex items-center justify-center">
             <button
               type="button"
-              className="px-6 py-2.5 bg-[#2563EB] text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition shadow-xs flex items-center space-x-2 pointer-events-none"
+              className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition shadow-xs flex items-center space-x-2 pointer-events-none"
             >
               <Upload className="w-4 h-4" />
               <span>Choose Image File</span>
