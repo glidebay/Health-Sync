@@ -285,11 +285,11 @@ export function QueueList({
 
       <div className="relative min-h-[200px]">
         {currentPatients.length === 0 ? (
-          <div className="bg-white rounded-3xl p-10 sm:p-12 border border-slate-100 text-center shadow-xs">
-            <div className="w-14 h-14 rounded-3xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-3 shadow-2xs border border-blue-100/60">
-              <Users className="w-7 h-7 stroke-[1.75]" />
+          <div className="bg-white rounded-2xl p-8 sm:p-10 border border-slate-100 text-center shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]">
+            <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-3 shadow-2xs border border-blue-100/60">
+              <Users className="w-6 h-6 stroke-[1.75]" />
             </div>
-            <h3 className="text-base font-bold text-slate-800">
+            <h3 className="text-sm font-bold text-slate-800">
               No patients found for {formatDisplayDate(selectedDate, todayIST)}
             </h3>
             <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
@@ -320,14 +320,14 @@ export function QueueList({
                     variants={cardVariants}
                     whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
                     transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-                    className={`bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs hover:border-slate-200 flex flex-col justify-between gap-3 ${
+                    className={`bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] hover:border-slate-200 flex flex-col justify-between gap-3 ${
                       isCompleted ? 'opacity-65' : ''
                     }`}
                   >
                     <div>
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 font-bold flex items-center justify-center text-xs border border-blue-100/60 shadow-2xs flex-shrink-0">
+                          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 font-bold flex items-center justify-center text-xs border border-blue-100/60 shadow-2xs flex-shrink-0">
                             {initials}
                           </div>
                           <div className="min-w-0">
@@ -410,7 +410,7 @@ export function QueueList({
                             whileHover={{ scale: 1.04 }}
                             whileTap={{ scale: 0.96 }}
                             onClick={() => setSelectedPatientForCancel(p)}
-                            className="text-xs font-semibold px-3 py-1.5 border border-rose-200/80 text-rose-600 rounded-2xl hover:bg-rose-50 transition cursor-pointer"
+                            className="text-xs font-semibold px-3 py-1.5 border border-rose-200/80 text-rose-600 rounded-xl hover:bg-rose-50 transition cursor-pointer"
                           >
                             Cancel
                           </motion.button>
@@ -418,7 +418,7 @@ export function QueueList({
                             whileHover={{ scale: 1.04 }}
                             whileTap={{ scale: 0.96 }}
                             onClick={() => setSelectedPatientForReschedule(p)}
-                            className="text-xs font-semibold px-3 py-1.5 border border-blue-200/80 text-blue-600 rounded-2xl hover:bg-blue-50 transition cursor-pointer"
+                            className="text-xs font-semibold px-3 py-1.5 border border-blue-200/80 text-blue-600 rounded-xl hover:bg-blue-50 transition cursor-pointer"
                           >
                             Reschedule
                           </motion.button>

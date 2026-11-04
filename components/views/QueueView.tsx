@@ -261,11 +261,11 @@ export function QueueView({
 
       <div className="relative min-h-[200px]">
         {currentPatients.length === 0 ? (
-          <div className="bg-white rounded-3xl p-10 sm:p-12 border border-slate-100 text-center shadow-xs">
-            <div className="w-14 h-14 rounded-3xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-3 shadow-2xs border border-blue-100/60">
-              <Stethoscope className="w-7 h-7 stroke-[1.75]" />
+          <div className="bg-white rounded-2xl p-8 sm:p-10 border border-slate-100 text-center shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]">
+            <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-3 shadow-2xs border border-blue-100/60">
+              <Stethoscope className="w-6 h-6 stroke-[1.75]" />
             </div>
-            <h3 className="text-base font-bold text-slate-800">
+            <h3 className="text-sm font-bold text-slate-800">
               No patients in queue for {formatDisplayDate(selectedDate, todayIST)}
             </h3>
             <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
@@ -297,7 +297,7 @@ export function QueueView({
                     whileHover={!isCompleted ? { y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' } : {}}
                     transition={{ type: 'spring', damping: 25, stiffness: 400 }}
                     onClick={() => !isCompleted && onStartConsultation(p.id, p)}
-                    className={`bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                    className={`bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
                       isCompleted
                         ? 'opacity-65 cursor-default'
                         : 'cursor-pointer hover:border-slate-200'
@@ -305,7 +305,7 @@ export function QueueView({
                   >
                     <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
                       <div className="relative flex-shrink-0">
-                        <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm border border-blue-100/60 shadow-2xs">
+                        <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm border border-blue-100/60 shadow-2xs">
                           {initials}
                         </div>
                         {isInProgress && (
@@ -382,7 +382,7 @@ export function QueueView({
                         <motion.button
                           whileHover={{ scale: 1.03 }}
                           whileTap={{ scale: 0.97 }}
-                          className="text-xs font-semibold px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl shadow-xs hover:shadow-md transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                          className="text-xs font-semibold px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl shadow-xs hover:shadow-md transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
                         >
                           <span>Start Consult</span>
                           <ArrowRight className="w-3.5 h-3.5" />

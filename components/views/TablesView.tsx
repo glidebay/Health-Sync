@@ -298,7 +298,7 @@ export function TablesView({
       <div className="relative space-y-5">
         <EcgActionLoader isLoading={isLoading} fullscreen={true} text="Syncing patient tables..." />
 
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] overflow-hidden">
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <h3 className="text-base font-bold text-slate-800">
@@ -410,7 +410,7 @@ export function TablesView({
           )}
         </div>
 
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] overflow-hidden">
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <h3 className="text-base font-bold text-slate-800">
