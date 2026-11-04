@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE IF NOT EXISTS public.suppliers (
-  id TEXT PRIMARY KEY DEFAULT ('sup-' || substr(md5(random()::text), 1, 10)),
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   name TEXT NOT NULL,
   contact_person TEXT,
   email TEXT,
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.suppliers (
 );
 
 CREATE TABLE IF NOT EXISTS public.medicines (
-  id TEXT PRIMARY KEY DEFAULT ('med-' || substr(md5(random()::text), 1, 10)),
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   sku TEXT UNIQUE NOT NULL,
   brand_name TEXT NOT NULL,
   generic_name TEXT NOT NULL,
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS public.medicines (
 );
 
 CREATE TABLE IF NOT EXISTS public.medicine_batches (
-  id TEXT PRIMARY KEY DEFAULT ('bat-' || substr(md5(random()::text), 1, 10)),
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   medicine_id TEXT NOT NULL REFERENCES public.medicines(id) ON DELETE CASCADE,
   batch_number TEXT NOT NULL,
   manufacturing_date DATE NOT NULL DEFAULT CURRENT_DATE,
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS public.medicine_batches (
 );
 
 CREATE TABLE IF NOT EXISTS public.purchase_records (
-  id TEXT PRIMARY KEY DEFAULT ('pur-' || substr(md5(random()::text), 1, 10)),
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   medicine_id TEXT NOT NULL REFERENCES public.medicines(id) ON DELETE CASCADE,
   medicine_name TEXT,
   supplier_id TEXT REFERENCES public.suppliers(id) ON DELETE SET NULL,
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS public.purchase_records (
 );
 
 CREATE TABLE IF NOT EXISTS public.stock_movements (
-  id TEXT PRIMARY KEY DEFAULT ('mov-' || substr(md5(random()::text), 1, 10)),
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   medicine_id TEXT NOT NULL REFERENCES public.medicines(id) ON DELETE CASCADE,
   batch_id TEXT REFERENCES public.medicine_batches(id) ON DELETE SET NULL,
   movement_type TEXT NOT NULL CHECK (movement_type IN ('Purchase', 'Dispensing', 'Stock Adjustment', 'Return', 'Expired Stock', 'Damaged Stock')),
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS public.stock_movements (
 );
 
 CREATE TABLE IF NOT EXISTS public.csv_import_logs (
-  id TEXT PRIMARY KEY DEFAULT ('csv-' || substr(md5(random()::text), 1, 10)),
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   filename TEXT NOT NULL,
   total_rows INT NOT NULL DEFAULT 0,
   imported_rows INT NOT NULL DEFAULT 0,
@@ -127,20 +127,20 @@ SELECT
   CASE
     WHEN EXISTS (
       SELECT 1 FROM public.medicine_batches bx
-      WHERE bx.medicine_id = m.id AND bx.available_quantity > 0 AND bx.expiry_date < CURRENT_DATE
+      WHERE bx.medicine_id::text = m.id::text AND bx.available_quantity > 0 AND bx.expiry_date < CURRENT_DATE
     ) THEN 'Expired'
     WHEN EXISTS (
       SELECT 1 FROM public.medicine_batches byx
-      WHERE byx.medicine_id = m.id AND byx.available_quantity > 0 AND byx.expiry_date <= (CURRENT_DATE + INTERVAL '60 days')
+      WHERE byx.medicine_id::text = m.id::text AND byx.available_quantity > 0 AND byx.expiry_date <= (CURRENT_DATE + INTERVAL '60 days')
     ) THEN 'Near Expiry'
     ELSE 'Valid'
   END AS expiry_status,
   MAX(pr.purchase_price) AS last_purchase_price,
   MAX(pr.purchase_date) AS last_purchase_date
 FROM public.medicines m
-LEFT JOIN public.suppliers s ON m.supplier_id = s.id
-LEFT JOIN public.medicine_batches b ON m.id = b.medicine_id
-LEFT JOIN public.purchase_records pr ON m.id = pr.medicine_id
+LEFT JOIN public.suppliers s ON m.supplier_id::text = s.id::text
+LEFT JOIN public.medicine_batches b ON m.id::text = b.medicine_id::text
+LEFT JOIN public.purchase_records pr ON m.id::text = pr.medicine_id::text
 GROUP BY m.id, s.id;
 
 CREATE OR REPLACE FUNCTION public.procure_batch_atomic(
@@ -170,9 +170,9 @@ DECLARE
   v_sup_name TEXT := p_supplier_name;
   v_invoice TEXT := COALESCE(p_invoice_number, 'INV-' || to_char(CURRENT_DATE, 'YYMM') || '-' || substr(md5(random()::text), 1, 5));
 BEGIN
-  SELECT id, brand_name INTO v_actual_med_id, v_med_name
+  SELECT id::text, brand_name INTO v_actual_med_id, v_med_name
   FROM public.medicines
-  WHERE id = p_medicine_id OR upper(sku) = upper(trim(p_medicine_id))
+  WHERE id::text = trim(p_medicine_id) OR upper(sku) = upper(trim(p_medicine_id))
   LIMIT 1;
 
   IF v_med_name IS NULL THEN
@@ -180,19 +180,19 @@ BEGIN
   END IF;
 
   IF v_sup_id IS NULL AND v_sup_name IS NOT NULL AND trim(v_sup_name) != '' THEN
-    SELECT id INTO v_sup_id FROM public.suppliers WHERE lower(name) = lower(trim(v_sup_name)) LIMIT 1;
+    SELECT id::text INTO v_sup_id FROM public.suppliers WHERE lower(name) = lower(trim(v_sup_name)) LIMIT 1;
     IF v_sup_id IS NULL THEN
-      v_sup_id := 'sup-' || substr(md5(random()::text), 1, 10);
+      v_sup_id := gen_random_uuid()::text;
       INSERT INTO public.suppliers (id, name, phone, last_purchase_date, last_purchase_price)
       VALUES (v_sup_id, trim(v_sup_name), '+91 00000 00000', CURRENT_DATE, p_purchase_price);
     END IF;
   END IF;
 
   IF v_sup_id IS NOT NULL AND (v_sup_name IS NULL OR trim(v_sup_name) = '') THEN
-    SELECT name INTO v_sup_name FROM public.suppliers WHERE id = v_sup_id;
+    SELECT name INTO v_sup_name FROM public.suppliers WHERE id::text = v_sup_id;
   END IF;
 
-  v_batch_id := 'bat-' || substr(md5(random()::text), 1, 10);
+  v_batch_id := gen_random_uuid()::text;
   INSERT INTO public.medicine_batches (
     id, medicine_id, batch_number, manufacturing_date, expiry_date,
     purchase_price, selling_price, initial_quantity, available_quantity,
@@ -210,9 +210,9 @@ BEGIN
       expiry_date = EXCLUDED.expiry_date,
       supplier_id = COALESCE(EXCLUDED.supplier_id, public.medicine_batches.supplier_id),
       supplier_name = COALESCE(EXCLUDED.supplier_name, public.medicine_batches.supplier_name)
-  RETURNING id INTO v_batch_id;
+  RETURNING id::text INTO v_batch_id;
 
-  v_purchase_id := 'pur-' || substr(md5(random()::text), 1, 10);
+  v_purchase_id := gen_random_uuid()::text;
   INSERT INTO public.purchase_records (
     id, medicine_id, medicine_name, supplier_id, supplier_name,
     batch_number, purchase_date, quantity_purchased, purchase_price,
@@ -223,7 +223,7 @@ BEGIN
     (p_quantity * p_purchase_price), v_invoice
   );
 
-  v_movement_id := 'mov-' || substr(md5(random()::text), 1, 10);
+  v_movement_id := gen_random_uuid()::text;
   INSERT INTO public.stock_movements (
     id, medicine_id, batch_id, movement_type, quantity,
     reference_number, responsible_user, date, notes
@@ -236,12 +236,12 @@ BEGIN
     UPDATE public.suppliers
     SET last_purchase_date = CURRENT_DATE,
         last_purchase_price = p_purchase_price
-    WHERE id = v_sup_id;
+    WHERE id::text = v_sup_id;
   END IF;
 
   UPDATE public.medicines
   SET updated_at = now()
-  WHERE id = v_actual_med_id;
+  WHERE id::text = v_actual_med_id;
 
   RETURN jsonb_build_object(
     'status', 'success',
@@ -277,9 +277,9 @@ BEGIN
     RAISE EXCEPTION 'Dispensing quantity must be greater than zero.';
   END IF;
 
-  SELECT id INTO v_actual_med_id
+  SELECT id::text INTO v_actual_med_id
   FROM public.medicines
-  WHERE id = p_medicine_id OR upper(sku) = upper(trim(p_medicine_id))
+  WHERE id::text = trim(p_medicine_id) OR upper(sku) = upper(trim(p_medicine_id))
   LIMIT 1;
 
   IF v_actual_med_id IS NULL THEN
@@ -289,7 +289,7 @@ BEGIN
   SELECT COALESCE(SUM(available_quantity), 0)
   INTO v_total_available
   FROM public.medicine_batches
-  WHERE medicine_id = v_actual_med_id
+  WHERE medicine_id::text = v_actual_med_id
     AND available_quantity > 0
     AND expiry_date >= CURRENT_DATE;
 
@@ -298,9 +298,9 @@ BEGIN
   END IF;
 
   FOR v_batch IN
-    SELECT id, batch_number, available_quantity, expiry_date, selling_price
+    SELECT id::text AS id, batch_number, available_quantity, expiry_date, selling_price
     FROM public.medicine_batches
-    WHERE medicine_id = v_actual_med_id
+    WHERE medicine_id::text = v_actual_med_id
       AND available_quantity > 0
       AND expiry_date >= CURRENT_DATE
     ORDER BY expiry_date ASC, created_at ASC
@@ -315,7 +315,7 @@ BEGIN
 
     UPDATE public.medicine_batches
     SET available_quantity = available_quantity - v_deduct
-    WHERE id = v_batch.id;
+    WHERE id::text = v_batch.id;
 
     INSERT INTO public.stock_movements (
       medicine_id, batch_id, movement_type, quantity,
@@ -339,7 +339,7 @@ BEGIN
 
   UPDATE public.medicines
   SET updated_at = now()
-  WHERE id = v_actual_med_id;
+  WHERE id::text = v_actual_med_id;
 
   RETURN jsonb_build_object(
     'status', 'success',
@@ -368,9 +368,9 @@ DECLARE
   v_target_batch_id TEXT := p_batch_id;
   v_current_qty INT;
 BEGIN
-  SELECT id INTO v_actual_med_id
+  SELECT id::text INTO v_actual_med_id
   FROM public.medicines
-  WHERE id = p_medicine_id OR upper(sku) = upper(trim(p_medicine_id))
+  WHERE id::text = trim(p_medicine_id) OR upper(sku) = upper(trim(p_medicine_id))
   LIMIT 1;
 
   IF v_actual_med_id IS NULL THEN
@@ -378,9 +378,9 @@ BEGIN
   END IF;
 
   IF v_target_batch_id IS NULL THEN
-    SELECT id INTO v_target_batch_id
+    SELECT id::text INTO v_target_batch_id
     FROM public.medicine_batches
-    WHERE medicine_id = v_actual_med_id
+    WHERE medicine_id::text = v_actual_med_id
     ORDER BY expiry_date ASC
     LIMIT 1;
   END IF;
@@ -388,7 +388,7 @@ BEGIN
   IF v_target_batch_id IS NOT NULL THEN
     SELECT available_quantity INTO v_current_qty
     FROM public.medicine_batches
-    WHERE id = v_target_batch_id;
+    WHERE id::text = v_target_batch_id;
 
     IF (v_current_qty + p_quantity_change) < 0 THEN
       RAISE EXCEPTION 'Adjustment would result in negative batch quantity (% available, change %)', v_current_qty, p_quantity_change;
@@ -396,7 +396,7 @@ BEGIN
 
     UPDATE public.medicine_batches
     SET available_quantity = available_quantity + p_quantity_change
-    WHERE id = v_target_batch_id;
+    WHERE id::text = v_target_batch_id;
   END IF;
 
   INSERT INTO public.stock_movements (
@@ -409,7 +409,7 @@ BEGIN
 
   UPDATE public.medicines
   SET updated_at = now()
-  WHERE id = v_actual_med_id;
+  WHERE id::text = v_actual_med_id;
 
   RETURN jsonb_build_object(
     'status', 'success',

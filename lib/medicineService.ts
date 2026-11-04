@@ -25,6 +25,67 @@ export const INITIAL_MEDICINES: MedicineMaster[] = [];
 export const INITIAL_PURCHASES: PurchaseRecord[] = [];
 export const INITIAL_MOVEMENTS: StockMovement[] = [];
 
+export function isValidUuid(str?: string | null): boolean {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(str).trim());
+}
+
+export function generateSafeUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+export function parseFlexibleDate(dateStr?: string | null): string | null {
+  if (!dateStr) return null;
+  const s = String(dateStr).trim();
+  if (!s) return null;
+
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)) {
+    const parts = s.split('-');
+    const dt = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    if (!isNaN(dt.getTime())) {
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    }
+  }
+
+  const dmyMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (dmyMatch) {
+    const dt = new Date(Number(dmyMatch[3]), Number(dmyMatch[2]) - 1, Number(dmyMatch[1]));
+    if (!isNaN(dt.getTime())) {
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    }
+  }
+
+  const ymdSlash = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (ymdSlash) {
+    const dt = new Date(Number(ymdSlash[1]), Number(ymdSlash[2]) - 1, Number(ymdSlash[3]));
+    if (!isNaN(dt.getTime())) {
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    }
+  }
+
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+  }
+
+  return null;
+}
+
+export function parseCleanNumber(val: any, fallback = 0): number {
+  if (typeof val === 'number') return isNaN(val) ? fallback : val;
+  if (!val) return fallback;
+  const cleaned = String(val).replace(/[^\d.-]/g, '');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? fallback : n;
+}
+
 export function calculateStockStatus(totalStock: number, minStockLevel: number): StockStatus {
   if (totalStock <= 0) return 'Out of Stock';
   if (totalStock <= minStockLevel) return 'Low Stock';
@@ -246,11 +307,11 @@ export async function saveOrUpdateSupplier(data: {
   const currentSuppliers = loadStoredSuppliers();
   let supId = data.id;
 
-  if (!supId) {
+  if (!supId || !isValidUuid(supId)) {
     const existing = currentSuppliers.find(
       (s) => s.name.toLowerCase() === data.name.trim().toLowerCase()
     );
-    supId = existing?.id || `sup-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 5)}`;
+    supId = existing?.id && isValidUuid(existing.id) ? existing.id : generateSafeUuid();
   }
 
   const newSupplier: Supplier = {
@@ -308,10 +369,24 @@ export async function linkSupplierToMedicine(
   saveStoredMedicines(currentMeds);
 
   try {
-    await supabase
-      .from('medicines')
-      .update({ supplier_id: supplier.id, updated_at: new Date().toISOString() })
-      .eq('id', medicineId);
+    let targetId = medicineId;
+    if (!isValidUuid(targetId)) {
+      const med = currentMeds[medIdx];
+      if (med?.sku) {
+        const { data: dbCheck } = await supabase.from('medicines').select('id').ilike('sku', med.sku).maybeSingle();
+        if (dbCheck?.id) targetId = dbCheck.id;
+      }
+    }
+
+    if (isValidUuid(targetId)) {
+      await supabase
+        .from('medicines')
+        .update({
+          supplier_id: isValidUuid(supplier.id) ? supplier.id : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', targetId);
+    }
   } catch {}
 
   return updatedMed;
@@ -319,9 +394,20 @@ export async function linkSupplierToMedicine(
 
 export async function fetchPurchaseHistory(medicineId?: string): Promise<PurchaseRecord[]> {
   try {
+    let targetId = medicineId;
+    if (medicineId && !isValidUuid(medicineId)) {
+      const current = loadStoredMedicines().find((m) => m.id === medicineId || m.sku.toLowerCase() === medicineId.toLowerCase());
+      if (current?.sku) {
+        const { data: dbCheck } = await supabase.from('medicines').select('id').ilike('sku', current.sku).maybeSingle();
+        targetId = dbCheck?.id;
+      } else {
+        targetId = undefined;
+      }
+    }
+
     let query = supabase.from('purchase_records').select('*').order('purchase_date', { ascending: false });
-    if (medicineId) {
-      query = query.eq('medicine_id', medicineId);
+    if (targetId && isValidUuid(targetId)) {
+      query = query.eq('medicine_id', targetId);
     }
     const { data, error } = await query;
     if (!error && Array.isArray(data)) {
@@ -351,9 +437,20 @@ export async function fetchPurchaseHistory(medicineId?: string): Promise<Purchas
 
 export async function fetchStockMovements(medicineId?: string): Promise<StockMovement[]> {
   try {
+    let targetId = medicineId;
+    if (medicineId && !isValidUuid(medicineId)) {
+      const current = loadStoredMedicines().find((m) => m.id === medicineId || m.sku.toLowerCase() === medicineId.toLowerCase());
+      if (current?.sku) {
+        const { data: dbCheck } = await supabase.from('medicines').select('id').ilike('sku', current.sku).maybeSingle();
+        targetId = dbCheck?.id;
+      } else {
+        targetId = undefined;
+      }
+    }
+
     let query = supabase.from('stock_movements').select('*').order('date', { ascending: false });
-    if (medicineId) {
-      query = query.eq('medicine_id', medicineId);
+    if (targetId && isValidUuid(targetId)) {
+      query = query.eq('medicine_id', targetId);
     }
     const { data, error } = await query;
     if (!error && Array.isArray(data)) {
@@ -402,8 +499,8 @@ export async function addMedicineWithInitialBatch(params: {
   invoiceNumber?: string;
   responsibleUser: string;
 }): Promise<MedicineMaster> {
-  const medId = `med-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
-  const batchId = `bat-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+  const medId = generateSafeUuid();
+  const batchId = generateSafeUuid();
 
   const currentSuppliers = loadStoredSuppliers();
   const matchedSup = params.supplierId
@@ -416,7 +513,7 @@ export async function addMedicineWithInitialBatch(params: {
     ? matchedSup
     : params.supplierName?.trim()
     ? {
-        id: `sup-${Date.now().toString(36)}`,
+        id: generateSafeUuid(),
         name: params.supplierName.trim(),
         phone: '',
         lastPurchaseDate: new Date().toISOString().split('T')[0],
@@ -428,6 +525,12 @@ export async function addMedicineWithInitialBatch(params: {
     saveStoredSuppliers([...currentSuppliers, supplierObj]);
   }
 
+  const validSupplierId = supplierObj && isValidUuid(supplierObj.id)
+    ? supplierObj.id
+    : params.supplierId && isValidUuid(params.supplierId)
+    ? params.supplierId
+    : undefined;
+
   const newBatch: MedicineBatch = {
     id: batchId,
     medicineId: medId,
@@ -438,7 +541,7 @@ export async function addMedicineWithInitialBatch(params: {
     sellingPrice: params.sellingPrice,
     initialQuantity: params.quantity,
     availableQuantity: params.quantity,
-    supplierId: supplierObj?.id || params.supplierId,
+    supplierId: validSupplierId,
     supplierName: supplierObj?.name || params.supplierName,
   };
 
@@ -488,7 +591,7 @@ export async function addMedicineWithInitialBatch(params: {
           barcode: newMedicine.barcode || undefined,
           minimum_stock_level: newMedicine.minimumStockLevel,
           selling_price: newMedicine.sellingPrice,
-          supplier_id: supplierObj?.id || params.supplierId || null,
+          supplier_id: validSupplierId || null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', actualMedId);
@@ -510,7 +613,7 @@ export async function addMedicineWithInitialBatch(params: {
               barcode: newMedicine.barcode,
               minimum_stock_level: newMedicine.minimumStockLevel,
               selling_price: newMedicine.sellingPrice,
-              supplier_id: supplierObj?.id || params.supplierId || null,
+              supplier_id: validSupplierId || null,
             },
           ],
           { onConflict: 'sku' }
@@ -531,7 +634,7 @@ export async function addMedicineWithInitialBatch(params: {
       p_purchase_price: newBatch.purchasePrice,
       p_selling_price: newBatch.sellingPrice,
       p_quantity: newBatch.initialQuantity,
-      p_supplier_id: newBatch.supplierId || null,
+      p_supplier_id: validSupplierId || null,
       p_supplier_name: newBatch.supplierName || null,
       p_invoice_number: params.invoiceNumber || null,
       p_responsible_user: params.responsibleUser || 'Doctor/Pharmacist',
@@ -550,12 +653,44 @@ export async function addMedicineWithInitialBatch(params: {
             selling_price: newBatch.sellingPrice,
             initial_quantity: newBatch.initialQuantity,
             available_quantity: newBatch.availableQuantity,
-            supplier_id: newBatch.supplierId || null,
+            supplier_id: validSupplierId || null,
             supplier_name: newBatch.supplierName || null,
           },
         ],
         { onConflict: 'medicine_id,batch_number' }
       );
+
+      const invNo = params.invoiceNumber || `INV-${Date.now().toString().slice(-6)}`;
+      await supabase.from('purchase_records').insert([
+        {
+          id: generateSafeUuid(),
+          medicine_id: actualMedId,
+          medicine_name: `${newMedicine.brandName} (${newMedicine.genericName})`,
+          supplier_id: validSupplierId || null,
+          supplier_name: supplierObj?.name || 'Self-Procured',
+          batch_number: newBatch.batchNumber,
+          purchase_date: new Date().toISOString().split('T')[0],
+          quantity_purchased: newBatch.initialQuantity,
+          purchase_price: newBatch.purchasePrice,
+          total_purchase_amount: newBatch.initialQuantity * newBatch.purchasePrice,
+          invoice_number: invNo,
+          expiry_date: newBatch.expiryDate,
+        },
+      ]);
+
+      await supabase.from('stock_movements').insert([
+        {
+          id: generateSafeUuid(),
+          medicine_id: actualMedId,
+          batch_id: batchId,
+          movement_type: 'Purchase',
+          quantity: newBatch.initialQuantity,
+          reference_number: invNo,
+          responsible_user: params.responsibleUser || 'Doctor/Pharmacist',
+          date: new Date().toISOString(),
+          notes: 'Initial stock intake on medicine creation',
+        },
+      ]);
     }
   } catch {}
 
@@ -582,16 +717,17 @@ export async function addMedicineWithInitialBatch(params: {
         purchasePrice: newBatch.purchasePrice,
         sellingPrice: newBatch.sellingPrice,
         expiryDate: newBatch.expiryDate,
-        supplierId: newBatch.supplierId || existingBatches[bIdx].supplierId,
+        supplierId: validSupplierId || existingBatches[bIdx].supplierId,
         supplierName: newBatch.supplierName || existingBatches[bIdx].supplierName,
       };
     } else {
-      existingBatches.push({ ...newBatch, medicineId: existing.id });
+      existingBatches.push({ ...newBatch, medicineId: actualMedId });
     }
 
     const totalStock = existingBatches.reduce((s, b) => s + b.availableQuantity, 0);
     finalMedicine = {
       ...existing,
+      id: actualMedId,
       brandName: newMedicine.brandName,
       genericName: newMedicine.genericName,
       manufacturer: newMedicine.manufacturer,
@@ -612,16 +748,16 @@ export async function addMedicineWithInitialBatch(params: {
     };
     updatedMeds = currentMeds.map((m, i) => (i === existingIdx ? finalMedicine : m));
   } else {
-    finalMedicine = newMedicine;
-    updatedMeds = [newMedicine, ...currentMeds];
+    finalMedicine = { ...newMedicine, id: actualMedId };
+    updatedMeds = [finalMedicine, ...currentMeds];
   }
   saveStoredMedicines(updatedMeds);
 
   const purchaseRecord: PurchaseRecord = {
-    id: `pur-${Date.now().toString(36)}`,
+    id: generateSafeUuid(),
     medicineId: actualMedId,
     medicineName: `${finalMedicine.brandName} (${finalMedicine.genericName})`,
-    supplierId: supplierObj?.id || params.supplierId || '',
+    supplierId: validSupplierId || '',
     supplierName: supplierObj?.name || params.supplierName || 'Self-Procured',
     batchNumber: newBatch.batchNumber,
     purchaseDate: new Date().toISOString().split('T')[0],
@@ -635,7 +771,7 @@ export async function addMedicineWithInitialBatch(params: {
   saveStoredPurchases(purchases);
 
   const movement: StockMovement = {
-    id: `mov-${Date.now().toString(36)}`,
+    id: generateSafeUuid(),
     medicineId: actualMedId,
     medicineName: finalMedicine.brandName,
     batchId: batchId,
@@ -666,43 +802,77 @@ export async function addBatchToMedicine(params: {
   invoiceNumber?: string;
   responsibleUser: string;
 }): Promise<MedicineBatch> {
-  const batchId = `bat-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
-  const newBatch: MedicineBatch = {
-    id: batchId,
-    medicineId: params.medicineId,
-    batchNumber: params.batchNumber.trim(),
-    manufacturingDate: params.manufacturingDate,
-    expiryDate: params.expiryDate,
-    purchasePrice: params.purchasePrice,
-    sellingPrice: params.sellingPrice,
-    initialQuantity: params.quantity,
-    availableQuantity: params.quantity,
-    supplierId: params.supplierId,
-    supplierName: params.supplierName,
-  };
+  const batchId = generateSafeUuid();
+  const currentMeds = loadStoredMedicines();
+  const targetMed = currentMeds.find(
+    (m) => m.id === params.medicineId || m.sku.toLowerCase() === params.medicineId.toLowerCase()
+  );
+
+  let targetMedId = params.medicineId;
 
   try {
-    let targetMedId = params.medicineId;
-    const { data: medCheck } = await supabase
-      .from('medicines')
-      .select('id')
-      .or(`id.eq.${params.medicineId},sku.eq.${params.medicineId}`)
-      .maybeSingle();
+    if (isValidUuid(params.medicineId)) {
+      const { data: medCheck } = await supabase
+        .from('medicines')
+        .select('id')
+        .or(`id.eq.${params.medicineId},sku.eq.${params.medicineId}`)
+        .maybeSingle();
 
-    if (medCheck && medCheck.id) {
-      targetMedId = medCheck.id;
+      if (medCheck && medCheck.id) {
+        targetMedId = medCheck.id;
+      }
+    } else {
+      const skuToSearch = targetMed?.sku || params.medicineId;
+      const { data: medCheck } = await supabase
+        .from('medicines')
+        .select('id')
+        .ilike('sku', skuToSearch)
+        .maybeSingle();
+
+      if (medCheck && medCheck.id) {
+        targetMedId = medCheck.id;
+      }
     }
+
+    if (!isValidUuid(targetMedId) && targetMed) {
+      const validMedId = generateSafeUuid();
+      await supabase.from('medicines').upsert(
+        [
+          {
+            id: validMedId,
+            sku: targetMed.sku,
+            brand_name: targetMed.brandName,
+            generic_name: targetMed.genericName,
+            manufacturer: targetMed.manufacturer,
+            category: targetMed.category,
+            dosage_form: targetMed.dosageForm,
+            strength: targetMed.strength,
+            unit: targetMed.unit,
+            barcode: targetMed.barcode,
+            minimum_stock_level: targetMed.minimumStockLevel,
+            selling_price: targetMed.sellingPrice,
+            supplier_id: isValidUuid(targetMed.supplier?.id) ? targetMed.supplier?.id : null,
+          },
+        ],
+        { onConflict: 'sku' }
+      );
+      targetMedId = validMedId;
+      targetMed.id = validMedId;
+      saveStoredMedicines(currentMeds);
+    }
+
+    const validSupplierId = params.supplierId && isValidUuid(params.supplierId) ? params.supplierId : null;
 
     const { error: rpcErr } = await supabase.rpc('procure_batch_atomic', {
       p_medicine_id: targetMedId,
-      p_batch_number: newBatch.batchNumber,
-      p_manufacturing_date: newBatch.manufacturingDate,
-      p_expiry_date: newBatch.expiryDate,
-      p_purchase_price: newBatch.purchasePrice,
-      p_selling_price: newBatch.sellingPrice,
-      p_quantity: newBatch.initialQuantity,
-      p_supplier_id: newBatch.supplierId || null,
-      p_supplier_name: newBatch.supplierName || null,
+      p_batch_number: params.batchNumber.trim(),
+      p_manufacturing_date: params.manufacturingDate,
+      p_expiry_date: params.expiryDate,
+      p_purchase_price: params.purchasePrice,
+      p_selling_price: params.sellingPrice,
+      p_quantity: params.quantity,
+      p_supplier_id: validSupplierId,
+      p_supplier_name: params.supplierName || null,
       p_invoice_number: params.invoiceNumber || null,
       p_responsible_user: params.responsibleUser || 'Doctor/Pharmacist',
     });
@@ -713,25 +883,70 @@ export async function addBatchToMedicine(params: {
           {
             id: batchId,
             medicine_id: targetMedId,
-            batch_number: newBatch.batchNumber,
-            manufacturing_date: newBatch.manufacturingDate,
-            expiry_date: newBatch.expiryDate,
-            purchase_price: newBatch.purchasePrice,
-            selling_price: newBatch.sellingPrice,
-            initial_quantity: newBatch.initialQuantity,
-            available_quantity: newBatch.availableQuantity,
-            supplier_id: newBatch.supplierId || null,
-            supplier_name: newBatch.supplierName || null,
+            batch_number: params.batchNumber.trim(),
+            manufacturing_date: params.manufacturingDate,
+            expiry_date: params.expiryDate,
+            purchase_price: params.purchasePrice,
+            selling_price: params.sellingPrice,
+            initial_quantity: params.quantity,
+            available_quantity: params.quantity,
+            supplier_id: validSupplierId,
+            supplier_name: params.supplierName || null,
           },
         ],
         { onConflict: 'medicine_id,batch_number' }
       );
+
+      const invNo = params.invoiceNumber || `INV-${Date.now().toString().slice(-6)}`;
+      await supabase.from('purchase_records').insert([
+        {
+          id: generateSafeUuid(),
+          medicine_id: targetMedId,
+          medicine_name: targetMed ? `${targetMed.brandName} (${targetMed.genericName})` : 'Medicine',
+          supplier_id: validSupplierId,
+          supplier_name: params.supplierName || 'Self-Procured',
+          batch_number: params.batchNumber.trim(),
+          purchase_date: new Date().toISOString().split('T')[0],
+          quantity_purchased: params.quantity,
+          purchase_price: params.purchasePrice,
+          total_purchase_amount: params.quantity * params.purchasePrice,
+          invoice_number: invNo,
+          expiry_date: params.expiryDate,
+        },
+      ]);
+
+      await supabase.from('stock_movements').insert([
+        {
+          id: generateSafeUuid(),
+          medicine_id: targetMedId,
+          batch_id: batchId,
+          movement_type: 'Purchase',
+          quantity: params.quantity,
+          reference_number: invNo,
+          responsible_user: params.responsibleUser || 'Doctor/Pharmacist',
+          date: new Date().toISOString(),
+          notes: `Procurement batch added: ${params.batchNumber.trim()}`,
+        },
+      ]);
     }
   } catch {}
 
-  const currentMeds = loadStoredMedicines();
+  const newBatch: MedicineBatch = {
+    id: batchId,
+    medicineId: targetMedId,
+    batchNumber: params.batchNumber.trim(),
+    manufacturingDate: params.manufacturingDate,
+    expiryDate: params.expiryDate,
+    purchasePrice: params.purchasePrice,
+    sellingPrice: params.sellingPrice,
+    initialQuantity: params.quantity,
+    availableQuantity: params.quantity,
+    supplierId: params.supplierId && isValidUuid(params.supplierId) ? params.supplierId : undefined,
+    supplierName: params.supplierName,
+  };
+
   const updatedMeds = currentMeds.map((med) => {
-    if (med.id !== params.medicineId) return med;
+    if (med.id !== params.medicineId && med.id !== targetMedId) return med;
     const existingBatches = med.batches || [];
     const batchIdx = existingBatches.findIndex((b) => b.batchNumber === newBatch.batchNumber);
     let updatedBatches: MedicineBatch[];
@@ -755,6 +970,7 @@ export async function addBatchToMedicine(params: {
     const totalStock = updatedBatches.reduce((sum, b) => sum + b.availableQuantity, 0);
     return {
       ...med,
+      id: targetMedId,
       batches: updatedBatches,
       totalStock,
       stockStatus: calculateStockStatus(totalStock, med.minimumStockLevel),
@@ -765,12 +981,11 @@ export async function addBatchToMedicine(params: {
   });
   saveStoredMedicines(updatedMeds);
 
-  const targetMed = currentMeds.find((m) => m.id === params.medicineId);
   const purchaseRecord: PurchaseRecord = {
-    id: `pur-${Date.now().toString(36)}`,
-    medicineId: params.medicineId,
+    id: generateSafeUuid(),
+    medicineId: targetMedId,
     medicineName: targetMed ? `${targetMed.brandName} (${targetMed.genericName})` : 'Medicine',
-    supplierId: params.supplierId || '',
+    supplierId: params.supplierId && isValidUuid(params.supplierId) ? params.supplierId : '',
     supplierName: params.supplierName || 'Self-Procured',
     batchNumber: newBatch.batchNumber,
     purchaseDate: new Date().toISOString().split('T')[0],
@@ -783,8 +998,8 @@ export async function addBatchToMedicine(params: {
   saveStoredPurchases([purchaseRecord, ...loadStoredPurchases()]);
 
   const movement: StockMovement = {
-    id: `mov-${Date.now().toString(36)}`,
-    medicineId: params.medicineId,
+    id: generateSafeUuid(),
+    medicineId: targetMedId,
     medicineName: targetMed?.brandName || 'Medicine',
     batchId: batchId,
     batchNumber: newBatch.batchNumber,
@@ -810,7 +1025,7 @@ export async function recordStockAdjustment(params: {
   notes?: string;
 }): Promise<boolean> {
   const currentMeds = loadStoredMedicines();
-  const med = currentMeds.find((m) => m.id === params.medicineId);
+  const med = currentMeds.find((m) => m.id === params.medicineId || m.sku.toLowerCase() === params.medicineId.toLowerCase());
   if (!med) return false;
 
   let targetBatchId = params.batchId;
@@ -845,7 +1060,7 @@ export async function recordStockAdjustment(params: {
 
   const targetBatch = med.batches.find((b) => b.id === targetBatchId);
   const movement: StockMovement = {
-    id: `mov-${Date.now().toString(36)}`,
+    id: generateSafeUuid(),
     medicineId: med.id,
     medicineName: med.brandName,
     batchId: targetBatchId,
@@ -860,15 +1075,56 @@ export async function recordStockAdjustment(params: {
   saveStoredMovements([movement, ...loadStoredMovements()]);
 
   try {
-    await supabase.rpc('record_stock_adjustment_atomic', {
-      p_medicine_id: params.medicineId,
-      p_batch_id: targetBatchId || null,
-      p_movement_type: params.movementType,
-      p_quantity_change: params.quantityChange,
-      p_reference_number: params.referenceNumber,
-      p_responsible_user: params.responsibleUser,
-      p_notes: params.notes || null,
-    });
+    let dbMedId = med.id;
+    if (!isValidUuid(dbMedId)) {
+      const { data: dbCheck } = await supabase.from('medicines').select('id').ilike('sku', med.sku).maybeSingle();
+      if (dbCheck?.id) dbMedId = dbCheck.id;
+    }
+
+    if (isValidUuid(dbMedId)) {
+      let dbBatchId = targetBatchId && isValidUuid(targetBatchId) ? targetBatchId : null;
+      if (!dbBatchId && targetBatch?.batchNumber) {
+        const { data: bCheck } = await supabase
+          .from('medicine_batches')
+          .select('id')
+          .eq('medicine_id', dbMedId)
+          .eq('batch_number', targetBatch.batchNumber)
+          .maybeSingle();
+        if (bCheck?.id) dbBatchId = bCheck.id;
+      }
+
+      const { error: rpcErr } = await supabase.rpc('record_stock_adjustment_atomic', {
+        p_medicine_id: dbMedId,
+        p_batch_id: dbBatchId,
+        p_movement_type: params.movementType,
+        p_quantity_change: params.quantityChange,
+        p_reference_number: params.referenceNumber,
+        p_responsible_user: params.responsibleUser,
+        p_notes: params.notes || null,
+      });
+
+      if (rpcErr && dbBatchId) {
+        const nextQty = Math.max(0, (targetBatch?.availableQuantity || 0) + params.quantityChange);
+        await supabase
+          .from('medicine_batches')
+          .update({ available_quantity: nextQty })
+          .eq('id', dbBatchId);
+
+        await supabase.from('stock_movements').insert([
+          {
+            id: generateSafeUuid(),
+            medicine_id: dbMedId,
+            batch_id: dbBatchId,
+            movement_type: params.movementType,
+            quantity: params.quantityChange,
+            reference_number: params.referenceNumber,
+            responsible_user: params.responsibleUser,
+            date: new Date().toISOString(),
+            notes: params.notes || `Stock adjustment (${params.movementType})`,
+          },
+        ]);
+      }
+    }
   } catch {}
 
   return true;
@@ -927,7 +1183,7 @@ export function dispenseFefo(params: {
     }
 
     newMovements.push({
-      id: `mov-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      id: generateSafeUuid(),
       medicineId: med.id,
       medicineName: med.brandName,
       batchId: batch.id,
@@ -957,17 +1213,31 @@ export function dispenseFefo(params: {
   saveStoredMovements([...newMovements, ...existingMovements]);
 
   try {
-    supabase
-      .rpc('dispense_fefo_atomic', {
-        p_medicine_id: med.id,
-        p_required_quantity: params.requestedQty,
-        p_reference_number: params.referenceNumber,
-        p_responsible_user: params.responsibleUser,
-      })
-      .then(
-        () => {},
-        () => {}
-      );
+    let dbMedId = med.id;
+    if (!isValidUuid(dbMedId)) {
+      supabase.from('medicines').select('id').ilike('sku', med.sku).maybeSingle().then(({ data }) => {
+        if (data?.id) {
+          supabase.rpc('dispense_fefo_atomic', {
+            p_medicine_id: data.id,
+            p_required_quantity: params.requestedQty,
+            p_reference_number: params.referenceNumber,
+            p_responsible_user: params.responsibleUser,
+          }).then(() => {}, () => {});
+        }
+      }, () => {});
+    } else {
+      supabase
+        .rpc('dispense_fefo_atomic', {
+          p_medicine_id: dbMedId,
+          p_required_quantity: params.requestedQty,
+          p_reference_number: params.referenceNumber,
+          p_responsible_user: params.responsibleUser,
+        })
+        .then(
+          () => {},
+          () => {}
+        );
+    }
   } catch {}
 
   return { success: true, dispensedQty: params.requestedQty };
@@ -1036,16 +1306,23 @@ export function parseAndValidateCsv(
     };
   }
 
-  const rawHeaders = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/['"]/g, ''));
-  const headerMap: Record<string, number> = {};
+  const rawHeaders = lines[0].split(',').map((h) => h.trim().replace(/^["']|["']$/g, ''));
+  const headerIndices: Record<string, number> = {};
   rawHeaders.forEach((h, idx) => {
-    headerMap[h] = idx;
+    const clean = h.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (clean) headerIndices[clean] = idx;
   });
 
-  const getCol = (cells: string[], key: string): string => {
-    const idx = headerMap[key];
-    if (idx === undefined || idx >= cells.length) return '';
-    return cells[idx].trim().replace(/^["']|["']$/g, '');
+  const getCol = (cells: string[], ...aliases: string[]): string => {
+    for (const alias of aliases) {
+      const cleanAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const idx = headerIndices[cleanAlias];
+      if (idx !== undefined && idx < cells.length) {
+        const val = cells[idx].trim().replace(/^["']|["']$/g, '');
+        if (val) return val;
+      }
+    }
+    return '';
   };
 
   const parsedRows: CsvParsedRow[] = [];
@@ -1067,29 +1344,41 @@ export function parseAndValidateCsv(
 
     const rowErrors: CsvValidationError[] = [];
 
-    const sku = (getCol(cells, 'sku') || getCol(cells, 'medicine_id') || getCol(cells, 'id')).toUpperCase();
-    const brandName = getCol(cells, 'brand_name') || getCol(cells, 'brand') || getCol(cells, 'name');
-    const genericName = getCol(cells, 'generic_name') || getCol(cells, 'generic');
-    const manufacturer = getCol(cells, 'manufacturer') || getCol(cells, 'mfg');
-    const category = getCol(cells, 'category');
-    const rawDosage = getCol(cells, 'dosage_form') || getCol(cells, 'form') || 'Tablet';
-    const strength = getCol(cells, 'strength') || getCol(cells, 'dosage');
-    const unit = getCol(cells, 'unit') || 'Units';
-    const barcode = getCol(cells, 'barcode');
-    const batchNumber = getCol(cells, 'batch_number') || getCol(cells, 'batch') || getCol(cells, 'batch_no');
-    const mfgDate = getCol(cells, 'mfg_date') || getCol(cells, 'manufacturing_date');
-    const expiryDate = getCol(cells, 'expiry_date') || getCol(cells, 'exp_date') || getCol(cells, 'expiry');
-    const rawPurchasePrice = getCol(cells, 'purchase_price') || getCol(cells, 'cost_price') || getCol(cells, 'buy_price');
-    const rawSellingPrice = getCol(cells, 'selling_price') || getCol(cells, 'mrp') || getCol(cells, 'sale_price');
-    const rawQty = getCol(cells, 'quantity') || getCol(cells, 'qty') || getCol(cells, 'stock');
-    const rawMinStock = getCol(cells, 'min_stock_level') || getCol(cells, 'min_stock') || getCol(cells, 'threshold');
-    const supplierName = getCol(cells, 'supplier_name') || getCol(cells, 'supplier');
-    const supplierPhone = getCol(cells, 'supplier_phone') || getCol(cells, 'supplier_contact');
-    const invoiceNumber = getCol(cells, 'invoice_number') || getCol(cells, 'invoice');
+    let brandName = getCol(cells, 'brand_name', 'brand', 'medicine_name', 'product_name', 'name', 'item_name', 'medicine');
+    let genericName = getCol(cells, 'generic_name', 'generic', 'composition', 'salt', 'formula', 'molecule', 'drug_name');
 
+    if (!brandName && genericName) brandName = genericName;
+    if (!genericName && brandName) genericName = brandName;
+
+    let sku = (getCol(cells, 'sku', 'medicine_sku', 'medicine_code', 'medicine_id', 'code', 'id', 'item_code', 'product_code')).toUpperCase();
     if (!sku) {
-      rowErrors.push({ row: rowNum, field: 'sku', value: '', reason: 'Medicine SKU is required' });
-    } else if (seenSkusInFile.has(sku)) {
+      const cleanName = (brandName || 'MED').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase();
+      sku = `MED-${cleanName}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    }
+
+    const manufacturer = getCol(cells, 'manufacturer', 'mfg', 'company', 'brand_owner', 'maker', 'pharma', 'lab') || 'Standard Healthcare';
+    const category = getCol(cells, 'category', 'cat', 'therapeutic_class', 'group', 'classification', 'department') || 'General Medicine';
+    const rawDosage = getCol(cells, 'dosage_form', 'form', 'dosage_type', 'type', 'presentation');
+    const strength = getCol(cells, 'strength', 'dosage', 'potency', 'power', 'concentration');
+    const unit = getCol(cells, 'unit', 'unit_of_measure', 'uom', 'pack_unit', 'packaging', 'package', 'pack');
+    const barcode = getCol(cells, 'barcode', 'ean', 'upc', 'gtin', 'qr');
+    let batchNumber = getCol(cells, 'batch_number', 'batch', 'batch_no', 'lot_number', 'lot_no', 'lot');
+    if (!batchNumber) {
+      batchNumber = `BTH-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    }
+
+    const rawMfgDate = getCol(cells, 'mfg_date', 'manufacturing_date', 'mfg', 'mfg_dt', 'production_date');
+    const rawExpiryDate = getCol(cells, 'expiry_date', 'exp_date', 'expiry', 'exp', 'expiration_date', 'exp_dt');
+    const rawPurchasePrice = getCol(cells, 'purchase_price', 'buy_price', 'cost_price', 'cost', 'purchase_rate', 'rate', 'cost_per_unit');
+    const rawSellingPrice = getCol(cells, 'selling_price', 'sell_price', 'sale_price', 'retail_price', 'price');
+    const rawMrp = getCol(cells, 'mrp', 'max_retail_price', 'selling_price', 'sell_price', 'retail_price');
+    const rawQty = getCol(cells, 'quantity', 'qty', 'stock', 'initial_quantity', 'units', 'count', 'total_qty');
+    const rawMinStock = getCol(cells, 'min_stock_level', 'reorder_level', 'reorder_qty', 'reorder', 'min_stock', 'minimum_stock', 'threshold', 'alert_level');
+    const supplierName = getCol(cells, 'supplier_name', 'supplier', 'vendor_name', 'vendor', 'distributor_name', 'distributor', 'wholesaler');
+    const supplierPhone = getCol(cells, 'supplier_phone', 'supplier_contact', 'contact', 'phone', 'phone_number', 'mobile', 'email', 'supplier_email');
+    const invoiceNumber = getCol(cells, 'invoice_number', 'invoice', 'bill_number', 'bill_no', 'inv_no', 'reference_no', 'ref_no');
+
+    if (seenSkusInFile.has(sku)) {
       rowErrors.push({ row: rowNum, field: 'sku', value: sku, reason: `Duplicate SKU "${sku}" found within the same CSV file` });
     } else {
       seenSkusInFile.add(sku);
@@ -1097,14 +1386,6 @@ export function parseAndValidateCsv(
 
     if (!brandName) {
       rowErrors.push({ row: rowNum, field: 'brand_name', value: '', reason: 'Brand Name is required' });
-    }
-
-    if (!genericName) {
-      rowErrors.push({ row: rowNum, field: 'generic_name', value: '', reason: 'Generic Name is required' });
-    }
-
-    if (!batchNumber) {
-      rowErrors.push({ row: rowNum, field: 'batch_number', value: '', reason: 'Batch Number is required for inventory tracking' });
     }
 
     if (barcode) {
@@ -1115,49 +1396,41 @@ export function parseAndValidateCsv(
       }
     }
 
-    const parseDate = (dStr: string): boolean => {
-      if (!dStr) return false;
-      const d = new Date(dStr);
-      return !isNaN(d.getTime());
-    };
-
-    if (!expiryDate || !parseDate(expiryDate)) {
-      rowErrors.push({ row: rowNum, field: 'expiry_date', value: expiryDate, reason: 'Valid expiry date required (e.g. YYYY-MM-DD)' });
+    let parsedExpiry = parseFlexibleDate(rawExpiryDate);
+    if (!parsedExpiry) {
+      rowErrors.push({ row: rowNum, field: 'expiry_date', value: rawExpiryDate, reason: 'Valid expiry date required (e.g. YYYY-MM-DD)' });
+      parsedExpiry = '2028-12-31';
     }
 
-    if (mfgDate && !parseDate(mfgDate)) {
-      rowErrors.push({ row: rowNum, field: 'mfg_date', value: mfgDate, reason: 'Invalid manufacturing date format (e.g. YYYY-MM-DD)' });
+    let parsedMfg = parseFlexibleDate(rawMfgDate);
+    if (!parsedMfg) {
+      const expDt = new Date(parsedExpiry);
+      expDt.setFullYear(expDt.getFullYear() - 1);
+      parsedMfg = `${expDt.getFullYear()}-${String(expDt.getMonth() + 1).padStart(2, '0')}-${String(expDt.getDate()).padStart(2, '0')}`;
     }
 
-    if (mfgDate && expiryDate && parseDate(mfgDate) && parseDate(expiryDate)) {
-      if (new Date(expiryDate) <= new Date(mfgDate)) {
-        rowErrors.push({ row: rowNum, field: 'expiry_date', value: expiryDate, reason: 'Expiry date must be after manufacturing date' });
-      }
+    if (parsedMfg && parsedExpiry && new Date(parsedExpiry) <= new Date(parsedMfg)) {
+      const expDt = new Date(parsedExpiry);
+      expDt.setFullYear(expDt.getFullYear() - 1);
+      parsedMfg = `${expDt.getFullYear()}-${String(expDt.getMonth() + 1).padStart(2, '0')}-${String(expDt.getDate()).padStart(2, '0')}`;
     }
 
-    const purchasePrice = parseFloat(rawPurchasePrice);
-    if (isNaN(purchasePrice) || purchasePrice < 0) {
-      rowErrors.push({ row: rowNum, field: 'purchase_price', value: rawPurchasePrice, reason: 'Purchase price must be a non-negative number' });
+    const purchasePrice = parseCleanNumber(rawPurchasePrice, 0);
+    let sellingPrice = parseCleanNumber(rawSellingPrice, 0);
+    const mrp = parseCleanNumber(rawMrp, 0);
+    if (sellingPrice <= 0 && mrp > 0) {
+      sellingPrice = mrp;
+    }
+    if (sellingPrice <= 0 && purchasePrice > 0) {
+      sellingPrice = Math.round(purchasePrice * 1.35 * 100) / 100;
     }
 
-    const sellingPrice = parseFloat(rawSellingPrice);
-    if (isNaN(sellingPrice) || sellingPrice < 0) {
-      rowErrors.push({ row: rowNum, field: 'selling_price', value: rawSellingPrice, reason: 'Selling price must be a non-negative number' });
-    }
-
-    if (!isNaN(purchasePrice) && !isNaN(sellingPrice) && sellingPrice < purchasePrice) {
-      rowErrors.push({ row: rowNum, field: 'selling_price', value: rawSellingPrice, reason: `Selling price (${sellingPrice}) cannot be lower than purchase price (${purchasePrice})` });
-    }
-
-    const quantity = parseInt(rawQty, 10);
+    const quantity = parseInt(rawQty || '0', 10);
     if (isNaN(quantity) || quantity < 0) {
       rowErrors.push({ row: rowNum, field: 'quantity', value: rawQty, reason: 'Quantity must be a positive whole integer' });
     }
 
     const minStockLevel = parseInt(rawMinStock || '20', 10);
-    if (isNaN(minStockLevel) || minStockLevel < 0) {
-      rowErrors.push({ row: rowNum, field: 'min_stock_level', value: rawMinStock, reason: 'Minimum stock level must be non-negative integer' });
-    }
 
     const isExisting = existingSkuMap.has(sku);
     const isBarcodeConflict = barcode && existingBarcodeMap.has(barcode) && existingBarcodeMap.get(barcode)?.sku !== sku;
@@ -1166,7 +1439,41 @@ export function parseAndValidateCsv(
     }
 
     const validDosageForms: DosageForm[] = ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Ointment', 'Drops', 'Inhaler', 'Suspension', 'Powder', 'Other'];
-    const matchedDosage = validDosageForms.find((f) => f.toLowerCase() === rawDosage.toLowerCase()) || 'Tablet';
+    let matchedDosage = validDosageForms.find((f) => f.toLowerCase() === (rawDosage || '').toLowerCase());
+    if (!matchedDosage) {
+      const combined = `${rawDosage || ''} ${unit || ''} ${brandName || ''} ${genericName || ''}`.toLowerCase();
+      if (combined.includes('cap')) matchedDosage = 'Capsule';
+      else if (combined.includes('syr') || combined.includes('liq') || combined.includes('sol')) matchedDosage = 'Syrup';
+      else if (combined.includes('inj') || combined.includes('vial') || combined.includes('amp')) matchedDosage = 'Injection';
+      else if (combined.includes('drop')) matchedDosage = 'Drops';
+      else if (combined.includes('oint') || combined.includes('gel') || combined.includes('cream')) matchedDosage = 'Ointment';
+      else if (combined.includes('sachet') || combined.includes('powd')) matchedDosage = 'Powder';
+      else if (combined.includes('inhal')) matchedDosage = 'Inhaler';
+      else if (combined.includes('susp')) matchedDosage = 'Suspension';
+      else matchedDosage = 'Tablet';
+    }
+
+    let matchedStrength = strength;
+    if (!matchedStrength) {
+      const strMatch = `${brandName} ${genericName}`.match(/(\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu|d3|%|iu\/ml|w\/v|w\/w))/i);
+      matchedStrength = strMatch ? strMatch[0] : 'Standard';
+    }
+
+    let normalizedUnit = unit;
+    if (!normalizedUnit || normalizedUnit.toLowerCase() === 'units') {
+      if (matchedDosage === 'Tablet' || matchedDosage === 'Capsule') normalizedUnit = 'Strips';
+      else if (matchedDosage === 'Syrup' || matchedDosage === 'Suspension') normalizedUnit = 'Bottles';
+      else if (matchedDosage === 'Injection') normalizedUnit = 'Vials';
+      else normalizedUnit = 'Units';
+    } else {
+      const lu = normalizedUnit.toLowerCase();
+      if (lu.includes('tab')) normalizedUnit = 'Tablets';
+      else if (lu.includes('cap')) normalizedUnit = 'Capsules';
+      else if (lu.includes('strip')) normalizedUnit = 'Strips';
+      else if (lu.includes('bot')) normalizedUnit = 'Bottles';
+      else if (lu.includes('vial')) normalizedUnit = 'Vials';
+      else if (lu.includes('sachet')) normalizedUnit = 'Sachets';
+    }
 
     allErrors.push(...rowErrors);
 
@@ -1174,18 +1481,18 @@ export function parseAndValidateCsv(
       rowNumber: rowNum,
       sku,
       brandName: brandName || 'Unknown Brand',
-      genericName: genericName || 'Unknown Generic',
-      manufacturer: manufacturer || 'Standard Pharma',
-      category: category || 'General Medicine',
+      genericName: genericName || brandName || 'Unknown Generic',
+      manufacturer,
+      category,
       dosageForm: matchedDosage,
-      strength: strength || 'N/A',
-      unit: unit || 'Units',
+      strength: matchedStrength,
+      unit: normalizedUnit,
       barcode: barcode || undefined,
-      batchNumber: batchNumber || `BATCH-${rowNum}`,
-      mfgDate: mfgDate || new Date().toISOString().split('T')[0],
-      expiryDate: expiryDate || '2027-12-31',
-      purchasePrice: isNaN(purchasePrice) ? 0 : purchasePrice,
-      sellingPrice: isNaN(sellingPrice) ? 0 : sellingPrice,
+      batchNumber,
+      mfgDate: parsedMfg,
+      expiryDate: parsedExpiry,
+      purchasePrice,
+      sellingPrice,
       quantity: isNaN(quantity) ? 0 : quantity,
       minStockLevel: isNaN(minStockLevel) ? 20 : minStockLevel,
       supplierName,
@@ -1221,11 +1528,11 @@ export function parseAndValidateCsv(
   };
 }
 
-export function executeCsvImport(
+export async function executeCsvImport(
   parsedRows: CsvParsedRow[],
   updateExisting: boolean,
   responsibleUser: string
-): CsvImportSummary {
+): Promise<CsvImportSummary> {
   const currentMeds = loadStoredMedicines();
   const currentPurchases = loadStoredPurchases();
   const currentMovements = loadStoredMovements();
@@ -1240,8 +1547,32 @@ export function executeCsvImport(
   const medsMap = new Map<string, MedicineMaster>();
   currentMeds.forEach((m) => medsMap.set(m.sku.toUpperCase(), m));
 
+  const dbSkuToId = new Map<string, string>();
+  const dbSupNameToId = new Map<string, string>();
+
+  try {
+    const [mRes, sRes] = await Promise.all([
+      supabase.from('medicines').select('id, sku'),
+      supabase.from('suppliers').select('id, name'),
+    ]);
+    if (Array.isArray(mRes.data)) {
+      for (const dm of mRes.data) {
+        if (dm.sku && dm.id) dbSkuToId.set(dm.sku.toUpperCase(), dm.id);
+      }
+    }
+    if (Array.isArray(sRes.data)) {
+      for (const ds of sRes.data) {
+        if (ds.name && ds.id) dbSupNameToId.set(ds.name.toLowerCase().trim(), ds.id);
+      }
+    }
+  } catch {}
+
   const newPurchases: PurchaseRecord[] = [];
   const newMovements: StockMovement[] = [];
+  const dbMedsToUpsert: any[] = [];
+  const dbBatchesToUpsert: any[] = [];
+  const dbPurchasesToInsert: any[] = [];
+  const dbMovementsToInsert: any[] = [];
 
   for (const row of parsedRows) {
     if (!row.isValid) {
@@ -1250,7 +1581,43 @@ export function executeCsvImport(
       continue;
     }
 
-    const existingMed = medsMap.get(row.sku.toUpperCase());
+    let supId: string | undefined = undefined;
+    if (row.supplierName?.trim()) {
+      const sName = row.supplierName.trim();
+      const sKey = sName.toLowerCase();
+      if (dbSupNameToId.has(sKey)) {
+        supId = dbSupNameToId.get(sKey);
+      } else {
+        const localSup = currentSuppliers.find((s) => s.name.toLowerCase() === sKey);
+        supId = localSup?.id && isValidUuid(localSup.id) ? localSup.id : generateSafeUuid();
+        dbSupNameToId.set(sKey, supId);
+
+        const newSup: Supplier = {
+          id: supId,
+          name: sName,
+          phone: row.supplierPhone?.trim() || '+91 00000 00000',
+          email: row.supplierPhone?.includes('@') ? row.supplierPhone.trim() : undefined,
+          lastPurchaseDate: new Date().toISOString().split('T')[0],
+          lastPurchasePrice: row.purchasePrice,
+        };
+        currentSuppliers.push(newSup);
+
+        try {
+          await supabase.from('suppliers').upsert({
+            id: supId,
+            name: newSup.name,
+            phone: newSup.phone,
+            email: newSup.email || null,
+            last_purchase_date: newSup.lastPurchaseDate,
+            last_purchase_price: newSup.lastPurchasePrice,
+          });
+        } catch {}
+      }
+    }
+
+    const skuKey = row.sku.toUpperCase();
+    const existingMed = medsMap.get(skuKey);
+    let medId = dbSkuToId.get(skuKey);
 
     if (existingMed) {
       if (!updateExisting) {
@@ -1258,13 +1625,21 @@ export function executeCsvImport(
         continue;
       }
 
-      const existingBatches = [...existingMed.batches];
-      const batchIdx = existingBatches.findIndex((b) => b.batchNumber === row.batchNumber);
+      if (!medId || !isValidUuid(medId)) {
+        medId = isValidUuid(existingMed.id) ? existingMed.id : generateSafeUuid();
+        dbSkuToId.set(skuKey, medId);
+      }
 
-      const batchId = batchIdx >= 0 ? existingBatches[batchIdx].id : `bat-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+      const existingBatches = [...existingMed.batches];
+      const batchIdx = existingBatches.findIndex((b) => b.batchNumber.toLowerCase() === row.batchNumber.toLowerCase());
+
+      const batchId = batchIdx >= 0 && isValidUuid(existingBatches[batchIdx].id)
+        ? existingBatches[batchIdx].id
+        : generateSafeUuid();
+
       const newBatch: MedicineBatch = {
         id: batchId,
-        medicineId: existingMed.id,
+        medicineId: medId,
         batchNumber: row.batchNumber,
         manufacturingDate: row.mfgDate,
         expiryDate: row.expiryDate,
@@ -1272,6 +1647,7 @@ export function executeCsvImport(
         sellingPrice: row.sellingPrice,
         initialQuantity: row.quantity,
         availableQuantity: batchIdx >= 0 ? existingBatches[batchIdx].availableQuantity + row.quantity : row.quantity,
+        supplierId: supId,
         supplierName: row.supplierName,
       };
 
@@ -1285,6 +1661,7 @@ export function executeCsvImport(
 
       const updatedMedicine: MedicineMaster = {
         ...existingMed,
+        id: medId,
         brandName: row.brandName || existingMed.brandName,
         genericName: row.genericName || existingMed.genericName,
         manufacturer: row.manufacturer || existingMed.manufacturer,
@@ -1303,42 +1680,88 @@ export function executeCsvImport(
         expiryStatus: calculateExpiryStatus(existingBatches),
       };
 
-      medsMap.set(row.sku.toUpperCase(), updatedMedicine);
+      medsMap.set(skuKey, updatedMedicine);
       updatedCount++;
 
+      const purId = generateSafeUuid();
+      const invoiceNo = row.invoiceNumber || `CSV-IMP-${row.rowNumber}`;
       const purchaseRecord: PurchaseRecord = {
-        id: `pur-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
-        medicineId: existingMed.id,
+        id: purId,
+        medicineId: medId,
         medicineName: `${row.brandName} (${row.genericName})`,
-        supplierId: 'sup-import',
-        supplierName: row.supplierName || 'Self-Procured',
+        supplierId: supId || '',
+        supplierName: row.supplierName || 'Import Distributor',
         batchNumber: row.batchNumber,
         purchaseDate: new Date().toISOString().split('T')[0],
         quantityPurchased: row.quantity,
         purchasePrice: row.purchasePrice,
         totalPurchaseAmount: row.quantity * row.purchasePrice,
-        invoiceNumber: row.invoiceNumber || `CSV-IMP-${row.rowNumber}`,
+        invoiceNumber: invoiceNo,
         expiryDate: row.expiryDate,
       };
       newPurchases.push(purchaseRecord);
 
+      const movId = generateSafeUuid();
       newMovements.push({
-        id: `mov-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
-        medicineId: existingMed.id,
+        id: movId,
+        medicineId: medId,
         medicineName: row.brandName,
         batchId: batchId,
         batchNumber: row.batchNumber,
         movementType: 'Purchase',
         quantity: row.quantity,
-        referenceNumber: purchaseRecord.invoiceNumber,
+        referenceNumber: invoiceNo,
+        responsibleUser: responsibleUser || 'CSV Importer',
+        date: new Date().toISOString(),
+        notes: `CSV Master Data Import (Row ${row.rowNumber}) - Restock`,
+      });
+
+      dbBatchesToUpsert.push({
+        id: batchId,
+        medicine_id: medId,
+        batch_number: row.batchNumber,
+        manufacturing_date: row.mfgDate,
+        expiry_date: row.expiryDate,
+        purchase_price: row.purchasePrice,
+        selling_price: row.sellingPrice,
+        initial_quantity: newBatch.initialQuantity,
+        available_quantity: newBatch.availableQuantity,
+        supplier_id: supId || null,
+        supplier_name: row.supplierName || null,
+      });
+
+      dbPurchasesToInsert.push({
+        id: purId,
+        medicine_id: medId,
+        medicine_name: `${row.brandName} (${row.genericName})`,
+        supplier_id: supId || null,
+        supplier_name: row.supplierName || 'Import Distributor',
+        batch_number: row.batchNumber,
+        purchase_date: new Date().toISOString().split('T')[0],
+        quantity_purchased: row.quantity,
+        purchase_price: row.purchasePrice,
+        total_purchase_amount: row.quantity * row.purchasePrice,
+        invoice_number: invoiceNo,
+      });
+
+      dbMovementsToInsert.push({
+        id: movId,
+        medicine_id: medId,
+        batch_id: batchId,
+        movement_type: 'Purchase',
+        quantity: row.quantity,
+        reference_number: invoiceNo,
         responsibleUser: responsibleUser || 'CSV Importer',
         date: new Date().toISOString(),
         notes: `CSV Master Data Import (Row ${row.rowNumber}) - Restock`,
       });
     } else {
-      const medId = `med-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
-      const batchId = `bat-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+      if (!medId || !isValidUuid(medId)) {
+        medId = generateSafeUuid();
+        dbSkuToId.set(skuKey, medId);
+      }
 
+      const batchId = generateSafeUuid();
       const newBatch: MedicineBatch = {
         id: batchId,
         medicineId: medId,
@@ -1349,6 +1772,7 @@ export function executeCsvImport(
         sellingPrice: row.sellingPrice,
         initialQuantity: row.quantity,
         availableQuantity: row.quantity,
+        supplierId: supId,
         supplierName: row.supplierName,
       };
 
@@ -1373,50 +1797,99 @@ export function executeCsvImport(
         sellingPrice: row.sellingPrice,
       };
 
-      medsMap.set(row.sku.toUpperCase(), newMed);
+      medsMap.set(skuKey, newMed);
       importedCount++;
 
+      const purId = generateSafeUuid();
+      const invoiceNo = row.invoiceNumber || `CSV-IMP-${row.rowNumber}`;
       const purchaseRecord: PurchaseRecord = {
-        id: `pur-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+        id: purId,
         medicineId: medId,
         medicineName: `${row.brandName} (${row.genericName})`,
-        supplierId: 'sup-import',
+        supplierId: supId || '',
         supplierName: row.supplierName || 'Import Distributor',
         batchNumber: row.batchNumber,
         purchaseDate: new Date().toISOString().split('T')[0],
         quantityPurchased: row.quantity,
         purchasePrice: row.purchasePrice,
         totalPurchaseAmount: row.quantity * row.purchasePrice,
-        invoiceNumber: row.invoiceNumber || `CSV-IMP-${row.rowNumber}`,
+        invoiceNumber: invoiceNo,
         expiryDate: row.expiryDate,
       };
       newPurchases.push(purchaseRecord);
 
+      const movId = generateSafeUuid();
       newMovements.push({
-        id: `mov-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+        id: movId,
         medicineId: medId,
         medicineName: row.brandName,
         batchId: batchId,
         batchNumber: row.batchNumber,
         movementType: 'Purchase',
         quantity: row.quantity,
-        referenceNumber: purchaseRecord.invoiceNumber,
+        referenceNumber: invoiceNo,
         responsibleUser: responsibleUser || 'CSV Importer',
+        date: new Date().toISOString(),
+        notes: `CSV Master Data Import (Row ${row.rowNumber}) - New Master`,
+      });
+
+      dbBatchesToUpsert.push({
+        id: batchId,
+        medicine_id: medId,
+        batch_number: row.batchNumber,
+        manufacturing_date: row.mfgDate,
+        expiry_date: row.expiryDate,
+        purchase_price: row.purchasePrice,
+        selling_price: row.sellingPrice,
+        initial_quantity: newBatch.initialQuantity,
+        available_quantity: newBatch.availableQuantity,
+        supplier_id: supId || null,
+        supplier_name: row.supplierName || null,
+      });
+
+      dbPurchasesToInsert.push({
+        id: purId,
+        medicine_id: medId,
+        medicine_name: `${row.brandName} (${row.genericName})`,
+        supplier_id: supId || null,
+        supplier_name: row.supplierName || 'Import Distributor',
+        batch_number: row.batchNumber,
+        purchase_date: new Date().toISOString().split('T')[0],
+        quantity_purchased: row.quantity,
+        purchase_price: row.purchasePrice,
+        total_purchase_amount: row.quantity * row.purchasePrice,
+        invoice_number: invoiceNo,
+      });
+
+      dbMovementsToInsert.push({
+        id: movId,
+        medicine_id: medId,
+        batch_id: batchId,
+        movement_type: 'Purchase',
+        quantity: row.quantity,
+        reference_number: invoiceNo,
+        responsible_user: responsibleUser || 'CSV Importer',
         date: new Date().toISOString(),
         notes: `CSV Master Data Import (Row ${row.rowNumber}) - New Master`,
       });
     }
 
-    if (row.supplierName && !currentSuppliers.some((s) => s.name.toLowerCase() === row.supplierName?.toLowerCase())) {
-      const newSup: Supplier = {
-        id: `sup-${Date.now().toString(36)}`,
-        name: row.supplierName,
-        phone: row.supplierPhone || '+91 98000 00000',
-        lastPurchaseDate: new Date().toISOString().split('T')[0],
-        lastPurchasePrice: row.purchasePrice,
-      };
-      currentSuppliers.push(newSup);
-    }
+    dbMedsToUpsert.push({
+      id: medId,
+      sku: row.sku,
+      brand_name: row.brandName,
+      generic_name: row.genericName,
+      manufacturer: row.manufacturer,
+      category: row.category,
+      dosage_form: row.dosageForm,
+      strength: row.strength,
+      unit: row.unit,
+      barcode: row.barcode || null,
+      minimum_stock_level: row.minStockLevel,
+      selling_price: row.sellingPrice,
+      supplier_id: supId || null,
+      updated_at: new Date().toISOString(),
+    });
   }
 
   const finalMeds = Array.from(medsMap.values());
@@ -1426,8 +1899,52 @@ export function executeCsvImport(
   saveStoredSuppliers(currentSuppliers);
 
   try {
-    supabase.from('csv_import_logs').insert([
+    if (dbMedsToUpsert.length > 0) {
+      const { data: upsertedMeds } = await supabase
+        .from('medicines')
+        .upsert(dbMedsToUpsert, { onConflict: 'sku' })
+        .select('id, sku');
+      if (Array.isArray(upsertedMeds)) {
+        for (const um of upsertedMeds) {
+          if (um.sku && um.id) {
+            dbSkuToId.set(um.sku.toUpperCase(), um.id);
+          }
+        }
+      }
+    }
+
+    if (dbBatchesToUpsert.length > 0) {
+      const alignedBatches = dbBatchesToUpsert.map((b) => {
+        const med = finalMeds.find((m) => m.id === b.medicine_id);
+        const realId = med?.sku ? dbSkuToId.get(med.sku.toUpperCase()) || b.medicine_id : b.medicine_id;
+        return { ...b, medicine_id: realId };
+      });
+      await supabase
+        .from('medicine_batches')
+        .upsert(alignedBatches, { onConflict: 'medicine_id,batch_number' });
+    }
+
+    if (dbPurchasesToInsert.length > 0) {
+      const alignedPurchases = dbPurchasesToInsert.map((p) => {
+        const med = finalMeds.find((m) => m.id === p.medicine_id);
+        const realId = med?.sku ? dbSkuToId.get(med.sku.toUpperCase()) || p.medicine_id : p.medicine_id;
+        return { ...p, medicine_id: realId };
+      });
+      await supabase.from('purchase_records').insert(alignedPurchases);
+    }
+
+    if (dbMovementsToInsert.length > 0) {
+      const alignedMovements = dbMovementsToInsert.map((mv) => {
+        const med = finalMeds.find((m) => m.id === mv.medicine_id);
+        const realId = med?.sku ? dbSkuToId.get(med.sku.toUpperCase()) || mv.medicine_id : mv.medicine_id;
+        return { ...mv, medicine_id: realId };
+      });
+      await supabase.from('stock_movements').insert(alignedMovements);
+    }
+
+    await supabase.from('csv_import_logs').insert([
       {
+        id: generateSafeUuid(),
         filename: 'master_import.csv',
         total_rows: parsedRows.length,
         imported_rows: importedCount + updatedCount,
@@ -1435,78 +1952,7 @@ export function executeCsvImport(
         status: failedCount === 0 ? 'Success' : 'Partial Success',
         error_log: failureErrors,
       },
-    ]).then(() => {}, () => {});
-
-    const dbMedsToUpsert = finalMeds.map((m) => ({
-      id: m.id,
-      sku: m.sku,
-      brand_name: m.brandName,
-      generic_name: m.genericName,
-      manufacturer: m.manufacturer,
-      category: m.category,
-      dosage_form: m.dosageForm,
-      strength: m.strength,
-      unit: m.unit,
-      barcode: m.barcode,
-      minimum_stock_level: m.minimumStockLevel,
-      selling_price: m.sellingPrice,
-      supplier_id: m.supplier?.id || null,
-      updated_at: new Date().toISOString(),
-    }));
-    supabase.from('medicines').upsert(dbMedsToUpsert, { onConflict: 'sku' }).then(() => {}, () => {});
-
-    const allBatches = finalMeds.flatMap((m) =>
-      m.batches.map((b) => ({
-        id: b.id,
-        medicine_id: m.id,
-        batch_number: b.batchNumber,
-        manufacturing_date: b.manufacturingDate,
-        expiry_date: b.expiryDate,
-        purchase_price: b.purchasePrice,
-        selling_price: b.sellingPrice,
-        initial_quantity: b.initialQuantity,
-        available_quantity: b.availableQuantity,
-        supplier_id: b.supplierId || null,
-        supplier_name: b.supplierName || null,
-      }))
-    );
-    if (allBatches.length > 0) {
-      supabase.from('medicine_batches').upsert(allBatches, { onConflict: 'medicine_id,batch_number' }).then(() => {}, () => {});
-    }
-
-    if (newPurchases.length > 0) {
-      supabase.from('purchase_records').insert(
-        newPurchases.map((p) => ({
-          id: p.id,
-          medicine_id: p.medicineId,
-          medicine_name: p.medicineName,
-          supplier_id: p.supplierId || null,
-          supplier_name: p.supplierName,
-          batch_number: p.batchNumber,
-          purchase_date: p.purchaseDate,
-          quantity_purchased: p.quantityPurchased,
-          purchase_price: p.purchasePrice,
-          total_purchase_amount: p.totalPurchaseAmount,
-          invoice_number: p.invoiceNumber,
-        }))
-      ).then(() => {}, () => {});
-    }
-
-    if (newMovements.length > 0) {
-      supabase.from('stock_movements').insert(
-        newMovements.map((mv) => ({
-          id: mv.id,
-          medicine_id: mv.medicineId,
-          batch_id: mv.batchId || null,
-          movement_type: mv.movementType,
-          quantity: mv.quantity,
-          reference_number: mv.referenceNumber,
-          responsible_user: mv.responsibleUser,
-          date: mv.date,
-          notes: mv.notes,
-        }))
-      ).then(() => {}, () => {});
-    }
+    ]);
   } catch {}
 
   return {
@@ -1542,4 +1988,3 @@ export function convertMasterToInventoryItems(medicines: MedicineMaster[]): Inve
     batchNo: m.batches && m.batches.length > 0 ? m.batches[0].batchNumber : undefined,
   }));
 }
-

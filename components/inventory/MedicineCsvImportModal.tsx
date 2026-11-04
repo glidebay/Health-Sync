@@ -95,15 +95,17 @@ export function MedicineCsvImportModal({
     }
   };
 
-  const handleRunImport = () => {
+  const handleRunImport = async () => {
     setCurrentStep('importing');
-    setTimeout(() => {
+    try {
       const rowsToProcess = skipInvalid ? parsedRows.filter((r) => r.isValid) : parsedRows;
-      const res = executeCsvImport(rowsToProcess, updateExisting, responsibleUser);
+      const res = await executeCsvImport(rowsToProcess, updateExisting, responsibleUser);
       setFinalResult(res);
       setCurrentStep('results');
       onImportComplete();
-    }, 700);
+    } catch {
+      setCurrentStep('results');
+    }
   };
 
   const handleDownloadErrors = () => {
