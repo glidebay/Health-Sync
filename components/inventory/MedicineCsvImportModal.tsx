@@ -6,7 +6,6 @@ import {
   X,
   UploadCloud,
   FileSpreadsheet,
-  Download,
   AlertCircle,
   CheckCircle,
   AlertTriangle,
@@ -14,6 +13,8 @@ import {
   ChevronRight,
   ArrowRight,
   Check,
+  Pencil,
+  Download,
 } from 'lucide-react';
 import {
   MedicineMaster,
@@ -21,10 +22,11 @@ import {
   CsvImportSummary,
 } from '@/types/medicine';
 import {
-  generateSampleCsvTemplate,
   parseAndValidateCsv,
   executeCsvImport,
   generateCsvErrorReport,
+  streamAndIngestCsvToSupabase,
+  StreamImportProgress,
 } from '@/lib/medicineService';
 
 interface MedicineCsvImportModalProps {
@@ -51,20 +53,58 @@ export function MedicineCsvImportModal({
   const [updateExisting, setUpdateExisting] = useState<boolean>(true);
   const [skipInvalid, setSkipInvalid] = useState<boolean>(true);
   const [previewFilter, setPreviewFilter] = useState<'all' | 'valid' | 'invalid' | 'duplicates'>('all');
+  const [previewPage, setPreviewPage] = useState(1);
+  const [importProgress, setImportProgress] = useState<{ processed: number; total: number } | null>(null);
   const [finalResult, setFinalResult] = useState<CsvImportSummary | null>(null);
+  const [editingRow, setEditingRow] = useState<CsvParsedRow | null>(null);
 
+  // High-Capacity Streaming State
+  const [totalDetectedRows, setTotalDetectedRows] = useState<number>(0);
+  const [isStreaming, setIsStreaming] = useState<boolean>(false);
+  const [streamProgress, setStreamProgress] = useState<StreamImportProgress | null>(null);
+  const rawFileTextRef = useRef<string>('');
+
+  const PREVIEW_PAGE_SIZE = 25;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleDownloadTemplate = () => {
-    const csvContent = generateSampleCsvTemplate();
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'medicine_master_import_template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleStartEditRow = (row: CsvParsedRow) => {
+    setEditingRow({ ...row });
+  };
+
+  const handleSaveEditedRow = (updated: CsvParsedRow) => {
+    const brandValid = !!updated.brandName.trim();
+    const errors = brandValid
+      ? []
+      : [
+          {
+            row: updated.rowNumber,
+            field: 'brand_name',
+            value: updated.brandName,
+            reason: 'Brand Name is required',
+          },
+        ];
+    const rowWithValid: CsvParsedRow = {
+      ...updated,
+      brandName: updated.brandName.trim(),
+      genericName: updated.genericName.trim() || updated.brandName.trim(),
+      errors,
+      isValid: errors.length === 0,
+    };
+
+    setParsedRows((prev) => {
+      const next = prev.map((r) => (r.rowNumber === rowWithValid.rowNumber ? rowWithValid : r));
+      if (summary) {
+        const validRows = next.filter((r) => r.isValid).length;
+        const invalidRows = next.filter((r) => !r.isValid).length;
+        setSummary({
+          ...summary,
+          validRows,
+          invalidRows,
+        });
+      }
+      return next;
+    });
+    setEditingRow(null);
   };
 
   const processFile = (file: File) => {
@@ -73,11 +113,20 @@ export function MedicineCsvImportModal({
     reader.onload = (e) => {
       const text = e.target?.result as string;
       if (!text) return;
+      rawFileTextRef.current = text;
 
-      const { rows, summary: valSummary } = parseAndValidateCsv(text, existingMedicines);
-      setParsedRows(rows);
-      setSummary(valSummary);
-      setCurrentStep('preview');
+      // Fast line count without memory allocation
+      const lineCount = (text.match(/\n/g) || []).length;
+      setTotalDetectedRows(lineCount);
+
+      setTimeout(() => {
+        // Fast instant preview of the top 50 rows
+        const { rows, summary: valSummary } = parseAndValidateCsv(text, existingMedicines, 50);
+        setParsedRows(rows);
+        setSummary(valSummary);
+        setPreviewPage(1);
+        setCurrentStep('preview');
+      }, 30);
     };
     reader.readAsText(file);
   };
@@ -97,14 +146,60 @@ export function MedicineCsvImportModal({
 
   const handleRunImport = async () => {
     setCurrentStep('importing');
-    try {
-      const rowsToProcess = skipInvalid ? parsedRows.filter((r) => r.isValid) : parsedRows;
-      const res = await executeCsvImport(rowsToProcess, updateExisting, responsibleUser);
-      setFinalResult(res);
-      setCurrentStep('results');
-      onImportComplete();
-    } catch {
-      setCurrentStep('results');
+    setImportProgress(null);
+    setStreamProgress(null);
+
+    // If large file (> 200 lines), automatically run high-scale stream engine
+    if (totalDetectedRows > 200 && rawFileTextRef.current) {
+      setIsStreaming(true);
+      try {
+        const res = await streamAndIngestCsvToSupabase(rawFileTextRef.current, {
+          updateExisting,
+          batchSize: 500,
+          responsibleUser,
+          onProgress: (p) => {
+            setStreamProgress({ ...p });
+          },
+        });
+
+        setFinalResult({
+          totalRows: res.totalProcessed,
+          validRows: res.totalImported,
+          invalidRows: 0,
+          duplicateRows: 0,
+          newMedicinesCount: res.totalImported,
+          updatedMedicinesCount: 0,
+          successfullyImported: res.totalImported,
+          skippedRows: res.totalSkipped,
+          failedRows: 0,
+          errors: [],
+        });
+        setCurrentStep('results');
+        onImportComplete();
+      } catch (err: any) {
+        console.warn('Streaming notice:', err);
+        setCurrentStep('results');
+      } finally {
+        setIsStreaming(false);
+      }
+    } else {
+      // Standard fast importer
+      try {
+        const rowsToProcess = skipInvalid ? parsedRows.filter((r) => r.isValid) : parsedRows;
+        const res = await executeCsvImport(
+          rowsToProcess,
+          updateExisting,
+          responsibleUser,
+          (processed, total) => {
+            setImportProgress({ processed, total });
+          }
+        );
+        setFinalResult(res);
+        setCurrentStep('results');
+        onImportComplete();
+      } catch {
+        setCurrentStep('results');
+      }
     }
   };
 
@@ -127,6 +222,13 @@ export function MedicineCsvImportModal({
     setParsedRows([]);
     setSummary(null);
     setFinalResult(null);
+    setEditingRow(null);
+    setPreviewPage(1);
+    setImportProgress(null);
+    setTotalDetectedRows(0);
+    setIsStreaming(false);
+    setStreamProgress(null);
+    rawFileTextRef.current = '';
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -139,6 +241,12 @@ export function MedicineCsvImportModal({
     return parsedRows;
   }, [parsedRows, previewFilter]);
 
+  const totalPreviewPages = Math.ceil(filteredPreviewRows.length / PREVIEW_PAGE_SIZE) || 1;
+  const paginatedPreviewRows = useMemo(() => {
+    const start = (previewPage - 1) * PREVIEW_PAGE_SIZE;
+    return filteredPreviewRows.slice(start, start + PREVIEW_PAGE_SIZE);
+  }, [filteredPreviewRows, previewPage]);
+
   if (!isOpen) return null;
 
   return (
@@ -150,6 +258,7 @@ export function MedicineCsvImportModal({
           exit={{ opacity: 0, scale: 0.96, y: 15 }}
           className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden"
         >
+          {/* Header */}
           <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-[#FAFBFD]">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#2563EB] flex items-center justify-center border border-blue-100">
@@ -160,7 +269,7 @@ export function MedicineCsvImportModal({
                   Medicine Master CSV Import
                 </h2>
                 <p className="text-xs text-[#8A909D] font-medium">
-                  Bulk import medicine catalog, batch inventory, and supplier master records
+                  Import medicine catalog, batch inventory, and formulation records
                 </p>
               </div>
             </div>
@@ -172,12 +281,13 @@ export function MedicineCsvImportModal({
             </button>
           </div>
 
+          {/* Stepper */}
           <div className="flex items-center border-b border-slate-100 px-6 py-3 bg-[#FAFBFD] text-xs font-semibold gap-2">
             {[
-              { step: 'upload', label: '1. Upload & Template' },
+              { step: 'upload', label: '1. Upload CSV' },
               { step: 'preview', label: '2. Validate & Preview' },
               { step: 'results', label: '3. Import Summary' },
-            ].map((st, i) => {
+            ].map((st, i, arr) => {
               const active = currentStep === st.step || (currentStep === 'importing' && st.step === 'results');
               return (
                 <div key={st.step} className="flex items-center gap-2">
@@ -188,20 +298,22 @@ export function MedicineCsvImportModal({
                   >
                     {st.label}
                   </span>
-                  {i < 2 && <ChevronRight className="w-3.5 h-3.5 text-slate-300" />}
+                  {i < arr.length - 1 && <ChevronRight className="w-3.5 h-3.5 text-slate-300" />}
                 </div>
               );
             })}
           </div>
 
+          {/* Modal Body */}
           <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+            {/* Step 1: Upload Dropzone */}
             {currentStep === 'upload' && (
-              <div className="space-y-5">
+              <div className="py-8 sm:py-14">
                 <div
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-3xl p-8 sm:p-14 flex flex-col items-center justify-center text-center cursor-pointer transition bg-[#FAFBFD] hover:bg-blue-50/20 group"
+                  className="border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-3xl p-10 sm:p-16 flex flex-col items-center justify-center text-center cursor-pointer transition bg-[#FAFBFD] hover:bg-blue-50/20 group"
                 >
                   <input
                     ref={fileInputRef}
@@ -210,71 +322,57 @@ export function MedicineCsvImportModal({
                     onChange={handleFileChange}
                     className="hidden"
                   />
-                  <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#2563EB] flex items-center justify-center mb-4 group-hover:scale-110 transition shadow-2xs">
-                    <UploadCloud className="w-7 h-7" />
+                  <div className="w-16 h-16 rounded-2xl bg-blue-50 text-[#2563EB] flex items-center justify-center mb-4 group-hover:scale-110 transition shadow-2xs">
+                    <UploadCloud className="w-8 h-8" />
                   </div>
                   <h3 className="text-base font-bold text-slate-800">
                     Click to browse or drop CSV file here
                   </h3>
-                  <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                    Upload your medicine master sheet with batch info, pricing, and supplier tags.
+                  <p className="text-xs text-slate-400 mt-1.5 max-w-sm">
+                    Upload your medicine formulary or inventory CSV file to synchronize catalog records.
                   </p>
-                  <span className="mt-4 px-4 py-2 bg-white border border-slate-200 group-hover:border-blue-300 text-slate-700 rounded-xl text-xs font-semibold shadow-2xs">
+                  <span className="mt-5 px-5 py-2.5 bg-white border border-slate-200 group-hover:border-blue-300 text-slate-700 rounded-xl text-xs font-semibold shadow-2xs">
                     Select CSV File
                   </span>
-                </div>
-
-                <div className="bg-[#F8F9FB] rounded-2xl border border-slate-100 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <Download className="w-4 h-4 text-blue-600" />
-                      Download Pre-Formatted Medicine CSV Template
-                    </h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Pre-formatted template with all supported columns and realistic sample medicines ready for editing.
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleDownloadTemplate}
-                    className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-2 shadow-2xs whitespace-nowrap self-start sm:self-auto"
-                  >
-                    <Download className="w-3.5 h-3.5 text-blue-600" />
-                    Download Sample CSV
-                  </button>
                 </div>
               </div>
             )}
 
+            {/* Step 2: Validate & Preview */}
             {currentStep === 'preview' && summary && (
-              <div className="space-y-5">
+              <div className="space-y-4">
+                {/* Stats Bar */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5">
                   <div className="p-3 bg-[#F8F9FB] border border-slate-100 rounded-xl">
                     <p className="text-[11px] font-medium text-slate-400">Total Rows</p>
-                    <p className="text-lg font-black text-slate-800">{summary.totalRows}</p>
+                    <p className="text-lg font-black text-slate-800">
+                      {(totalDetectedRows > 0 ? totalDetectedRows : summary.totalRows).toLocaleString()}
+                    </p>
                   </div>
                   <div className="p-3 bg-emerald-50/60 border border-emerald-100 rounded-xl">
                     <p className="text-[11px] font-medium text-emerald-700">Valid Rows</p>
-                    <p className="text-lg font-black text-emerald-800">{summary.validRows}</p>
+                    <p className="text-lg font-black text-emerald-800">{summary.validRows.toLocaleString()}</p>
                   </div>
                   <div className="p-3 bg-red-50/60 border border-red-100 rounded-xl">
                     <p className="text-[11px] font-medium text-red-700">Invalid Rows</p>
-                    <p className="text-lg font-black text-red-800">{summary.invalidRows}</p>
+                    <p className="text-lg font-black text-red-800">{summary.invalidRows.toLocaleString()}</p>
                   </div>
                   <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-xl">
                     <p className="text-[11px] font-medium text-blue-700">New Medicines</p>
-                    <p className="text-lg font-black text-blue-800">{summary.newMedicinesCount}</p>
+                    <p className="text-lg font-black text-blue-800">{summary.newMedicinesCount.toLocaleString()}</p>
                   </div>
                   <div className="p-3 bg-purple-50/60 border border-purple-100 rounded-xl">
                     <p className="text-[11px] font-medium text-purple-700">Existing (Restock)</p>
-                    <p className="text-lg font-black text-purple-800">{summary.updatedMedicinesCount}</p>
+                    <p className="text-lg font-black text-purple-800">{summary.updatedMedicinesCount.toLocaleString()}</p>
                   </div>
                   <div className="p-3 bg-amber-50/60 border border-amber-100 rounded-xl">
                     <p className="text-[11px] font-medium text-amber-700">Duplicate SKUs</p>
-                    <p className="text-lg font-black text-amber-800">{summary.duplicateRows}</p>
+                    <p className="text-lg font-black text-amber-800">{summary.duplicateRows.toLocaleString()}</p>
                   </div>
                 </div>
 
-                <div className="bg-[#F8F9FB] rounded-2xl border border-slate-100 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                {/* Import Settings */}
+                <div className="bg-[#F8F9FB] rounded-2xl border border-slate-100 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   <div className="space-y-1.5">
                     <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-700">
                       <input
@@ -307,13 +405,17 @@ export function MedicineCsvImportModal({
                   )}
                 </div>
 
+                {/* Filters and Preview Table */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl text-xs font-semibold">
                       {(['all', 'valid', 'invalid', 'duplicates'] as const).map((f) => (
                         <button
                           key={f}
-                          onClick={() => setPreviewFilter(f)}
+                          onClick={() => {
+                            setPreviewFilter(f);
+                            setPreviewPage(1);
+                          }}
                           className={`px-3 py-1 rounded-lg capitalize transition cursor-pointer ${
                             previewFilter === f
                               ? 'bg-white text-slate-900 shadow-2xs'
@@ -322,46 +424,48 @@ export function MedicineCsvImportModal({
                         >
                           {f} ({
                             f === 'all'
-                              ? parsedRows.length
+                              ? parsedRows.length.toLocaleString()
                               : f === 'valid'
-                              ? summary.validRows
+                              ? summary.validRows.toLocaleString()
                               : f === 'invalid'
-                              ? summary.invalidRows
-                              : summary.duplicateRows
+                              ? summary.invalidRows.toLocaleString()
+                              : summary.duplicateRows.toLocaleString()
                           })
                         </button>
                       ))}
                     </div>
                     <span className="text-xs text-slate-400 font-medium">
-                      Showing {filteredPreviewRows.length} rows
+                      Showing {filteredPreviewRows.length.toLocaleString()} rows
                     </span>
                   </div>
 
+                  {/* Table with fixed max height and pagination */}
                   <div className="overflow-x-auto border border-slate-100 rounded-2xl max-h-72">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-[#FAFBFD] text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-100 sticky top-0">
                         <tr>
-                          <th className="py-2 px-3">Row</th>
-                          <th className="py-2 px-3">Status</th>
-                          <th className="py-2 px-3">SKU</th>
-                          <th className="py-2 px-3">Brand & Generic</th>
-                          <th className="py-2 px-3">Batch #</th>
-                          <th className="py-2 px-3">Exp Date</th>
-                          <th className="py-2 px-3">Qty</th>
-                          <th className="py-2 px-3">Buy Price</th>
-                          <th className="py-2 px-3">Sell Price</th>
-                          <th className="py-2 px-3">Validation Diagnostic</th>
+                          <th className="py-2.5 px-3">Row</th>
+                          <th className="py-2.5 px-3">Status</th>
+                          <th className="py-2.5 px-3">SKU</th>
+                          <th className="py-2.5 px-3">Brand & Generic</th>
+                          <th className="py-2.5 px-3">Batch #</th>
+                          <th className="py-2.5 px-3">Exp Date</th>
+                          <th className="py-2.5 px-3">Qty</th>
+                          <th className="py-2.5 px-3">Buy Price</th>
+                          <th className="py-2.5 px-3">Sell Price</th>
+                          <th className="py-2.5 px-3">Validation Diagnostic</th>
+                          <th className="py-2.5 px-3 text-right">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {filteredPreviewRows.length === 0 ? (
                           <tr>
-                            <td colSpan={10} className="py-6 text-center text-slate-400">
+                            <td colSpan={11} className="py-6 text-center text-slate-400">
                               No rows match this filter.
                             </td>
                           </tr>
                         ) : (
-                          filteredPreviewRows.map((r) => (
+                          paginatedPreviewRows.map((r) => (
                             <tr
                               key={r.rowNumber}
                               className={`hover:bg-slate-50/70 transition ${
@@ -387,9 +491,19 @@ export function MedicineCsvImportModal({
                               </td>
                               <td className="py-2 px-3 font-mono text-slate-700">{r.batchNumber}</td>
                               <td className="py-2 px-3 text-slate-600">{r.expiryDate}</td>
-                              <td className="py-2 px-3 font-bold text-slate-800">{r.quantity}</td>
-                              <td className="py-2 px-3 text-slate-600">₹{r.purchasePrice.toFixed(2)}</td>
-                              <td className="py-2 px-3 font-semibold text-emerald-700">₹{r.sellingPrice.toFixed(2)}</td>
+                              <td className="py-2 px-3 font-bold text-slate-800">
+                                {r.quantity > 0 ? r.quantity : <span className="text-slate-400 font-normal">0 (Catalog)</span>}
+                              </td>
+                              <td className="py-2 px-3 text-slate-600">
+                                {r.purchasePrice > 0 ? `₹${r.purchasePrice.toFixed(2)}` : <span className="text-slate-400">—</span>}
+                              </td>
+                              <td className="py-2 px-3">
+                                {r.sellingPrice > 0 ? (
+                                  <span className="font-semibold text-emerald-700">₹{r.sellingPrice.toFixed(2)}</span>
+                                ) : (
+                                  <span className="text-slate-400 font-medium">Unpriced</span>
+                                )}
+                              </td>
                               <td className="py-2 px-3">
                                 {r.errors.length > 0 ? (
                                   <div className="space-y-0.5 max-w-xs">
@@ -405,16 +519,57 @@ export function MedicineCsvImportModal({
                                   </span>
                                 )}
                               </td>
+                              <td className="py-2 px-3 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEditRow(r)}
+                                  className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg inline-flex items-center gap-1 border border-slate-200 transition cursor-pointer"
+                                  title="Edit details for this medicine"
+                                >
+                                  <Pencil className="w-3 h-3" /> Edit
+                                </button>
+                              </td>
                             </tr>
                           ))
                         )}
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Clean Pagination Navigation */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs">
+                    <span className="text-slate-500 font-medium">
+                      Showing {filteredPreviewRows.length > 0 ? (previewPage - 1) * PREVIEW_PAGE_SIZE + 1 : 0} -{' '}
+                      {Math.min(previewPage * PREVIEW_PAGE_SIZE, filteredPreviewRows.length)} of{' '}
+                      {filteredPreviewRows.length.toLocaleString()} records
+                    </span>
+                    <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                      <button
+                        type="button"
+                        disabled={previewPage <= 1}
+                        onClick={() => setPreviewPage((p) => Math.max(1, p - 1))}
+                        className="px-3 py-1 rounded-xl border border-slate-200 bg-white text-slate-700 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-50 transition cursor-pointer font-bold"
+                      >
+                        Previous
+                      </button>
+                      <span className="px-2 font-bold text-slate-800">
+                        Page {previewPage} of {totalPreviewPages}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={previewPage >= totalPreviewPages}
+                        onClick={() => setPreviewPage((p) => Math.min(totalPreviewPages, p + 1))}
+                        className="px-3 py-1 rounded-xl border border-slate-200 bg-white text-slate-700 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-50 transition cursor-pointer font-bold"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
 
+            {/* Step 3: Importing in progress */}
             {currentStep === 'importing' && (
               <div className="py-16 flex flex-col items-center justify-center text-center space-y-4">
                 <RefreshCw className="w-10 h-10 text-[#2563EB] animate-spin" />
@@ -424,9 +579,38 @@ export function MedicineCsvImportModal({
                 <p className="text-xs text-slate-400 max-w-sm">
                   Writing medicine catalog, registering batch records, and initializing stock movement ledgers.
                 </p>
+
+                <div className="w-full max-w-md space-y-2 pt-2 px-4 mx-auto">
+                  <div className="flex justify-between text-xs font-semibold text-slate-600">
+                    <span>Synchronizing Medicines</span>
+                    <span className="tabular-nums">
+                      {isStreaming && streamProgress
+                        ? `${streamProgress.processed.toLocaleString()} / ${streamProgress.total.toLocaleString()} (${streamProgress.percent}%)`
+                        : importProgress
+                        ? `${importProgress.processed.toLocaleString()} / ${importProgress.total.toLocaleString()} (${Math.round((importProgress.processed / importProgress.total) * 100)}%)`
+                        : 'Starting synchronization...'}
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#2563EB] transition-all duration-200 rounded-full"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          isStreaming && streamProgress
+                            ? streamProgress.percent
+                            : importProgress
+                            ? Math.round((importProgress.processed / importProgress.total) * 100)
+                            : 8
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             )}
 
+            {/* Step 4: Import Complete Summary */}
             {currentStep === 'results' && finalResult && (
               <div className="space-y-6">
                 <div className="p-6 bg-emerald-50/50 border border-emerald-100 rounded-3xl text-center space-y-2">
@@ -444,19 +628,19 @@ export function MedicineCsvImportModal({
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-4 bg-[#F8F9FB] rounded-2xl border border-slate-100 text-center">
                     <p className="text-xs text-slate-400 font-medium">Total Processed</p>
-                    <p className="text-xl font-black text-slate-800 mt-1">{finalResult.totalRows}</p>
+                    <p className="text-xl font-black text-slate-800 mt-1">{finalResult.totalRows.toLocaleString()}</p>
                   </div>
                   <div className="p-4 bg-emerald-50/70 rounded-2xl border border-emerald-100 text-center">
                     <p className="text-xs text-emerald-700 font-medium">Successfully Imported</p>
-                    <p className="text-xl font-black text-emerald-800 mt-1">{finalResult.successfullyImported}</p>
+                    <p className="text-xl font-black text-emerald-800 mt-1">{finalResult.successfullyImported.toLocaleString()}</p>
                   </div>
                   <div className="p-4 bg-amber-50/70 rounded-2xl border border-amber-100 text-center">
                     <p className="text-xs text-amber-700 font-medium">Skipped Rows</p>
-                    <p className="text-xl font-black text-amber-800 mt-1">{finalResult.skippedRows}</p>
+                    <p className="text-xl font-black text-amber-800 mt-1">{finalResult.skippedRows.toLocaleString()}</p>
                   </div>
                   <div className="p-4 bg-red-50/70 rounded-2xl border border-red-100 text-center">
                     <p className="text-xs text-red-700 font-medium">Failed / Invalid</p>
-                    <p className="text-xl font-black text-red-800 mt-1">{finalResult.failedRows}</p>
+                    <p className="text-xl font-black text-red-800 mt-1">{finalResult.failedRows.toLocaleString()}</p>
                   </div>
                 </div>
 
@@ -482,6 +666,7 @@ export function MedicineCsvImportModal({
             )}
           </div>
 
+          {/* Modal Footer */}
           <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-between bg-[#FAFBFD]">
             {currentStep === 'upload' && (
               <>
@@ -513,6 +698,7 @@ export function MedicineCsvImportModal({
                     Cancel
                   </button>
                   <button
+                    type="button"
                     onClick={handleRunImport}
                     disabled={summary ? (skipInvalid ? summary.validRows === 0 : summary.invalidRows > 0) : true}
                     className="px-5 py-2.5 bg-[#2563EB] hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-xs"
@@ -542,6 +728,178 @@ export function MedicineCsvImportModal({
             )}
           </div>
         </motion.div>
+
+        {/* Quick Row Edit Dialog Modal */}
+        {editingRow && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs">
+            <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-lg p-5 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">
+                    Edit Row #{editingRow.rowNumber} ({editingRow.sku})
+                  </h3>
+                  <p className="text-xs text-slate-400">Modify details or pricing before import</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingRow(null)}
+                  className="w-8 h-8 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="col-span-2">
+                  <label className="block text-slate-600 font-bold mb-1">Brand Name *</label>
+                  <input
+                    type="text"
+                    value={editingRow.brandName}
+                    onChange={(e) => setEditingRow({ ...editingRow, brandName: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white font-semibold"
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-slate-600 font-bold mb-1">Generic Name / Molecule</label>
+                  <input
+                    type="text"
+                    value={editingRow.genericName}
+                    onChange={(e) => setEditingRow({ ...editingRow, genericName: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">Retail Selling Price (₹)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editingRow.sellingPrice > 0 ? editingRow.sellingPrice : ''}
+                    onChange={(e) =>
+                      setEditingRow({
+                        ...editingRow,
+                        sellingPrice: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    placeholder="0.00 (Unpriced)"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white font-bold text-emerald-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">Purchase / Cost Price (₹)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editingRow.purchasePrice > 0 ? editingRow.purchasePrice : ''}
+                    onChange={(e) =>
+                      setEditingRow({
+                        ...editingRow,
+                        purchasePrice: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">Initial Stock Qty</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editingRow.quantity}
+                    onChange={(e) =>
+                      setEditingRow({
+                        ...editingRow,
+                        quantity: parseInt(e.target.value, 10) || 0,
+                      })
+                    }
+                    placeholder="0"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">Batch Number</label>
+                  <input
+                    type="text"
+                    value={editingRow.batchNumber}
+                    onChange={(e) => setEditingRow({ ...editingRow, batchNumber: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">Expiry Date (YYYY-MM-DD)</label>
+                  <input
+                    type="text"
+                    value={editingRow.expiryDate}
+                    onChange={(e) => setEditingRow({ ...editingRow, expiryDate: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">Dosage Form</label>
+                  <select
+                    value={editingRow.dosageForm}
+                    onChange={(e) => setEditingRow({ ...editingRow, dosageForm: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white font-semibold"
+                  >
+                    {['Tablet', 'Capsule', 'Syrup', 'Injection', 'Ointment', 'Drops', 'Inhaler', 'Suspension', 'Powder', 'Other'].map(
+                      (f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">Strength</label>
+                  <input
+                    type="text"
+                    value={editingRow.strength}
+                    onChange={(e) => setEditingRow({ ...editingRow, strength: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold mb-1">Unit</label>
+                  <input
+                    type="text"
+                    value={editingRow.unit}
+                    onChange={(e) => setEditingRow({ ...editingRow, unit: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingRow(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveEditedRow(editingRow)}
+                  className="px-4 py-2 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" /> Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AnimatePresence>
   );

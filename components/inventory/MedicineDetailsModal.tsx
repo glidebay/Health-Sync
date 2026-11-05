@@ -28,6 +28,7 @@ import {
   Supplier,
 } from '@/types/medicine';
 import { SupplierFormModal } from '@/components/inventory/SupplierFormModal';
+import { EditMedicineModal } from '@/components/inventory/EditMedicineModal';
 import {
   fetchPurchaseHistory,
   fetchStockMovements,
@@ -80,6 +81,7 @@ export function MedicineDetailsModal({
   const [isSupplierFormOpen, setIsSupplierFormOpen] = useState(false);
   const [selectedSupplierForModal, setSelectedSupplierForModal] = useState<Supplier | null>(null);
   const [showLinkSupplierModal, setShowLinkSupplierModal] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
     if (!medicine || !isOpen) return;
@@ -351,6 +353,14 @@ export function MedicineDetailsModal({
             <div className="flex items-center gap-2 flex-shrink-0">
               {isDoctorUnlocked && (
                 <>
+                  <button
+                    onClick={() => setIsEditModalOpen(true)}
+                    className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                    title="Edit Medicine Master & Pricing"
+                  >
+                    <Pencil className="w-3.5 h-3.5 text-slate-500" />
+                    <span className="hidden sm:inline">Edit Details</span>
+                  </button>
                   <button
                     onClick={() => setShowAdjustModal(true)}
                     className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
@@ -1348,6 +1358,16 @@ export function MedicineDetailsModal({
               </form>
             </motion.div>
           </div>
+        )}
+        {isEditModalOpen && (
+          <EditMedicineModal
+            medicine={medicine}
+            isOpen={isEditModalOpen}
+            onClose={() => setIsEditModalOpen(false)}
+            onMedicineUpdated={() => {
+              onMedicineUpdated();
+            }}
+          />
         )}
       </div>
     </AnimatePresence>

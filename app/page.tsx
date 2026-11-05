@@ -274,20 +274,25 @@ function DashboardContent() {
 
   const isDoctorUnlocked = isLoggedIn || !config.require_doctor_pin;
   const effectiveDoctorProfile = React.useMemo(() => {
-    if (isLoggedIn) return doctorProfile;
+    if (isLoggedIn) {
+      const doc = availableDoctors.find((d) => d.full_name === doctorProfile.name);
+      return { ...doctorProfile, regNo: (doc as any)?.reg_no || 'KMC-45892' };
+    }
     if (!config.require_doctor_pin) {
       if (availableDoctors.length > 0) {
         return {
           name: availableDoctors[0].full_name,
           title: availableDoctors[0].specialization || 'General Medicine',
+          regNo: (availableDoctors[0] as any).reg_no || 'KMC-45892',
         };
       }
       return {
         name: 'Dr. Sunny',
         title: 'General Medicine',
+        regNo: 'KMC-45892',
       };
     }
-    return doctorProfile;
+    return { ...doctorProfile, regNo: 'KMC-45892' };
   }, [isLoggedIn, config.require_doctor_pin, availableDoctors, doctorProfile]);
 
   const syncQueueOnly = useCallback(async () => {
@@ -453,6 +458,7 @@ function DashboardContent() {
     patientAge?: number | string;
     patientGender?: string;
     tokenNumber?: string | number;
+    nextVisitDate?: string;
   } | null>(null);
 
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
@@ -1104,15 +1110,19 @@ function DashboardContent() {
     setCurrentPrescription((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const completeConsultation = async () => {
+  const completeConsultation = async (nextVisitDate?: string) => {
     if (!activePatient) return;
 
     await completeConsultationDb({
       appointmentId: activePatient.id,
       notes: diagnosticNotes || 'Clinical examination normal. Prescription issued.',
+      nextVisitDate,
       prescriptions: currentPrescription.map((p) => ({
         inventoryId: String(p.med.id),
         qty: p.qty,
+        medicineName: p.med.brand,
+        dosage: p.dosage,
+        instructions: p.instructions,
       })),
     });
 
@@ -1162,6 +1172,7 @@ function DashboardContent() {
         `P${activePatient.queueTokenNo || ''}`,
       diagnostics: diagnosticNotes || 'Clinical examination normal. Prescription issued.',
       items: [...currentPrescription],
+      nextVisitDate,
     });
 
     setShowPrintModal(true);
