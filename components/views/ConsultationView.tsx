@@ -1,11 +1,29 @@
 'use client';
 
-import React, { useRef } from 'react';
-import { motion } from 'framer-motion';
-import { Stethoscope, Phone, Trash2, Printer } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Stethoscope,
+  Phone,
+  Trash2,
+  Printer,
+  Calendar,
+  History,
+  Pill,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  CalendarPlus,
+  AlertCircle,
+  FileText,
+} from 'lucide-react';
 import { Patient, InventoryItem, PrescriptionItem } from '@/types';
 import { MedicineSearchCombobox } from '@/components/common/MedicineSearchCombobox';
 import { formatPatientToken } from '@/lib/utils';
+import {
+  enterpriseCLMSService,
+  PatientMedicalHistoryProfile,
+} from '@/lib/enterpriseCLMSService';
 
 interface ConsultationViewProps {
   activePatient: Patient | null;
@@ -21,7 +39,7 @@ interface ConsultationViewProps {
   currentPrescription: PrescriptionItem[];
   onAddMedicineToRx: () => void;
   onRemoveRx: (index: number) => void;
-  onCompleteConsultation: () => void;
+  onCompleteConsultation: (nextVisitDate?: string) => void;
   onGoToQueue: () => void;
 }
 
@@ -43,6 +61,50 @@ export function ConsultationView({
   onGoToQueue,
 }: ConsultationViewProps) {
   const qtyInputRef = useRef<HTMLInputElement>(null);
+
+  // Next-Visit Follow-Up Charting State
+  const [nextVisitDate, setNextVisitDate] = useState<string>('');
+
+  // Patient Medical History State
+  const [medicalProfile, setMedicalProfile] = useState<PatientMedicalHistoryProfile | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState<boolean>(false);
+  const [showHistoryPanel, setShowHistoryPanel] = useState<boolean>(false);
+
+  // Load Patient Medical History when patient changes
+  useEffect(() => {
+    if (!activePatient) {
+      setMedicalProfile(null);
+      setNextVisitDate('');
+      setShowHistoryPanel(false);
+      return;
+    }
+
+    const patientDbId = activePatient.patientDbId || activePatient.id;
+    if (patientDbId) {
+      setIsLoadingProfile(true);
+      enterpriseCLMSService
+        .fetchPatientMedicalProfile(patientDbId)
+        .then((profile) => {
+          if (profile && profile.success) {
+            setMedicalProfile(profile);
+            if (profile.visits && profile.visits.length > 0) {
+              // Automatically open history panel if patient has past visits
+              setShowHistoryPanel(true);
+            }
+          }
+        })
+        .catch((err) => console.warn('Could not load patient medical history:', err))
+        .finally(() => setIsLoadingProfile(false));
+    }
+  }, [activePatient]);
+
+  // Quick follow-up date calculation
+  const setQuickFollowUp = (daysAhead: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + daysAhead);
+    const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    setNextVisitDate(ymd);
+  };
 
   return (
     <motion.section
@@ -71,6 +133,7 @@ export function ConsultationView({
         </div>
       ) : (
         <div className="space-y-4 sm:space-y-6">
+          {/* Patient Header Banner */}
           <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center space-x-2">
@@ -78,6 +141,11 @@ export function ConsultationView({
                 <span className="text-xs text-[#8A909D] font-semibold">
                   ({formatPatientToken(activePatient)})
                 </span>
+                {medicalProfile?.visits && medicalProfile.visits.length > 0 && (
+                  <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                    {medicalProfile.visits.length} Past Visits
+                  </span>
+                )}
               </div>
               <p className="text-xs text-[#8A909D] font-medium mt-0.5 flex items-center flex-wrap gap-1.5">
                 <span>{activePatient.age} Yrs • {activePatient.gender}</span>
@@ -93,22 +161,185 @@ export function ConsultationView({
                 <span>• Slot: {activePatient.time}</span>
               </p>
             </div>
-            <span className="text-xs font-bold bg-[#EBECEF] text-[#16191E] px-3.5 py-1.5 rounded-xl self-start sm:self-auto">
-              Active Chamber
-            </span>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              {medicalProfile && (
+                <button
+                  type="button"
+                  onClick={() => setShowHistoryPanel((prev) => !prev)}
+                  className="text-xs font-bold px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span>Medical History ({medicalProfile.visits.length})</span>
+                  {showHistoryPanel ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+              )}
+              <span className="text-xs font-bold bg-[#EBECEF] text-[#16191E] px-3.5 py-1.5 rounded-xl">
+                Active Chamber
+              </span>
+            </div>
           </div>
 
+          {/* Collapsible Patient Past Medical History Profile */}
+          <AnimatePresence>
+            {showHistoryPanel && medicalProfile && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="bg-gradient-to-br from-blue-50/60 to-slate-50 rounded-2xl p-4 sm:p-6 border border-blue-100 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <History className="w-4 h-4 text-blue-600" />
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                        Patient Longitudinal Medical History & Past Rx
+                      </h4>
+                    </div>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      Registered: {new Date(medicalProfile.patient?.created_at || Date.now()).toLocaleDateString()}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Past Consultations */}
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2 flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5 text-blue-600" />
+                        Previous Clinical Visits ({medicalProfile.visits.length})
+                      </span>
+                      {medicalProfile.visits.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic py-2">No prior clinic visits on record.</p>
+                      ) : (
+                        <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
+                          {medicalProfile.visits.map((v, i) => (
+                            <div key={v.appointment_id || i} className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs">
+                              <div className="flex justify-between items-center text-[11px] font-bold text-slate-700">
+                                <span>{new Date(v.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                <span className="text-blue-600">{v.doctor_name}</span>
+                              </div>
+                              <p className="text-slate-600 mt-1 line-clamp-2">{v.clinical_notes || 'Routine consultation'}</p>
+                              {v.next_visit_date && (
+                                <p className="text-[10px] text-emerald-600 font-semibold mt-1">
+                                  Follow-up set for: {v.next_visit_date}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Past Prescribed Medications */}
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2 flex items-center gap-1">
+                        <Pill className="w-3.5 h-3.5 text-indigo-600" />
+                        Past Prescribed Medications ({medicalProfile.prescriptions.length})
+                      </span>
+                      {medicalProfile.prescriptions.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic py-2">No prior medications recorded.</p>
+                      ) : (
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {medicalProfile.prescriptions.map((rx, i) => (
+                            <div key={i} className="p-2 bg-slate-50 rounded-lg border border-slate-100 text-xs flex justify-between items-center">
+                              <div>
+                                <span className="font-bold text-slate-800 block">{rx.medicine_name}</span>
+                                <span className="text-[11px] text-blue-600">{rx.dosage || rx.instructions || 'Standard dosage'}</span>
+                              </div>
+                              <span className="text-[10px] text-slate-400">
+                                {new Date(rx.prescribed_date).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Clinical Diagnostic Notes */}
           <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
             <h3 className="text-sm font-bold text-[#16191E] mb-3">Clinical Diagnostic Notes</h3>
             <textarea
               rows={3}
               value={diagnosticNotes}
               onChange={(e) => setDiagnosticNotes(e.target.value)}
-              placeholder="Record patient complaints, clinical findings, and diagnosis..."
+              placeholder="Record patient complaints, clinical findings, symptoms, and diagnosis..."
               className="w-full p-3.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs sm:text-sm outline-none focus:ring-1 focus:ring-gray-300 transition"
             />
           </div>
 
+          {/* Next-Visit Follow-Up Date Charting (Flow 3) */}
+          <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-[#16191E] flex items-center gap-1.5">
+                  <CalendarPlus className="w-4 h-4 text-blue-600" />
+                  Next-Visit Follow-Up Charting
+                </h3>
+                <p className="text-xs text-[#8A909D] mt-0.5">
+                  Schedule patient return visit date for automatic reminders and legal prescription print
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={nextVisitDate}
+                  onChange={(e) => setNextVisitDate(e.target.value)}
+                  className="px-3 py-1.5 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs font-semibold text-slate-800 outline-none focus:ring-1 focus:ring-blue-400"
+                />
+                {nextVisitDate && (
+                  <button
+                    type="button"
+                    onClick={() => setNextVisitDate('')}
+                    className="text-[11px] font-bold text-red-500 hover:text-red-700 px-2 py-1 rounded-lg hover:bg-red-50 cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Follow-Up Presets */}
+            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs">
+              <span className="font-semibold text-gray-400 text-[10px] uppercase tracking-wider mr-1">Presets:</span>
+              <button
+                type="button"
+                onClick={() => setQuickFollowUp(3)}
+                className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-blue-50 hover:text-blue-600 border border-gray-200/60 font-semibold text-slate-600 transition cursor-pointer"
+              >
+                +3 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickFollowUp(7)}
+                className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-blue-50 hover:text-blue-600 border border-gray-200/60 font-semibold text-slate-600 transition cursor-pointer"
+              >
+                +1 Week
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickFollowUp(14)}
+                className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-blue-50 hover:text-blue-600 border border-gray-200/60 font-semibold text-slate-600 transition cursor-pointer"
+              >
+                +2 Weeks
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickFollowUp(30)}
+                className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-blue-50 hover:text-blue-600 border border-gray-200/60 font-semibold text-slate-600 transition cursor-pointer"
+              >
+                +1 Month
+              </button>
+            </div>
+          </div>
+
+          {/* Prescription Builder */}
           <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-4">
               <h3 className="text-sm font-bold text-[#16191E]">
@@ -231,11 +462,11 @@ export function ConsultationView({
             <motion.button
               whileHover={{ scale: 1.02, y: -1 }}
               whileTap={{ scale: 0.98 }}
-              onClick={onCompleteConsultation}
-              className="w-full mt-6 py-3 bg-[#2563EB] hover:bg-blue-700 text-white font-semibold text-sm rounded-xl transition cursor-pointer shadow-sm flex items-center justify-center space-x-2"
+              onClick={() => onCompleteConsultation(nextVisitDate)}
+              className="w-full mt-6 py-3.5 bg-[#2563EB] hover:bg-blue-700 text-white font-semibold text-sm rounded-xl transition cursor-pointer shadow-sm flex items-center justify-center space-x-2"
             >
               <Printer className="w-4 h-4" />
-              <span>Complete & Print Rx</span>
+              <span>Complete Consultation & Print Legal Rx</span>
             </motion.button>
           </div>
         </div>

@@ -174,8 +174,6 @@ function AudioVoiceMessagePlayer({
             <Play className="w-4 h-4 fill-current translate-x-0.5" />
           )}
         </button>
-
-        {/* Waveform & Scrubber */}
         <div className="flex-1 flex flex-col justify-center min-w-0">
           <div
             onClick={handleWaveformClick}

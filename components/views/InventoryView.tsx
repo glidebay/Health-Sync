@@ -20,11 +20,13 @@ import {
   ChevronDown,
   Check,
   Pill,
+  Pencil,
 } from 'lucide-react';
 import { InventoryItem } from '@/types';
 import { MedicineMaster, DosageForm, Supplier } from '@/types/medicine';
 import { NumberedPagination } from '@/components/ui/pagination';
 import { MedicineDetailsModal } from '@/components/inventory/MedicineDetailsModal';
+import { EditMedicineModal } from '@/components/inventory/EditMedicineModal';
 import { MedicineCsvImportModal } from '@/components/inventory/MedicineCsvImportModal';
 import { SupplierFormModal } from '@/components/inventory/SupplierFormModal';
 import { AnimatedCounter } from '@/components/common/AnimatedCounter';
@@ -103,7 +105,9 @@ export function InventoryView({
   const [loadingMeds, setLoadingMeds] = useState(true);
 
   const [selectedMedicine, setSelectedMedicine] = useState<MedicineMaster | null>(null);
+  const [selectedMedicineForEdit, setSelectedMedicineForEdit] = useState<MedicineMaster | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   const [selectedSupplierForModal, setSelectedSupplierForModal] = useState<Supplier | null>(null);
@@ -1065,9 +1069,28 @@ export function InventoryView({
                                   {item.sku}
                                 </span>
                               </div>
-                              <span className="text-[11px] text-slate-400 block truncate mt-0.5">
-                                {item.genericName} &bull; {item.manufacturer}
-                              </span>
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                <span className="text-[11px] text-slate-400 block truncate">
+                                  {item.genericName} &bull; {item.manufacturer}
+                                </span>
+                                {item.sellingPrice && item.sellingPrice > 0 ? (
+                                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-100 flex-shrink-0">
+                                    ₹{item.sellingPrice.toFixed(2)}
+                                  </span>
+                                ) : (
+                                  <span
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedMedicineForEdit(item);
+                                      setIsEditModalOpen(true);
+                                    }}
+                                    className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-1.5 py-0.2 rounded border border-amber-200 flex-shrink-0 cursor-pointer"
+                                    title="Click to set retail price"
+                                  >
+                                    Unpriced
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -1150,6 +1173,17 @@ export function InventoryView({
                             </button>
                             <button
                               type="button"
+                              onClick={() => {
+                                setSelectedMedicineForEdit(item);
+                                setIsEditModalOpen(true);
+                              }}
+                              className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+                              title="Edit Medicine Master & Pricing"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleOpenDetails(item)}
                               className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition cursor-pointer"
                               title="View Full Details"
@@ -1186,6 +1220,17 @@ export function InventoryView({
         }}
         onMedicineUpdated={loadData}
         isDoctorUnlocked={isDoctorUnlocked}
+      />
+
+      <EditMedicineModal
+        medicine={selectedMedicineForEdit}
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setSelectedMedicineForEdit(null);
+        }}
+        onMedicineUpdated={loadData}
+        categories={allAvailableCategories}
       />
 
       <MedicineCsvImportModal

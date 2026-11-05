@@ -1142,16 +1142,30 @@ export async function cascadeDoctorDelayDb(
 export async function completeConsultationDb(params: {
   appointmentId: string;
   notes?: string;
-  prescriptions: Array<{ inventoryId: string | number; qty: number }>;
+  nextVisitDate?: string;
+  prescriptions: Array<{
+    inventoryId: string | number;
+    qty: number;
+    medicineName?: string;
+    dosage?: string;
+    frequency?: string;
+    duration?: string;
+    instructions?: string;
+  }>;
 }): Promise<boolean> {
   try {
+    const updatePayload: Record<string, any> = {
+      status: 'Completed',
+      clinical_notes: params.notes,
+      updated_at: new Date().toISOString(),
+    };
+    if (params.nextVisitDate) {
+      updatePayload.next_visit_date = params.nextVisitDate;
+    }
+
     const { error: apptError } = await supabase
       .from('appointments')
-      .update({
-        status: 'Completed',
-        clinical_notes: params.notes,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq('id', params.appointmentId);
 
     if (apptError) {
@@ -1159,13 +1173,19 @@ export async function completeConsultationDb(params: {
     }
 
     for (const rx of params.prescriptions) {
-      await supabase.from('prescribed_medications').insert([
-        {
-          appointment_id: params.appointmentId,
-          inventory_id: rx.inventoryId,
-          dispensed_quantity: rx.qty,
-        },
-      ]);
+      const rxInsert: Record<string, any> = {
+        appointment_id: params.appointmentId,
+        inventory_id: String(rx.inventoryId),
+        dispensed_quantity: rx.qty,
+        created_at: new Date().toISOString(),
+      };
+      if (rx.medicineName) rxInsert.medicine_name = rx.medicineName;
+      if (rx.dosage) rxInsert.dosage = rx.dosage;
+      if (rx.frequency) rxInsert.frequency = rx.frequency;
+      if (rx.duration) rxInsert.duration = rx.duration;
+      if (rx.instructions) rxInsert.instructions = rx.instructions;
+
+      await supabase.from('prescribed_medications').insert([rxInsert]);
 
       const { data: invItem } = await supabase
         .from('inventory')
@@ -2062,6 +2082,53 @@ export async function bookAppointmentSlotDb(
         message: 'Patient full name must be at least 2 characters long.',
       };
     }
+
+    // Attempt Atomic Guarded Booking RPC
+    try {
+      const { data: guardedData, error: guardedErr } = await supabase.rpc('book_appointment_guarded', {
+        p_doctor_id: params.doctorId,
+        p_patient_id: null,
+        p_patient_name: cleanName,
+        p_phone: cleanPhone,
+        p_scheduled_time: scheduledTime,
+        p_visit_type: 'Online',
+        p_priority: params.priority || 'Normal',
+      });
+
+      if (!guardedErr && guardedData) {
+        if (guardedData.success) {
+          const tokenStr = `P${String(guardedData.token_no || 1).padStart(3, '0')}`;
+          return {
+            success: true,
+            appointmentId: guardedData.appointment_id,
+            tokenNumber: tokenStr,
+            queueTokenNo: guardedData.token_no,
+            patientNumber: guardedData.token_no,
+            displayId: tokenStr,
+            visitType: 'Online',
+            assignedSlot: params.slotTime,
+            scheduledDate: params.date,
+            status: 'Confirmed',
+            priority: params.priority || 'Normal',
+            message: guardedData.message,
+          };
+        } else if (guardedData.error_code === 'DOUBLE_BOOKING_COLLISION') {
+          return {
+            success: false,
+            error: 'DOUBLE_BOOKING_COLLISION',
+            message: guardedData.message + (guardedData.recommended_slots && guardedData.recommended_slots.length > 0 ? ` Recommended open slots: ${guardedData.recommended_slots.join(', ')}` : ''),
+          };
+        } else if (guardedData.error_code === 'QUOTA_EXCEEDED') {
+          return {
+            success: false,
+            error: 'DAILY_QUOTA_REACHED',
+            message: guardedData.message,
+          };
+        }
+      }
+    } catch (e) {
+      // Fall through to standard booking logic
+    }
     const { data: rpcData, error: rpcError } = await supabase.rpc(
       'register_walk_in_patient',
       {
@@ -2869,6 +2936,24 @@ export async function sendQuickBookingLink(
   const replyText = `Hello ${patientName}! You can choose your appointment slot directly here: ${bookingLink}`;
   return sendDoctorReplyToChat(phoneNumber, patientName, replyText, 'link_sent');
 }
+
+export { enterpriseCLMSService } from './enterpriseCLMSService';
+export type {
+  DoctorSlotItem,
+  DoctorSlotsResponse,
+  GuardedBookingParams,
+  GuardedBookingResponse,
+  ActiveQueueItem,
+  PatientVisitHistoryItem,
+  PatientPrescriptionHistoryItem,
+  PatientMedicalHistoryProfile,
+  CasemixCategory,
+  PharmacyValuation,
+  FastMovingMolecule,
+  CasemixAndValuationReport,
+  GenericMolecule,
+} from './enterpriseCLMSService';
+
 
 export async function markThreadUrgentInDb(phoneNumber: string): Promise<boolean> {
   try {

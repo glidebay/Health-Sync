@@ -23,6 +23,10 @@ import { formatPatientToken } from '@/lib/utils';
 import { AnimatedCounter } from '@/components/common/AnimatedCounter';
 import { NumberedPagination } from '@/components/ui/pagination';
 import { staggerContainer, fadeScale } from '@/lib/constants';
+import {
+  enterpriseCLMSService,
+  CasemixAndValuationReport,
+} from '@/lib/enterpriseCLMSService';
 
 interface AnalyticsViewProps {
   totalPatientsCount: number;
@@ -59,6 +63,13 @@ export function AnalyticsView({
   const cleanQuery = searchQuery.trim().toLowerCase();
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('month');
   const [cancelledPage, setCancelledPage] = useState(1);
+  const [report, setReport] = useState<CasemixAndValuationReport | null>(null);
+
+  useEffect(() => {
+    enterpriseCLMSService.getCasemixAndPharmacyValuation().then((data) => {
+      if (data) setReport(data);
+    }).catch((err) => console.warn('Casemix report load notice:', err));
+  }, []);
   const cancelledList = useMemo(() => {
     if (cancelledAppointments !== undefined) {
       return cancelledAppointments;
@@ -175,7 +186,56 @@ export function AnalyticsView({
     }
   }, [selectedPeriod]);
 
-  const topSellingMedicines: RankBarItem[] = [
+  const topSellingMedicines: RankBarItem[] = useMemo(() => {
+    if (report?.fast_moving_molecules && report.fast_moving_molecules.length > 0) {
+      return report.fast_moving_molecules.map((m, idx) => ({
+        label: m.medicine_name,
+        sub: `Prescribed ${m.prescribed_count} times`,
+        value: m.prescribed_count,
+        highlight: idx === 0,
+      }));
+    }
+    return [
+      {
+        label: 'Paracetamol 650mg',
+        sub: 'Dolo-650 · Analgesic & Antipyretic',
+        value: 1420,
+        highlight: true,
+      },
+      {
+        label: 'Amoxicillin + Clav 625mg',
+        sub: 'Augmentin · Broad-Spectrum Antibiotic',
+        value: 1180,
+      },
+      {
+        label: 'Pantoprazole 40mg',
+        sub: 'Pan-40 · Antacid & PPI Gastro',
+        value: 940,
+      },
+      {
+        label: 'Cetirizine 10mg',
+        sub: 'Cetzine · Antihistamine & Allergy',
+        value: 760,
+      },
+      {
+        label: 'Metformin 500mg',
+        sub: 'Glycomet · Glycemic Control',
+        value: 680,
+      },
+      {
+        label: 'Azithromycin 500mg',
+        sub: 'Azee-500 · Macrolide Antibiotic',
+        value: 520,
+      },
+      {
+        label: 'Montelukast 10mg',
+        sub: 'Montair · Respiratory Care',
+        value: 410,
+      },
+    ];
+  }, [report]);
+
+  const defaultTopSellingMedicines: RankBarItem[] = [
     {
       label: 'Paracetamol 650mg',
       sub: 'Dolo-650 · Analgesic & Antipyretic',
@@ -214,13 +274,24 @@ export function AnalyticsView({
     },
   ];
 
-  const casesData = [
-    { label: 'Viral Fever & URI', pct: '45%', color: 'bg-blue-600' },
-    { label: 'Gastric & Reflux', pct: '25%', color: 'bg-blue-500' },
-    { label: 'Allergies & Skin', pct: '15%', color: 'bg-blue-400' },
-    { label: 'Routine Vitals', pct: '10%', color: 'bg-blue-300' },
-    { label: 'Orthopedic / Joints', pct: '5%', color: 'bg-blue-200' },
-  ];
+  const casesData = useMemo(() => {
+    if (report?.casemix && report.casemix.length > 0) {
+      const total = report.casemix.reduce((sum, item) => sum + item.count, 0) || 1;
+      const colors = ['bg-blue-600', 'bg-blue-500', 'bg-blue-400', 'bg-blue-300', 'bg-blue-200'];
+      return report.casemix.map((item, idx) => ({
+        label: item.category,
+        pct: `${Math.round((item.count / total) * 100)}%`,
+        color: colors[idx % colors.length],
+      }));
+    }
+    return [
+      { label: 'Viral / Respiratory', pct: '45%', color: 'bg-blue-600' },
+      { label: 'Endocrine / Diabetes', pct: '25%', color: 'bg-blue-500' },
+      { label: 'Cardiovascular', pct: '15%', color: 'bg-blue-400' },
+      { label: 'Gastrointestinal', pct: '10%', color: 'bg-blue-300' },
+      { label: 'General Consultation', pct: '5%', color: 'bg-blue-200' },
+    ];
+  }, [report]);
 
   const filteredMedicines = useMemo(() => {
     if (!cleanQuery) return topSellingMedicines;
@@ -276,7 +347,7 @@ export function AnalyticsView({
           </p>
         </div>
 
-        <div className="flex items-center self-start sm:self-auto">
+        <div className="flex items-center space-x-3 self-start sm:self-auto">
           <div className="flex items-center bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/80 p-1 shadow-xs hover:border-slate-300 transition-all">
             {PERIOD_OPTIONS.map((period) => {
               const isActive = selectedPeriod === period.id;

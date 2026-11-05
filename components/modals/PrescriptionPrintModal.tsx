@@ -26,13 +26,14 @@ interface PrescriptionPrintRecord {
   patientAge?: number | string;
   patientGender?: string;
   tokenNumber?: string | number;
+  nextVisitDate?: string;
 }
 
 interface PrescriptionPrintModalProps {
   isOpen: boolean;
   onClose: () => void;
   printRecord: PrescriptionPrintRecord | null;
-  doctorProfile: { name: string; title: string };
+  doctorProfile: { name: string; title: string; regNo?: string };
 }
 
 // Dedicated Isolated Iframe Print Function - 100% Reliable, Never Blank
@@ -41,7 +42,7 @@ function printIsolatedPrescription(params: {
   printBg: boolean;
   fields: RxTemplateFields;
   printRecord: PrescriptionPrintRecord;
-  doctorProfile: { name: string; title: string };
+  doctorProfile: { name: string; title: string; regNo?: string };
   ageDisplay: string;
   genderDisplay: string;
 }) {
@@ -662,11 +663,20 @@ export function PrescriptionPrintModal({
                   )}
                 </div>
 
+                
+                {/* Next Follow-Up Visit Notice */}
+                {printRecord?.nextVisitDate && (
+                  <div className="mt-4 p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs font-semibold text-blue-900 flex items-center justify-between">
+                    <span>Next Review / Follow-Up Visit Scheduled:</span>
+                    <span className="font-bold">{printRecord.nextVisitDate}</span>
+                  </div>
+                )}
+
                 {/* Signature */}
                 <div className="mt-12 sm:mt-16 text-right">
                   <div className="border-t border-gray-400 inline-block pt-2 pr-16 text-sm font-semibold">
                     <p>{doctorProfile.name}</p>
-                    <p className="text-xs text-[#8A909D] font-normal">Authorized Medical Practitioner</p>
+                    <p className="text-xs text-[#8A909D] font-normal">{doctorProfile.regNo ? `Reg: ${doctorProfile.regNo} • ` : ''}Authorized Medical Practitioner</p>
                   </div>
                 </div>
 

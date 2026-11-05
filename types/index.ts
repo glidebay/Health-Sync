@@ -4,6 +4,7 @@ export type PatientStatus = 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled
 
 export interface Patient {
   id: string;
+  patientDbId?: string;
   name: string;
   age: number;
   gender: 'Male' | 'Female' | 'Other';
@@ -11,6 +12,7 @@ export interface Patient {
   status: PatientStatus;
   time: string;
   appointmentDate?: string;
+  nextVisitDate?: string;
   tokenNumber?: number | string;
   queueTokenNo?: number;
   patientNumber?: number;
@@ -31,6 +33,11 @@ export interface InventoryItem {
   unit?: string;
   category?: string;
   batchNo?: string;
+  manufacturer?: string;
+  packSize?: string;
+  purchasePrice?: number;
+  expiryDate?: string;
+  reorderThreshold?: number;
 }
 
 export interface PrescriptionItem {
@@ -51,6 +58,7 @@ export interface ConsultationRecord {
   date: string;
   timestamp?: number;
   diagnostics: string;
+  nextVisitDate?: string;
   prescription?: PrescriptionItem[];
   items?: PrescriptionItem[];
   demographics?: string;
