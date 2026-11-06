@@ -108,12 +108,10 @@ export function EcgActionLoader({
     </motion.div>
   );
 
-  // If overlay is disabled, render inline directly
   if (!overlay) {
     return <AnimatePresence>{content}</AnimatePresence>;
   }
 
-  // Full-screen overlay via React Portal directly onto document.body
   if (fullscreen) {
     if (!mounted || typeof document === 'undefined') return null;
 
@@ -139,7 +137,6 @@ export function EcgActionLoader({
     );
   }
 
-  // Fallback scoped container overlay
   return (
     <AnimatePresence>
       <motion.div

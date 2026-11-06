@@ -132,7 +132,6 @@ function AudioVoiceMessagePlayer({
             if (d && !isNaN(d) && isFinite(d) && d > 0) {
               setDuration(d);
             } else if (d === Infinity) {
-              // Workaround for Chromium / WhatsApp Opus OGG stream duration Infinity
               audio.currentTime = 1e101;
               const handleInitialSeek = () => {
                 audio.currentTime = 0;
@@ -284,7 +283,6 @@ export function DoctorChatModal({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Instant snap to bottom without animated scrolling down
   const scrollToBottom = useCallback(() => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
@@ -326,7 +324,6 @@ export function DoctorChatModal({
       loadThreads(true);
     });
 
-    // Live polling heartbeat while chat modal is open
     const interval = setInterval(() => {
       loadThreads(true);
     }, 3000);
@@ -344,14 +341,12 @@ export function DoctorChatModal({
 
   const [readStates, setReadStates] = useState<Record<string, number>>(() => getReadThreadStates());
 
-  // Sync read states from storage
   useEffect(() => {
     const onReadChange = () => setReadStates(getReadThreadStates());
     window.addEventListener('healthsync_chat_read_change', onReadChange);
     return () => window.removeEventListener('healthsync_chat_read_change', onReadChange);
   }, []);
 
-  // Mark active thread as read whenever it is open and visible
   const activeThreadId = activeThread?.id;
   const activeThreadMsgCount = activeThread?.messages?.length || 0;
 
@@ -364,10 +359,8 @@ export function DoctorChatModal({
   useEffect(() => {
     if (!isOpen || !activeThreadId) return;
 
-    // Immediately snap to bottom without animated scrolling down
     scrollToBottom();
 
-    // Ensure layout dimensions after render are pinned instantly to the latest message
     const rId = requestAnimationFrame(scrollToBottom);
     const t = setTimeout(scrollToBottom, 40);
 

@@ -59,7 +59,6 @@ export function parseFlexibleDate(dateStr?: string | null, fallbackYears: number
   const s = String(dateStr).trim().replace(/^["']|["']$/g, '');
   if (!s || /^(na|n\/a|nil|null|none|-|unknown|\/)$/i.test(s)) return getFallback();
 
-  // 1. YYYY-MM-DD
   const ymdMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
   if (ymdMatch) {
     const y = Number(ymdMatch[1]), m = Number(ymdMatch[2]), d = Number(ymdMatch[3]);
@@ -67,7 +66,6 @@ export function parseFlexibleDate(dateStr?: string | null, fallbackYears: number
     if (!isNaN(dt.getTime())) return formatYmd(dt);
   }
 
-  // 2. DD-MM-YYYY or MM-DD-YYYY
   const dmyMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
   if (dmyMatch) {
     let partA = Number(dmyMatch[1]), partB = Number(dmyMatch[2]), y = Number(dmyMatch[3]);
@@ -78,19 +76,17 @@ export function parseFlexibleDate(dateStr?: string | null, fallbackYears: number
     if (!isNaN(dt.getTime())) return formatYmd(dt);
   }
 
-  // 3. MM/YY or MM/YYYY (Blister pack expiration: e.g. 05/27, 12/28)
   const mmyyMatch = s.match(/^(\d{1,2})[-/.](\d{2,4})$/);
   if (mmyyMatch) {
     const m = Number(mmyyMatch[1]);
     let y = Number(mmyyMatch[2]);
     if (y < 100) y += 2000;
     if (m >= 1 && m <= 12) {
-      const dt = new Date(y, m, 0); // Last day of that month
+      const dt = new Date(y, m, 0);
       return formatYmd(dt);
     }
   }
 
-  // 4. MMM-YY or MMM-YYYY (e.g. DEC-27, MAR/2028, Aug-26)
   const monthMap: Record<string, number> = {
     jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
     jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12
@@ -107,12 +103,10 @@ export function parseFlexibleDate(dateStr?: string | null, fallbackYears: number
     }
   }
 
-  // 5. Year only (e.g. 2027)
   if (/^\d{4}$/.test(s)) {
     return `${s}-12-31`;
   }
 
-  // 6. Excel serial date
   const num = Number(s);
   if (!isNaN(num) && num > 30000 && num < 70000) {
     const dt = new Date((num - 25569) * 86400 * 1000);
@@ -178,10 +172,8 @@ export function detectCsvFileMetadata(text: string): {
 export function parseCsvTextToRows(text: string, maxRows?: number): string[][] {
   if (!text || !text.trim()) return [];
 
-  // 1. Strip UTF-8 BOM and unwrap whole-line quotes if detected
   const cleanText = normalizeRawCsvText(text);
 
-  // 2. Auto-detect delimiter
   const firstChunk = cleanText.slice(0, 4000);
   let delimiter = ',';
   const commaCount = (firstChunk.match(/,/g) || []).length;
@@ -205,7 +197,7 @@ export function parseCsvTextToRows(text: string, maxRows?: number): string[][] {
     if (char === '"') {
       if (insideQuotes && nextChar === '"') {
         currentCell += '"';
-        i++; // skip escaped quote
+        i++;
       } else {
         insideQuotes = !insideQuotes;
       }
@@ -214,14 +206,14 @@ export function parseCsvTextToRows(text: string, maxRows?: number): string[][] {
       currentCell = '';
     } else if ((char === '\r' || char === '\n') && !insideQuotes) {
       if (char === '\r' && nextChar === '\n') {
-        i++; // skip \r\n
+        i++;
       }
       currentRow.push(currentCell.trim().replace(/^["']|["']$/g, ''));
       currentCell = '';
       if (currentRow.length > 0 && currentRow.some((c) => c !== '')) {
         rows.push(currentRow);
         if (maxRows && rows.length >= maxRows + 1) {
-          break; // Early breakout for high performance
+          break;
         }
       }
       currentRow = [];
@@ -230,7 +222,6 @@ export function parseCsvTextToRows(text: string, maxRows?: number): string[][] {
     }
   }
 
-  // Last row
   if (currentCell.length > 0 || currentRow.length > 0) {
     currentRow.push(currentCell.trim().replace(/^["']|["']$/g, ''));
     if (currentRow.length > 0 && currentRow.some((c) => c !== '')) {
@@ -994,7 +985,6 @@ export async function updateMedicineMaster(params: {
   currentMeds[medIndex] = updated;
   saveStoredMedicines(currentMeds);
 
-  // Sync to Supabase
   try {
     if (isValidUuid(existing.id)) {
       await supabase
@@ -1572,7 +1562,6 @@ export function parseAndValidateCsv(
     const cells = rawRows[i];
     if (cells.length === 0 || cells.every((c) => c === '')) continue;
 
-    // Filter out discontinued products automatically so they never pollute active clinic inventory
     const isDiscontinued = getCol(cells, 'is_discontinued', 'discontinued', 'isdiscontinued').toLowerCase();
     if (isDiscontinued === 'true' || isDiscontinued === 'yes' || isDiscontinued === '1') {
       continue;
@@ -1580,7 +1569,6 @@ export function parseAndValidateCsv(
 
     const rowErrors: CsvValidationError[] = [];
 
-    // Expanded aliases covering Kaggle, Indian Formulary, Jan Aushadhi, 1mg, Pharma masters, WHO formularies
     let brandName = getCol(
       cells,
       'brand_name', 'brand', 'medicine_name', 'med_name', 'product_name', 'product',
@@ -1596,7 +1584,6 @@ export function parseAndValidateCsv(
       'active_molecule', 'active_salt'
     );
 
-    // Support Indian Medicine Dataset dual composition columns (short_composition1, short_composition2)
     const comp1 = getCol(cells, 'short_composition1', 'shortcomposition1', 'composition1', 'salt1');
     const comp2 = getCol(cells, 'short_composition2', 'shortcomposition2', 'composition2', 'salt2');
     if (!genericName && (comp1 || comp2)) {
@@ -1606,7 +1593,6 @@ export function parseAndValidateCsv(
     if (!brandName && genericName) brandName = genericName;
     if (!genericName && brandName) genericName = brandName;
 
-    // Fallback: If still empty, scan row for any valid text cell with medicine-like string
     if (!brandName) {
       for (const cell of cells) {
         const trimmed = cell.trim().replace(/^["']|["']$/g, '');
@@ -1637,7 +1623,6 @@ export function parseAndValidateCsv(
       sku = `MED-${cleanName}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
     }
 
-    // Auto-disambiguate duplicate SKUs in file so we never fail a row
     if (seenSkusInFile.has(sku)) {
       let suffix = 2;
       let disambiguated = `${sku}-B${suffix}`;
@@ -1663,7 +1648,6 @@ export function parseAndValidateCsv(
       'indication', 'drug_class', 'action_class', 'sub_category', 'therapeutic_group', 'use', 'uses'
     );
 
-    // Auto-infer therapeutic category from molecules if not provided or default
     if (!category || category === 'General Medicine') {
       const compLower = `${genericName} ${brandName}`.toLowerCase();
       if (compLower.match(/amox|azith|clav|cefix|cipro|cef|doxy|penicillin|antibiotic/)) {
@@ -1688,7 +1672,6 @@ export function parseAndValidateCsv(
     let strength = getCol(cells, 'strength', 'dosage', 'potency', 'power', 'concentration', 'dose', 'mg');
     let unit = getCol(cells, 'unit', 'unit_of_measure', 'uom', 'pack_unit', 'packaging', 'package', 'packing', 'size');
 
-    // Parse pack_size_label (e.g. "strip of 10 tablets", "bottle of 100 ml Syrup")
     if (packLabel) {
       const pl = packLabel.toLowerCase();
       if (!unit || unit.toLowerCase() === 'units') {
@@ -1728,14 +1711,12 @@ export function parseAndValidateCsv(
 
     if (barcode) {
       if (seenBarcodesInFile.has(barcode)) {
-        barcode = undefined; // ignore duplicate barcode instead of failing the medicine
+        barcode = undefined;
       } else {
         seenBarcodesInFile.add(barcode);
       }
     }
 
-    // Expiry date: Handles all pharma blister-pack formats (MM/YY, MM/YYYY, DEC-27, YYYY-MM-DD, etc.)
-    // If empty/missing: smoothly defaults to today + 3 years without pushing a fatal validation error!
     const parsedExpiry = parseFlexibleDate(rawExpiryDate, 3);
 
     let parsedMfg = parseFlexibleDate(rawMfgDate, 1);
@@ -1757,12 +1738,10 @@ export function parseAndValidateCsv(
     if (sellingPrice <= 0 && mrp > 0) {
       sellingPrice = mrp;
     }
-    // No arbitrary fake ₹10 default: unpriced items stay 0 so clinic staff can set the true price
     if (sellingPrice < 0) {
       sellingPrice = 0;
     }
 
-    // Quantity: If not provided in master catalog CSV, default to 0 initial stock (unstocked catalog), never fake 100!
     let quantity = rawQty ? parseCleanNumber(rawQty, 0) : 0;
     if (isNaN(quantity) || quantity < 0) quantity = 0;
 
@@ -1771,7 +1750,7 @@ export function parseAndValidateCsv(
     const isExisting = existingSkuMap.has(sku);
     const isBarcodeConflict = barcode && existingBarcodeMap.has(barcode) && existingBarcodeMap.get(barcode)?.sku !== sku;
     if (isBarcodeConflict) {
-      barcode = undefined; // Drop conflicting barcode so the medicine itself imports cleanly
+      barcode = undefined;
     }
 
     const validDosageForms: DosageForm[] = ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Ointment', 'Drops', 'Inhaler', 'Suspension', 'Powder', 'Other'];
@@ -2394,7 +2373,6 @@ export async function streamAndIngestCsvToSupabase(
   const startTime = Date.now();
   const cleanText = normalizeRawCsvText(rawText);
 
-  // 1. Line splitter via index search (avoids giant memory allocations of .split('\n'))
   const lineEnds: number[] = [];
   let pos = 0;
   while ((pos = cleanText.indexOf('\n', pos)) !== -1) {
@@ -2410,7 +2388,6 @@ export async function streamAndIngestCsvToSupabase(
     return { totalProcessed: 0, totalImported: 0, totalSkipped: 0, durationMs: 0, speedMedsPerSec: 0 };
   }
 
-  // 2. Parse Header
   const headerLine = cleanText.slice(0, lineEnds[0]).replace(/\r$/, '');
   const headers = headerLine.split(',').map((h) => h.trim().toLowerCase().replace(/[^a-z0-9]/g, ''));
   const getIndex = (...aliases: string[]): number => {
@@ -2444,7 +2421,6 @@ export async function streamAndIngestCsvToSupabase(
   let skippedCount = 0;
 
   for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
-    // Check pause or cancel signals
     if (controlSignal?.aborted) {
       if (onProgress) {
         onProgress({
@@ -2479,7 +2455,6 @@ export async function streamAndIngestCsvToSupabase(
       const rawLine = cleanText.slice(lineStart, lineEnd).replace(/\r$/, '').trim();
       if (!rawLine) continue;
 
-      // Parse CSV line respecting quotes
       const cells: string[] = [];
       let inQuote = false;
       let curr = '';
@@ -2496,7 +2471,6 @@ export async function streamAndIngestCsvToSupabase(
       }
       cells.push(curr.trim().replace(/^["']|["']$/g, ''));
 
-      // Check discontinued status
       const isDisc = discIdx !== -1 && (cells[discIdx] || '').toUpperCase() === 'TRUE';
       if (isDisc) {
         skippedCount++;
@@ -2518,7 +2492,6 @@ export async function streamAndIngestCsvToSupabase(
       const manufacturer = mfgIdx !== -1 && cells[mfgIdx] ? cells[mfgIdx] : 'Indian Pharmaceuticals Ltd';
       const packLabel = packIdx !== -1 ? cells[packIdx] || '' : '';
 
-      // Infer dosage form and unit from pack label
       let dosageForm = dosageIdx !== -1 && cells[dosageIdx] ? cells[dosageIdx] : 'Tablet';
       let unit = unitIdx !== -1 && cells[unitIdx] ? cells[unitIdx] : 'Strips';
       const plLower = packLabel.toLowerCase();
@@ -2585,7 +2558,6 @@ export async function streamAndIngestCsvToSupabase(
       processedCount++;
     }
 
-    // Upsert chunk to Supabase
     if (dbBatchMeds.length > 0) {
       try {
         await supabase.from('medicines').upsert(dbBatchMeds, { onConflict: 'sku' });
@@ -2597,7 +2569,6 @@ export async function streamAndIngestCsvToSupabase(
       }
     }
 
-    // Compute live throughput metrics for the horizontal balancer
     const elapsedSec = (Date.now() - startTime) / 1000;
     const speed = Math.round(processedCount / Math.max(0.1, elapsedSec));
     const remaining = Math.max(0, totalDataRows - processedCount);
@@ -2618,7 +2589,6 @@ export async function streamAndIngestCsvToSupabase(
       });
     }
 
-    // Yield control to UI thread (prevents browser freeze, guarantees smooth 60 FPS animation)
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 

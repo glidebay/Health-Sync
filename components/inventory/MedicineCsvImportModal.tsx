@@ -58,7 +58,6 @@ export function MedicineCsvImportModal({
   const [finalResult, setFinalResult] = useState<CsvImportSummary | null>(null);
   const [editingRow, setEditingRow] = useState<CsvParsedRow | null>(null);
 
-  // High-Capacity Streaming State
   const [totalDetectedRows, setTotalDetectedRows] = useState<number>(0);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [streamProgress, setStreamProgress] = useState<StreamImportProgress | null>(null);
@@ -115,12 +114,10 @@ export function MedicineCsvImportModal({
       if (!text) return;
       rawFileTextRef.current = text;
 
-      // Fast line count without memory allocation
       const lineCount = (text.match(/\n/g) || []).length;
       setTotalDetectedRows(lineCount);
 
       setTimeout(() => {
-        // Fast instant preview of the top 50 rows
         const { rows, summary: valSummary } = parseAndValidateCsv(text, existingMedicines, 50);
         setParsedRows(rows);
         setSummary(valSummary);
@@ -149,7 +146,6 @@ export function MedicineCsvImportModal({
     setImportProgress(null);
     setStreamProgress(null);
 
-    // If large file (> 200 lines), automatically run high-scale stream engine
     if (totalDetectedRows > 200 && rawFileTextRef.current) {
       setIsStreaming(true);
       try {
@@ -183,7 +179,6 @@ export function MedicineCsvImportModal({
         setIsStreaming(false);
       }
     } else {
-      // Standard fast importer
       try {
         const rowsToProcess = skipInvalid ? parsedRows.filter((r) => r.isValid) : parsedRows;
         const res = await executeCsvImport(

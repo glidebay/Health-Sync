@@ -62,15 +62,12 @@ export function ConsultationView({
 }: ConsultationViewProps) {
   const qtyInputRef = useRef<HTMLInputElement>(null);
 
-  // Next-Visit Follow-Up Charting State
   const [nextVisitDate, setNextVisitDate] = useState<string>('');
 
-  // Patient Medical History State
   const [medicalProfile, setMedicalProfile] = useState<PatientMedicalHistoryProfile | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState<boolean>(false);
   const [showHistoryPanel, setShowHistoryPanel] = useState<boolean>(false);
 
-  // Load Patient Medical History when patient changes
   useEffect(() => {
     if (!activePatient) {
       setMedicalProfile(null);
@@ -88,7 +85,6 @@ export function ConsultationView({
           if (profile && profile.success) {
             setMedicalProfile(profile);
             if (profile.visits && profile.visits.length > 0) {
-              // Automatically open history panel if patient has past visits
               setShowHistoryPanel(true);
             }
           }
@@ -98,7 +94,6 @@ export function ConsultationView({
     }
   }, [activePatient]);
 
-  // Quick follow-up date calculation
   const setQuickFollowUp = (daysAhead: number) => {
     const d = new Date();
     d.setDate(d.getDate() + daysAhead);

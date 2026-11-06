@@ -31,14 +31,12 @@ export function GlobalPharmacySearch({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus input when opened
   useEffect(() => {
     if (isExpanded || isMobile) {
       inputRef.current?.focus();
     }
   }, [isExpanded, isMobile]);
 
-  // Click outside to close
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -53,7 +51,6 @@ export function GlobalPharmacySearch({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isMobile, onClose]);
 
-  // Escape key to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -70,7 +67,6 @@ export function GlobalPharmacySearch({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [query, onClose]);
 
-  // Filter inventory simply by brand or generic
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return inventory.slice(0, 10);

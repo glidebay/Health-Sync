@@ -113,7 +113,6 @@ export async function addDoctorDb(newDoctor: {
     const cleanRegNo = newDoctor.reg_no.trim();
     const cleanFullName = newDoctor.full_name.trim();
 
-    // Check duplicate reg_no
     const existing = await getDoctors();
     const isDuplicate = existing.some(
       (d) => (d.reg_no || '').toLowerCase() === cleanRegNo.toLowerCase()
@@ -545,7 +544,6 @@ export async function fetchQueueFromDb(targetDate?: string, doctorId?: string): 
   try {
     const todayIST = targetDate || getTodayIST();
 
-    // 1. Primary: Use get_patient_appointments RPC which anchors to Indian Standard Time (Asia/Kolkata)
     const { data: rpcData, error: rpcError } = await supabase.rpc('get_patient_appointments', {
       p_date: todayIST,
       p_status: 'All',
@@ -586,7 +584,6 @@ export async function fetchQueueFromDb(targetDate?: string, doctorId?: string): 
       return sortQueuePatients(mapped);
     }
 
-    // 2. Fallback: Direct query on appointments table with strict IST date range
     const startIso = `${todayIST}T00:00:00+05:30`;
     const endIso = `${todayIST}T23:59:59.999+05:30`;
 
@@ -2011,7 +2008,6 @@ export async function getDoctorSlotsForDate(
         .neq('status', 'Reallocated'),
     ]);
 
-    // Check if date falls on a clinic holiday
     const holCfg = cfgRes.data?.find((c) => c.key === 'clinic_holidays');
     let holidaysList: any[] = [];
     try {
@@ -2036,7 +2032,6 @@ export async function getDoctorSlotsForDate(
       };
     }
 
-    // Check for date-specific doctor quota override
     let isQuotaOverridden = false;
     const ovrCfg = cfgRes.data?.find((c) => c.key === 'clinic_quota_overrides');
     let overridesList: any[] = [];
@@ -2273,7 +2268,6 @@ export async function bookAppointmentSlotDb(
       };
     }
 
-    // Attempt Atomic Guarded Booking RPC
     try {
       const { data: guardedData, error: guardedErr } = await supabase.rpc('book_appointment_guarded', {
         p_doctor_id: params.doctorId,
@@ -2390,7 +2384,6 @@ export async function bookAppointmentSlotDb(
       let apptPriority = rpcData.priority || params.priority;
 
       if (apptId) {
-        // Query the authoritative record from appointments table (after triggers calculate fixed slot tokens)
         const { data: realAppt } = await supabase
           .from('appointments')
           .select(`
@@ -2900,7 +2893,6 @@ export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
           const incomingMsg = rawPayload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
           const isFromDoctor = rawPayload?.sender === 'doctor';
 
-          // Detect WhatsApp Audio Voice Message
           const rawText = typeof req.message_text === 'string' ? req.message_text.trim() : '';
           const looksLikeMediaId =
             /^FA[A-Za-z0-9_-]{20,}$/.test(rawText) ||

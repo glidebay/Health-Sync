@@ -100,7 +100,6 @@ export function DoctorProfileEditModal({
       return;
     }
 
-    // Duplicate Council Registration Number check
     let allDoctors = existingDoctors;
     if (!allDoctors || allDoctors.length === 0) {
       allDoctors = await getDoctors();
@@ -117,10 +116,8 @@ export function DoctorProfileEditModal({
       return;
     }
 
-    // Daily quota range check (1 - 200)
     const quotaNum = Math.max(1, Math.min(200, Number(dailyQuota) || 30));
 
-    // PIN check
     if (newPin.trim() && newPin.trim().length < 4) {
       setErrorMsg('Security PIN must be at least 4 digits if changing.');
       return;

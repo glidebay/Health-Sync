@@ -55,7 +55,6 @@ export function PatientSlotBookingPortal() {
   const [selectedSlot, setSelectedSlot] = useState<DoctorSlotItem | null>(null);
   const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
 
-  // Form Fields
   const [patientName, setPatientName] = useState('');
   const [phone, setPhone] = useState('');
   const [age, setAge] = useState('');
@@ -63,13 +62,11 @@ export function PatientSlotBookingPortal() {
   const [priority, setPriority] = useState<'Normal' | 'Urgent'>('Normal');
   const [visitType, setVisitType] = useState('WhatsApp Online');
 
-  // Submission & Guard State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [collisionError, setCollisionError] = useState<string | null>(null);
   const [recommendedSlots, setRecommendedSlots] = useState<string[]>([]);
   const [confirmedPass, setConfirmedPass] = useState<ConfirmedPass | null>(null);
 
-  // 1. Load active doctors
   useEffect(() => {
     async function loadDoctors() {
       try {
@@ -85,7 +82,6 @@ export function PatientSlotBookingPortal() {
     loadDoctors();
   }, []);
 
-  // 2. Fetch dynamic slots whenever doctor or date changes
   const loadSlots = useCallback(async (docId: string, date: string) => {
     if (!docId || !date) return;
     setLoadingSlots(true);
@@ -121,7 +117,6 @@ export function PatientSlotBookingPortal() {
     );
   }, [doctors, selectedDoctorId]);
 
-  // Group slots by period
   const groupedSlots = useMemo(() => {
     if (!slotData?.slots) return { morning: [], afternoon: [], evening: [] };
     const morning: DoctorSlotItem[] = [];
@@ -144,7 +139,6 @@ export function PatientSlotBookingPortal() {
     return { morning, afternoon, evening };
   }, [slotData]);
 
-  // 3. Handle Guarded Booking Submission
   const handleSubmitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -187,12 +181,10 @@ export function PatientSlotBookingPortal() {
         } else {
           setCollisionError(res.message || 'Unable to confirm slot. Please pick another time.');
         }
-        // Refresh slots to show real-time state
         loadSlots(selectedDoctorId, selectedDate);
         return;
       }
 
-      // Success: Build Token Pass
       const pass: ConfirmedPass = {
         tokenNumber: res.token_no || 'T-01',
         patientName: patientName.trim(),

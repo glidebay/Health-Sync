@@ -35,7 +35,6 @@ export function BranchLocationsManager({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<BranchLocation | null>(null);
 
-  // Form State
   const [formName, setFormName] = useState('');
   const [formAddress, setFormAddress] = useState('');
   const [formPhone, setFormPhone] = useState('');
@@ -44,10 +43,8 @@ export function BranchLocationsManager({
   const [formStatus, setFormStatus] = useState<'Active' | 'Inactive'>('Active');
   const [formError, setFormError] = useState('');
 
-  // Delete confirm state
   const [branchToDelete, setBranchToDelete] = useState<string | null>(null);
 
-  // Initial load from localStorage or default seed
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -62,7 +59,6 @@ export function BranchLocationsManager({
       console.warn('Failed to parse branch locations from storage:', e);
     }
 
-    // Default Seed
     const initialBranches: BranchLocation[] = [
       {
         id: 'branch-1',
@@ -92,7 +88,6 @@ export function BranchLocationsManager({
     } catch {}
   }, [defaultClinicName, defaultClinicAddress, defaultClinicPhone]);
 
-  // Persist helper
   const saveBranches = (newBranches: BranchLocation[]) => {
     setBranches(newBranches);
     try {
@@ -160,7 +155,6 @@ export function BranchLocationsManager({
         return b;
       });
 
-      // Ensure at least one primary exists
       const hasPrimary = updated.some((b) => b.isPrimary);
       if (!hasPrimary && updated.length > 0) {
         updated[0].isPrimary = true;

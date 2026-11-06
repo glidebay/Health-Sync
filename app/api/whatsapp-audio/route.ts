@@ -26,7 +26,6 @@ export async function GET(req: NextRequest) {
       process.env.WHATSAPP_TOKEN ||
       process.env.META_ACCESS_TOKEN;
 
-    // 1. If WhatsApp permanent access token is configured, try direct Meta Cloud API download
     if (mediaId && whatsappToken) {
       try {
         const metaRes = await fetch(`https://graph.facebook.com/v19.0/${mediaId}`, {
@@ -63,7 +62,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 2. Try fetching from Supabase Edge Function whatsapp-webhook
     if (mediaId) {
       const edgeFunctionUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?media_id=${mediaId}`;
       try {
@@ -82,7 +80,6 @@ export async function GET(req: NextRequest) {
 
         if (edgeRes.ok) {
           const contentType = edgeRes.headers.get('content-type') || 'audio/ogg; codecs=opus';
-          // Verify that this is real audio binary and not plain text error
           if (!contentType.includes('text/') && !contentType.includes('json')) {
             const buffer = await edgeRes.arrayBuffer();
             return new NextResponse(buffer, {
@@ -102,7 +99,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 3. Fallback: If direct media URL is provided, try downloading it
     if (fallbackUrl) {
       const safeUrl = fallbackUrl.replace(/^http:\/\//i, 'https://');
       try {
@@ -135,7 +131,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 4. Return diagnostic error response
     return NextResponse.json(
       {
         error: 'Audio file expired or not found on Meta CDN',

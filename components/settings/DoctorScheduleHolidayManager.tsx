@@ -51,7 +51,6 @@ import { DbDoctor } from '@/types/database';
 export function DoctorScheduleHolidayManager() {
   const [activeTab, setActiveTab] = useState<'shifts' | 'calendar' | 'overrides'>('shifts');
 
-  // Core Data
   const [weeklySchedule, setWeeklySchedule] = useState<DaySchedule[]>(DEFAULT_WEEKLY_SCHEDULE);
   const [holidays, setHolidays] = useState<ClinicHoliday[]>(DEFAULT_HOLIDAYS);
   const [quotaOverrides, setQuotaOverrides] = useState<QuotaOverride[]>(DEFAULT_OVERRIDES);
@@ -59,14 +58,12 @@ export function DoctorScheduleHolidayManager() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Calendar State
-  const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date(2026, 10, 1)); // Default to Nov 2026
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date(2026, 10, 1));
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
 
-  // Toast Notification
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const showToast = (type: 'success' | 'error', text: string) => {
@@ -74,9 +71,6 @@ export function DoctorScheduleHolidayManager() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // --------------------------------------------------------------------------
-  // Modals State
-  // --------------------------------------------------------------------------
   const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
   const [editingHoliday, setEditingHoliday] = useState<ClinicHoliday | null>(null);
   const [holidayFormDate, setHolidayFormDate] = useState('');
@@ -97,9 +91,6 @@ export function DoctorScheduleHolidayManager() {
   const [overrideFormError, setOverrideFormError] = useState('');
   const [overrideToDelete, setOverrideToDelete] = useState<QuotaOverride | null>(null);
 
-  // --------------------------------------------------------------------------
-  // Load All Data
-  // --------------------------------------------------------------------------
   const loadInitialData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -129,9 +120,6 @@ export function DoctorScheduleHolidayManager() {
     loadInitialData();
   }, [loadInitialData]);
 
-  // --------------------------------------------------------------------------
-  // Weekly Shift Calculations & Handlers
-  // --------------------------------------------------------------------------
   const totalWeeklyCapacity = useMemo(() => {
     return weeklySchedule.reduce((acc, day) => {
       if (!day.isEnabled) return acc;
@@ -199,7 +187,6 @@ export function DoctorScheduleHolidayManager() {
   };
 
   const handleSaveShifts = async () => {
-    // Validate shifts before saving
     for (const day of weeklySchedule) {
       if (!day.isEnabled) continue;
       for (const shift of day.shifts) {
@@ -208,7 +195,6 @@ export function DoctorScheduleHolidayManager() {
           return;
         }
       }
-      // Check overlaps
       for (let i = 0; i < day.shifts.length; i++) {
         for (let j = i + 1; j < day.shifts.length; j++) {
           if (checkShiftOverlap(day.shifts[i], [day.shifts[j]])) {
@@ -237,11 +223,8 @@ export function DoctorScheduleHolidayManager() {
     }
   };
 
-  // --------------------------------------------------------------------------
-  // Calendar Navigation & Helpers
-  // --------------------------------------------------------------------------
   const calendarYear = currentMonth.getFullYear();
-  const calendarMonthIndex = currentMonth.getMonth(); // 0 to 11
+  const calendarMonthIndex = currentMonth.getMonth();
 
   const monthName = currentMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
@@ -259,14 +242,11 @@ export function DoctorScheduleHolidayManager() {
     setSelectedDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
   };
 
-  // Days in current month
   const calendarGridDays = useMemo(() => {
     const firstDay = new Date(calendarYear, calendarMonthIndex, 1);
     const lastDay = new Date(calendarYear, calendarMonthIndex + 1, 0);
     const daysInMonth = lastDay.getDate();
 
-    // In JS: 0 = Sun, 1 = Mon ... 6 = Sat
-    // We want grid to start on Monday (Mon = 0, Sun = 6)
     let startingDayIndex = firstDay.getDay() - 1;
     if (startingDayIndex === -1) startingDayIndex = 6;
 
@@ -280,7 +260,6 @@ export function DoctorScheduleHolidayManager() {
       isNonWorkingDay: boolean;
     } | null)[] = [];
 
-    // Blank cells before month starts
     for (let i = 0; i < startingDayIndex; i++) {
       days.push(null);
     }
@@ -315,7 +294,6 @@ export function DoctorScheduleHolidayManager() {
     return days;
   }, [calendarYear, calendarMonthIndex, holidays, quotaOverrides, weeklySchedule]);
 
-  // Selected date details
   const selectedDateHoliday = useMemo(() => {
     return holidays.find((h) => h.date === selectedDate);
   }, [holidays, selectedDate]);
@@ -334,9 +312,6 @@ export function DoctorScheduleHolidayManager() {
     return weeklySchedule.find((w) => w.dayOfWeek === dayNum);
   }, [selectedDate, weeklySchedule]);
 
-  // --------------------------------------------------------------------------
-  // Holiday Modal Handlers
-  // --------------------------------------------------------------------------
   const handleOpenAddHoliday = (prefillDate?: string) => {
     setEditingHoliday(null);
     setHolidayFormDate(prefillDate || selectedDate || '2026-11-26');
@@ -424,9 +399,6 @@ export function DoctorScheduleHolidayManager() {
     }
   };
 
-  // --------------------------------------------------------------------------
-  // Quota Override Modal Handlers
-  // --------------------------------------------------------------------------
   const handleOpenAddOverride = (prefillDate?: string) => {
     setEditingOverride(null);
     setOverrideFormDoctorId(doctors[0]?.id || 'doc-default');
@@ -1792,3 +1764,4 @@ export function DoctorScheduleHolidayManager() {
 }
 
 export default DoctorScheduleHolidayManager;
+

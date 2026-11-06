@@ -36,7 +36,6 @@ function BookSlotInnerClient() {
   const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
   const [confirmedToken, setConfirmedToken] = useState<ConfirmedToken | null>(null);
 
-  // Initialize booking date to today
   useEffect(() => {
     const today = new Date();
     const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -44,7 +43,6 @@ function BookSlotInnerClient() {
   }, []);
 
   useEffect(() => {
-    // Load active doctors
     getDoctors().then((docs: DbDoctor[]) => {
       if (docs && docs.length > 0) {
         setAvailableDoctors(docs);
@@ -59,7 +57,6 @@ function BookSlotInnerClient() {
       }
     });
 
-    // Load active queue
     fetchQueueFromDb().then((q: Patient[]) => {
       if (q) setQueue(q);
     });

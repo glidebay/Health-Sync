@@ -5,14 +5,14 @@ import { DbDoctor } from '@/types/database';
 export interface DoctorShift {
   id: string;
   name: string;
-  startTime: string; // "HH:MM" 24h
-  endTime: string;   // "HH:MM" 24h
-  slotDurationMins: number; // 5, 10, 15, 20, 30, 45, 60
-  bufferMins: number; // 0, 5, 10, 15
+  startTime: string;
+  endTime: string;
+  slotDurationMins: number;
+  bufferMins: number;
 }
 
 export interface DaySchedule {
-  dayOfWeek: number; // 1 = Monday, 2 = Tuesday, ... 7 = Sunday
+  dayOfWeek: number;
   dayName: string;
   isEnabled: boolean;
   shifts: DoctorShift[];
@@ -20,7 +20,7 @@ export interface DaySchedule {
 
 export interface ClinicHoliday {
   id: string;
-  date: string; // "YYYY-MM-DD"
+  date: string;
   name: string;
   description?: string;
   type: 'full-day' | 'partial-day';
@@ -33,8 +33,8 @@ export interface QuotaOverride {
   id: string;
   doctorId: string;
   doctorName: string;
-  date: string; // "YYYY-MM-DD"
-  customQuota: number; // 1 to 200
+  date: string;
+  customQuota: number;
   reason?: string;
   createdAt?: string;
 }
@@ -151,14 +151,12 @@ export const DEFAULT_OVERRIDES: QuotaOverride[] = [
   },
 ];
 
-// Helper: Convert "HH:MM" to minutes from midnight
 export function timeToMinutes(t: string): number {
   if (!t) return 0;
   const [h, m] = t.split(':').map((v) => parseInt(v, 10) || 0);
   return h * 60 + m;
 }
 
-// Helper: Calculate total slots in a shift
 export function calculateShiftSlots(shift: DoctorShift): number {
   const start = timeToMinutes(shift.startTime);
   const end = timeToMinutes(shift.endTime);
@@ -168,7 +166,6 @@ export function calculateShiftSlots(shift: DoctorShift): number {
   return Math.floor((end - start) / cycle);
 }
 
-// Helper: Check shift time overlap on the same day
 export function checkShiftOverlap(
   shift: { startTime: string; endTime: string },
   otherShifts: { startTime: string; endTime: string }[],
@@ -182,7 +179,6 @@ export function checkShiftOverlap(
     if ((other as any).id === excludeId) continue;
     const s2 = timeToMinutes(other.startTime);
     const e2 = timeToMinutes(other.endTime);
-    // Overlap occurs if startA < endB and endA > startB
     if (s1 < e2 && e1 > s2) {
       return true;
     }
@@ -190,9 +186,6 @@ export function checkShiftOverlap(
   return false;
 }
 
-// ----------------------------------------------------------------------------
-// Local Storage & Supabase Sync Services
-// ----------------------------------------------------------------------------
 
 export async function fetchWeeklyShifts(): Promise<DaySchedule[]> {
   try {
@@ -207,7 +200,6 @@ export async function fetchWeeklyShifts(): Promise<DaySchedule[]> {
     console.warn('Error reading shifts from localStorage:', e);
   }
 
-  // Try Supabase app_config fallback
   try {
     const { data } = await supabase
       .from('app_config')
@@ -378,9 +370,6 @@ export async function saveQuotaOverrides(overrides: QuotaOverride[]): Promise<{ 
   }
 }
 
-// ----------------------------------------------------------------------------
-// Date & Holiday Lookup Helpers
-// ----------------------------------------------------------------------------
 
 export function isHoliday(dateStr: string, holidays: ClinicHoliday[]): ClinicHoliday | undefined {
   if (!dateStr || !holidays) return undefined;
@@ -398,8 +387,6 @@ export function getDoctorQuotaOverride(
 
 export function getDayScheduleForDate(dateStr: string, schedule: DaySchedule[]): DaySchedule | undefined {
   if (!dateStr || !schedule) return undefined;
-  // Day of week in standard JS: 0 = Sun, 1 = Mon ... 6 = Sat
-  // In our DaySchedule: 1 = Mon, 2 = Tue ... 7 = Sun
   const dateObj = new Date(`${dateStr}T12:00:00Z`);
   const jsDay = dateObj.getUTCDay();
   const dayNum = jsDay === 0 ? 7 : jsDay;

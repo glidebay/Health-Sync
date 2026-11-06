@@ -124,7 +124,6 @@ export function GlobalPatientSearch({
 
   const todayIST = useMemo(() => getTodayIST(), []);
 
-  // Guarantee search operates strictly on today's patients
   const todayQueue = useMemo(() => {
     return queue.filter((p) => !p.appointmentDate || p.appointmentDate === todayIST);
   }, [queue, todayIST]);
@@ -139,7 +138,6 @@ export function GlobalPatientSearch({
     const timer = setTimeout(async () => {
       setIsLoadingDb(true);
       try {
-        // Query database appointments strictly anchored to today in IST
         const results = await fetchPatientAppointmentsFromDb({
           date: todayIST,
           search: trimmed,

@@ -154,7 +154,6 @@ class EnterpriseCLMSService {
       console.warn('RPC get_doctor_available_slots error, falling back:', err);
     }
 
-    // Fallback: Generate basic 15-min shift slots
     const fallbackSlots: DoctorSlotItem[] = [];
     const baseHour = 9;
     for (let i = 0; i < 16; i++) {
@@ -214,11 +213,9 @@ class EnterpriseCLMSService {
       console.warn('RPC book_appointment_guarded exception, attempting fallback insert:', err);
     }
 
-    // Direct Supabase fallback insert with conflict prevention
     try {
       const todayDate = params.scheduledTime.split('T')[0] || getTodayIST();
       
-      // Check double booking manually
       const { data: existingAppts } = await supabase
         .from('appointments')
         .select('id, scheduled_time')
@@ -237,7 +234,6 @@ class EnterpriseCLMSService {
         };
       }
 
-      // Resolve or create patient
       let resolvedPatientId = params.patientId;
       if (!resolvedPatientId && params.phone) {
         const { data: pt } = await supabase
@@ -266,7 +262,6 @@ class EnterpriseCLMSService {
         }
       }
 
-      // Get next token
       const { data: maxAppt } = await supabase
         .from('appointments')
         .select('queue_token_no')
@@ -337,7 +332,6 @@ class EnterpriseCLMSService {
       console.warn('RPC get_active_queue_clean error, falling back:', err);
     }
 
-    // Direct fallback
     let query = supabase
       .from('appointments')
       .select(`
@@ -396,7 +390,6 @@ class EnterpriseCLMSService {
       console.warn('RPC get_patient_medical_history_profile error, falling back:', err);
     }
 
-    // Direct fallback
     const { data: patient } = await supabase
       .from('patients')
       .select('*')
@@ -494,7 +487,6 @@ class EnterpriseCLMSService {
       console.warn('RPC get_casemix_and_pharmacy_valuation error, falling back:', err);
     }
 
-    // Direct Fallback Valuation
     const { data: invRows } = await supabase.from('inventory').select('stock_quantity, unit_price, reorder_threshold');
     let totalSkus = 0;
     let totalUnits = 0;

@@ -36,7 +36,6 @@ interface PrescriptionPrintModalProps {
   doctorProfile: { name: string; title: string; regNo?: string };
 }
 
-// Dedicated Isolated Iframe Print Function - 100% Reliable, Never Blank
 function printIsolatedPrescription(params: {
   templateUrl: string;
   printBg: boolean;
@@ -230,7 +229,6 @@ export function PrescriptionPrintModal({
     setMounted(true);
   }, []);
 
-  // Check local storage first for latest immediate calibrator edits
   const localConfig = useMemo(() => getAppConfigLocal(), [isOpen]);
 
   const activeTemplateUrl = config?.rx_template_url || localConfig?.rx_template_url || '';
@@ -255,7 +253,6 @@ export function PrescriptionPrintModal({
     return DEFAULT_RX_TEMPLATE_FIELDS;
   }, [config?.rx_template_fields, localConfig?.rx_template_fields]);
 
-  // Derived patient demographics
   const ageDisplay = useMemo(() => {
     if (printRecord?.patientAge) return `${printRecord.patientAge} Yrs`;
     if (printRecord?.demographics) {

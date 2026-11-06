@@ -61,11 +61,9 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
   const [doctors, setDoctors] = useState<DbDoctor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState<DbDoctor | null>(null);
 
-  // Form State
   const [formName, setFormName] = useState('');
   const [formSpecialization, setFormSpecialization] = useState('General Medicine');
   const [formRegNo, setFormRegNo] = useState('');
@@ -76,10 +74,8 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Notification Toast State
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Delete Confirm State
   const [doctorToDelete, setDoctorToDelete] = useState<DbDoctor | null>(null);
 
   const showToast = (type: 'success' | 'error', text: string) => {
@@ -124,7 +120,7 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
     setFormSpecialization(doc.specialization || 'General Medicine');
     setFormRegNo(doc.reg_no || '');
     setFormDailyQuota(doc.daily_quota ? Math.max(1, Math.min(200, doc.daily_quota)) : 30);
-    setFormPin(''); // Keep blank to preserve existing PIN
+    setFormPin('');
     setShowPin(false);
     setFormStatus(doc.is_active !== false);
     setFormError('');
@@ -135,7 +131,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
     e.preventDefault();
     setFormError('');
 
-    // Validation
     const cleanName = formName.trim();
     if (!cleanName || cleanName.length < 2) {
       setFormError('Please enter a valid doctor name.');
@@ -148,7 +143,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
       return;
     }
 
-    // Check duplicate Council Registration Number
     const duplicate = doctors.find(
       (d) =>
         (!editingDoctor || d.id !== editingDoctor.id) &&
@@ -159,18 +153,14 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
       return;
     }
 
-    // Enforce quota between 1 and 200
     const quota = Math.max(1, Math.min(200, Number(formDailyQuota) || 30));
 
-    // PIN Validation
     if (!editingDoctor) {
-      // New Doctor Onboarding
       if (!formPin.trim() || formPin.trim().length < 4) {
         setFormError('Security PIN must be at least 4 digits for new doctor onboarding.');
         return;
       }
     } else {
-      // Editing Doctor
       if (formPin.trim() && formPin.trim().length < 4) {
         setFormError('New Security PIN must be at least 4 digits (or leave blank to keep current PIN).');
         return;
@@ -583,7 +573,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
                       type={showPin ? 'text' : 'password'}
                       value={formPin}
                       onChange={(e) => {
-                        // Allow digits only
                         const digitsOnly = e.target.value.replace(/[^0-9]/g, '');
                         setFormPin(digitsOnly);
                       }}

@@ -39,10 +39,8 @@ export function isThreadUnread(
   if (!thread || !thread.messages) return false;
   const readCount = readStates[thread.id];
   if (readCount === undefined) {
-    // If never opened, consider unread if it has any messages
     return thread.messages.length > 0;
   }
-  // If new messages have arrived since last opened
   return thread.messages.length > readCount;
 }
 
