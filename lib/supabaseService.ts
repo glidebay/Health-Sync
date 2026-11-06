@@ -1878,6 +1878,9 @@ export interface DoctorSlotsResult {
   lockedAndHiddenCount: number;
   dailyQuota: number;
   date: string;
+  isHoliday?: boolean;
+  holidayName?: string;
+  isQuotaOverridden?: boolean;
 }
 
 export function parseTimeToMinutes(timeStr: string): number {
@@ -1999,7 +2002,7 @@ export async function getDoctorSlotsForDate(
 
     const [docRes, cfgRes, bookedApptsRes] = await Promise.all([
       supabase.from('doctors').select('daily_quota').eq('id', doctorId).maybeSingle(),
-      supabase.from('app_config').select('key, value').in('key', ['daily_quota', 'slot_duration_mins']),
+      supabase.from('app_config').select('key, value').in('key', ['daily_quota', 'slot_duration_mins', 'clinic_holidays', 'clinic_quota_overrides']),
       supabase
         .from('appointments')
         .select('scheduled_time, status')
@@ -2008,7 +2011,48 @@ export async function getDoctorSlotsForDate(
         .neq('status', 'Reallocated'),
     ]);
 
-    if (docRes.data?.daily_quota) {
+    // Check if date falls on a clinic holiday
+    const holCfg = cfgRes.data?.find((c) => c.key === 'clinic_holidays');
+    let holidaysList: any[] = [];
+    try {
+      if (holCfg?.value) holidaysList = typeof holCfg.value === 'string' ? JSON.parse(holCfg.value) : holCfg.value;
+      else if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('healthsync_clinic_holidays');
+        if (stored) holidaysList = JSON.parse(stored);
+      }
+    } catch (_) {}
+
+    const holMatch = holidaysList.find((h: any) => h.date === dateStr);
+    if (holMatch && holMatch.type === 'full-day') {
+      return {
+        slots: [],
+        availableCount: 0,
+        bookedCount: 0,
+        lockedAndHiddenCount: 0,
+        dailyQuota: 0,
+        date: dateStr,
+        isHoliday: true,
+        holidayName: holMatch.name,
+      };
+    }
+
+    // Check for date-specific doctor quota override
+    let isQuotaOverridden = false;
+    const ovrCfg = cfgRes.data?.find((c) => c.key === 'clinic_quota_overrides');
+    let overridesList: any[] = [];
+    try {
+      if (ovrCfg?.value) overridesList = typeof ovrCfg.value === 'string' ? JSON.parse(ovrCfg.value) : ovrCfg.value;
+      else if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('healthsync_quota_overrides');
+        if (stored) overridesList = JSON.parse(stored);
+      }
+    } catch (_) {}
+
+    const ovrMatch = overridesList.find((o: any) => o.doctorId === doctorId && o.date === dateStr);
+    if (ovrMatch && ovrMatch.customQuota) {
+      doctorQuota = Number(ovrMatch.customQuota);
+      isQuotaOverridden = true;
+    } else if (docRes.data?.daily_quota) {
       doctorQuota = Number(docRes.data.daily_quota);
     } else if (cfgRes.data) {
       const quotaCfg = cfgRes.data.find((c) => c.key === 'daily_quota');
@@ -2137,6 +2181,7 @@ export async function getDoctorSlotsForDate(
       lockedAndHiddenCount: bookedCount,
       dailyQuota: doctorQuota,
       date: dateStr,
+      isQuotaOverridden,
     };
   } catch (err) {
     console.error('getDoctorSlotsForDate error:', err);

@@ -33,6 +33,7 @@ import { staggerContainer, fadeScale } from '@/lib/constants';
 import { PrescriptionTemplateCalibrator } from '@/components/settings/PrescriptionTemplateCalibrator';
 import { BranchLocationsManager } from '@/components/settings/BranchLocationsManager';
 import { DoctorDirectoryManager } from '@/components/settings/DoctorDirectoryManager';
+import { DoctorScheduleHolidayManager } from '@/components/settings/DoctorScheduleHolidayManager';
 
 interface SettingsViewProps {
   isMobile?: boolean;
@@ -771,6 +772,20 @@ function CustomDropdownInput({
               className="pt-2"
             >
               <DoctorDirectoryManager />
+            </motion.div>
+          )}
+
+        {(activeCategory === 'Doctor & Quota Controls' ||
+          ['schedule', 'shift', 'shifts', 'timing', 'holiday', 'holidays', 'calendar', 'matrix', 'override', 'quota'].some((k) =>
+            searchQuery.toLowerCase().includes(k)
+          )) && (
+            <motion.div
+              variants={fadeScale}
+              initial="hidden"
+              animate="visible"
+              className="pt-2"
+            >
+              <DoctorScheduleHolidayManager />
             </motion.div>
           )}
 
