@@ -322,7 +322,6 @@ export function DoctorChatModal({
         console.warn('Failed to load chat threads:', err);
       });
 
-    // Live WebSocket connection to incoming WhatsApp messages
     const unsubscribe = subscribeToChatUpdates(() => {
       loadThreads(true);
     });
