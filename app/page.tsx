@@ -1696,6 +1696,7 @@ function DashboardContent() {
             isOpen={showDoctorEditModal}
             onClose={() => setShowDoctorEditModal(false)}
             doctor={availableDoctors.find((d) => d.id === bookDoctorId) || availableDoctors[0] || null}
+            existingDoctors={availableDoctors}
             onSave={(updatedDoc) => {
               setAvailableDoctors((prev) =>
                 prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d))
