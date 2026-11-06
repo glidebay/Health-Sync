@@ -10,6 +10,9 @@ export interface DbDoctor {
   pin_session_until?: string | null;
   specialization?: string | null;
   reg_no?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  is_active?: boolean;
 }
 
 export interface DbDoctorSchedule {

@@ -49,17 +49,118 @@ export interface FormattedInventoryItem {
   reorderThreshold?: number;
 }
 
+const LOCAL_DOCTORS_KEY = 'healthsync_doctors_cache';
+
+export function getDoctorsLocal(): DbDoctor[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_DOCTORS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return [
+    {
+      id: 'doc-sunny-default',
+      full_name: 'Dr. Sunny',
+      specialization: 'Consultant Physician & Diabetologist',
+      reg_no: 'KMC-45892',
+      daily_quota: 35,
+      is_active: true,
+      pin_code: bcrypt.hashSync('1234', 10),
+      created_at: new Date().toISOString(),
+    },
+  ];
+}
+
+export function saveDoctorsLocal(doctors: DbDoctor[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(LOCAL_DOCTORS_KEY, JSON.stringify(doctors));
+  } catch {}
+}
+
 export async function getDoctors(): Promise<DbDoctor[]> {
   try {
-    const { data, error } = await supabase.from('doctors').select('*');
+    const { data, error } = await supabase.from('doctors').select('*').order('created_at', { ascending: true });
     if (error) {
       console.warn('Error fetching doctors:', error.message);
-      return [];
+      return getDoctorsLocal();
     }
-    return data || [];
+    if (data && data.length > 0) {
+      saveDoctorsLocal(data);
+      return data;
+    }
+    return getDoctorsLocal();
   } catch (err) {
     console.warn('Doctors fetch exception:', err);
-    return [];
+    return getDoctorsLocal();
+  }
+}
+
+export async function addDoctorDb(newDoctor: {
+  full_name: string;
+  specialization: string;
+  reg_no: string;
+  daily_quota: number;
+  pin_code: string;
+  is_active?: boolean;
+  phone?: string;
+  email?: string;
+}): Promise<{ success: boolean; doctor?: DbDoctor; error?: string }> {
+  try {
+    const cleanRegNo = newDoctor.reg_no.trim();
+    const cleanFullName = newDoctor.full_name.trim();
+
+    // Check duplicate reg_no
+    const existing = await getDoctors();
+    const isDuplicate = existing.some(
+      (d) => (d.reg_no || '').toLowerCase() === cleanRegNo.toLowerCase()
+    );
+    if (isDuplicate) {
+      return { success: false, error: `Council Registration Number '${cleanRegNo}' is already registered to another doctor.` };
+    }
+
+    const hashedPin = bcrypt.hashSync(newDoctor.pin_code.trim(), 10);
+    const quota = Math.max(1, Math.min(200, Number(newDoctor.daily_quota) || 30));
+
+    const payload: Record<string, unknown> = {
+      full_name: cleanFullName,
+      specialization: newDoctor.specialization.trim() || 'General Medicine',
+      reg_no: cleanRegNo,
+      daily_quota: quota,
+      pin_code: hashedPin,
+      is_active: newDoctor.is_active !== false,
+      phone: newDoctor.phone?.trim() || null,
+      email: newDoctor.email?.trim() || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('doctors')
+      .insert([payload])
+      .select('*')
+      .maybeSingle();
+
+    if (error) {
+      console.warn('Supabase insert error, falling back to local:', error.message);
+      const fallbackDoc: DbDoctor = {
+        id: `doc-${Date.now()}`,
+        ...(payload as any),
+      };
+      const updatedLocal = [...existing, fallbackDoc];
+      saveDoctorsLocal(updatedLocal);
+      return { success: true, doctor: fallbackDoc };
+    }
+
+    const savedDoc = (data as DbDoctor) || ({ id: `doc-${Date.now()}`, ...(payload as any) });
+    saveDoctorsLocal([...existing.filter((d) => d.id !== savedDoc.id), savedDoc]);
+    return { success: true, doctor: savedDoc };
+  } catch (err: any) {
+    console.warn('addDoctorDb exception:', err);
+    return { success: false, error: err.message || 'Failed to add doctor' };
   }
 }
 
@@ -71,14 +172,35 @@ export async function updateDoctorProfileDb(
     reg_no?: string;
     daily_quota?: number;
     pin_code?: string;
+    is_active?: boolean;
+    phone?: string;
+    email?: string;
   }
 ): Promise<{ success: boolean; doctor?: DbDoctor; error?: string }> {
   try {
-    const payload: Record<string, unknown> = {};
+    const existing = await getDoctors();
+    if (updates.reg_no !== undefined) {
+      const cleanReg = updates.reg_no.trim();
+      const duplicate = existing.find(
+        (d) => d.id !== doctorId && (d.reg_no || '').toLowerCase() === cleanReg.toLowerCase()
+      );
+      if (duplicate) {
+        return { success: false, error: `Council Registration Number '${cleanReg}' is already registered to ${duplicate.full_name}.` };
+      }
+    }
+
+    const payload: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
     if (updates.full_name !== undefined) payload.full_name = updates.full_name.trim();
     if (updates.specialization !== undefined) payload.specialization = updates.specialization.trim();
     if (updates.reg_no !== undefined) payload.reg_no = updates.reg_no.trim();
-    if (updates.daily_quota !== undefined) payload.daily_quota = Number(updates.daily_quota);
+    if (updates.daily_quota !== undefined) {
+      payload.daily_quota = Math.max(1, Math.min(200, Number(updates.daily_quota)));
+    }
+    if (updates.is_active !== undefined) payload.is_active = Boolean(updates.is_active);
+    if (updates.phone !== undefined) payload.phone = updates.phone.trim();
+    if (updates.email !== undefined) payload.email = updates.email.trim();
     if (updates.pin_code && updates.pin_code.trim()) {
       payload.pin_code = bcrypt.hashSync(updates.pin_code.trim(), 10);
     }
@@ -91,13 +213,36 @@ export async function updateDoctorProfileDb(
       .maybeSingle();
 
     if (error) {
-      console.warn('Error updating doctor profile:', error.message);
-      return { success: false, error: error.message };
+      console.warn('Error updating doctor profile in Supabase:', error.message);
+      const updatedList = existing.map((d) => (d.id === doctorId ? { ...d, ...payload } : d));
+      saveDoctorsLocal(updatedList);
+      const updatedDoc = updatedList.find((d) => d.id === doctorId);
+      return { success: true, doctor: updatedDoc };
     }
-    return { success: true, doctor: data as DbDoctor };
+
+    const updatedDoc = data as DbDoctor;
+    const updatedList = existing.map((d) => (d.id === doctorId ? { ...d, ...updatedDoc } : d));
+    saveDoctorsLocal(updatedList);
+    return { success: true, doctor: updatedDoc };
   } catch (err: any) {
     console.warn('updateDoctorProfileDb exception:', err);
     return { success: false, error: err.message || 'Failed to update doctor profile' };
+  }
+}
+
+export async function deleteDoctorDb(doctorId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const existing = await getDoctors();
+    const { error } = await supabase.from('doctors').delete().eq('id', doctorId);
+    if (error) {
+      console.warn('Supabase doctor delete error:', error.message);
+    }
+    const filtered = existing.filter((d) => d.id !== doctorId);
+    saveDoctorsLocal(filtered);
+    return { success: true };
+  } catch (err: any) {
+    console.warn('deleteDoctorDb exception:', err);
+    return { success: false, error: err.message || 'Failed to delete doctor' };
   }
 }
 

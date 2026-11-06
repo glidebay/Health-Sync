@@ -32,6 +32,7 @@ import { AnimatedCounter } from '@/components/common/AnimatedCounter';
 import { staggerContainer, fadeScale } from '@/lib/constants';
 import { PrescriptionTemplateCalibrator } from '@/components/settings/PrescriptionTemplateCalibrator';
 import { BranchLocationsManager } from '@/components/settings/BranchLocationsManager';
+import { DoctorDirectoryManager } from '@/components/settings/DoctorDirectoryManager';
 
 interface SettingsViewProps {
   isMobile?: boolean;
@@ -756,6 +757,20 @@ function CustomDropdownInput({
                 isSaving={isSaving}
                 isSaved={isSaved}
               />
+            </motion.div>
+          )}
+
+        {(activeCategory === 'Doctor & Quota Controls' ||
+          ['doctor', 'quota', 'quotas', 'physician', 'specialist', 'directory', 'onboard'].some((k) =>
+            searchQuery.toLowerCase().includes(k)
+          )) && (
+            <motion.div
+              variants={fadeScale}
+              initial="hidden"
+              animate="visible"
+              className="pt-2"
+            >
+              <DoctorDirectoryManager />
             </motion.div>
           )}
 
