@@ -306,7 +306,6 @@ export function DoctorChatModal({
     }
   }, []);
 
-  // Real-time synchronization: Instant Supabase WebSocket updates + 3s live polling guarantee
   useEffect(() => {
     if (!isOpen) return;
 

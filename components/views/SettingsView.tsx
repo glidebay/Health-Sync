@@ -31,6 +31,7 @@ import {
 import { AnimatedCounter } from '@/components/common/AnimatedCounter';
 import { staggerContainer, fadeScale } from '@/lib/constants';
 import { PrescriptionTemplateCalibrator } from '@/components/settings/PrescriptionTemplateCalibrator';
+import { BranchLocationsManager } from '@/components/settings/BranchLocationsManager';
 
 interface SettingsViewProps {
   isMobile?: boolean;
@@ -713,6 +714,24 @@ function CustomDropdownInput({
             )}
           </AnimatePresence>
         </div>
+
+        {(activeCategory === 'Clinic Identity & Branding' ||
+          ['branch', 'location', 'locations', 'branches'].some((k) =>
+            searchQuery.toLowerCase().includes(k)
+          )) && (
+            <motion.div
+              variants={fadeScale}
+              initial="hidden"
+              animate="visible"
+              className="pt-2"
+            >
+              <BranchLocationsManager
+                defaultClinicName={formData.clinic_name}
+                defaultClinicAddress={formData.clinic_address}
+                defaultClinicPhone={formData.clinic_phone}
+              />
+            </motion.div>
+          )}
 
         {(activeCategory === 'Clinic Identity & Branding' ||
           ['prescription', 'template', 'rx', 'pad', 'letterhead'].some((k) =>

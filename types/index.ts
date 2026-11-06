@@ -88,3 +88,14 @@ export interface ConfirmedToken {
   message?: string;
   status?: string;
 }
+
+export interface BranchLocation {
+  id: string;
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  isPrimary: boolean;
+  status: 'Active' | 'Inactive';
+  createdAt?: string;
+}
