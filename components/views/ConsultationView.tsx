@@ -128,7 +128,6 @@ export function ConsultationView({
         </div>
       ) : (
         <div className="space-y-4 sm:space-y-6">
-          {/* Patient Header Banner */}
           <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center space-x-2">
@@ -175,7 +174,6 @@ export function ConsultationView({
             </div>
           </div>
 
-          {/* Collapsible Patient Past Medical History Profile */}
           <AnimatePresence>
             {showHistoryPanel && medicalProfile && (
               <motion.div
@@ -198,7 +196,6 @@ export function ConsultationView({
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Past Consultations */}
                     <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
                       <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2 flex items-center gap-1">
                         <FileText className="w-3.5 h-3.5 text-blue-600" />
@@ -226,7 +223,6 @@ export function ConsultationView({
                       )}
                     </div>
 
-                    {/* Past Prescribed Medications */}
                     <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
                       <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2 flex items-center gap-1">
                         <Pill className="w-3.5 h-3.5 text-indigo-600" />
@@ -256,7 +252,6 @@ export function ConsultationView({
             )}
           </AnimatePresence>
 
-          {/* Clinical Diagnostic Notes */}
           <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
             <h3 className="text-sm font-bold text-[#16191E] mb-3">Clinical Diagnostic Notes</h3>
             <textarea
@@ -268,7 +263,6 @@ export function ConsultationView({
             />
           </div>
 
-          {/* Next-Visit Follow-Up Date Charting (Flow 3) */}
           <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
               <div>
@@ -300,7 +294,6 @@ export function ConsultationView({
               </div>
             </div>
 
-            {/* Quick Follow-Up Presets */}
             <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs">
               <span className="font-semibold text-gray-400 text-[10px] uppercase tracking-wider mr-1">Presets:</span>
               <button
@@ -334,7 +327,6 @@ export function ConsultationView({
             </div>
           </div>
 
-          {/* Prescription Builder */}
           <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-4">
               <h3 className="text-sm font-bold text-[#16191E]">
@@ -393,7 +385,6 @@ export function ConsultationView({
                 </div>
               </div>
 
-              {/* Quick Dosage Presets */}
               {setRxDosage && (
                 <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-[11px] text-[#5E6470]">
                   <span className="font-semibold text-gray-400 text-[10px] uppercase tracking-wider mr-1">Presets:</span>

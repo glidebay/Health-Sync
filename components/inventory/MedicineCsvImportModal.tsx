@@ -253,7 +253,6 @@ export function MedicineCsvImportModal({
           exit={{ opacity: 0, scale: 0.96, y: 15 }}
           className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden"
         >
-          {/* Header */}
           <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-[#FAFBFD]">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#2563EB] flex items-center justify-center border border-blue-100">
@@ -276,7 +275,6 @@ export function MedicineCsvImportModal({
             </button>
           </div>
 
-          {/* Stepper */}
           <div className="flex items-center border-b border-slate-100 px-6 py-3 bg-[#FAFBFD] text-xs font-semibold gap-2">
             {[
               { step: 'upload', label: '1. Upload CSV' },
@@ -299,9 +297,7 @@ export function MedicineCsvImportModal({
             })}
           </div>
 
-          {/* Modal Body */}
           <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-            {/* Step 1: Upload Dropzone */}
             {currentStep === 'upload' && (
               <div className="py-8 sm:py-14">
                 <div
@@ -333,10 +329,8 @@ export function MedicineCsvImportModal({
               </div>
             )}
 
-            {/* Step 2: Validate & Preview */}
             {currentStep === 'preview' && summary && (
               <div className="space-y-4">
-                {/* Stats Bar */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5">
                   <div className="p-3 bg-[#F8F9FB] border border-slate-100 rounded-xl">
                     <p className="text-[11px] font-medium text-slate-400">Total Rows</p>
@@ -366,7 +360,6 @@ export function MedicineCsvImportModal({
                   </div>
                 </div>
 
-                {/* Import Settings */}
                 <div className="bg-[#F8F9FB] rounded-2xl border border-slate-100 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   <div className="space-y-1.5">
                     <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-700">
@@ -400,7 +393,6 @@ export function MedicineCsvImportModal({
                   )}
                 </div>
 
-                {/* Filters and Preview Table */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl text-xs font-semibold">
@@ -434,7 +426,6 @@ export function MedicineCsvImportModal({
                     </span>
                   </div>
 
-                  {/* Table with fixed max height and pagination */}
                   <div className="overflow-x-auto border border-slate-100 rounded-2xl max-h-72">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-[#FAFBFD] text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-100 sticky top-0">
@@ -531,7 +522,6 @@ export function MedicineCsvImportModal({
                     </table>
                   </div>
 
-                  {/* Clean Pagination Navigation */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs">
                     <span className="text-slate-500 font-medium">
                       Showing {filteredPreviewRows.length > 0 ? (previewPage - 1) * PREVIEW_PAGE_SIZE + 1 : 0} -{' '}
@@ -564,7 +554,6 @@ export function MedicineCsvImportModal({
               </div>
             )}
 
-            {/* Step 3: Importing in progress */}
             {currentStep === 'importing' && (
               <div className="py-16 flex flex-col items-center justify-center text-center space-y-4">
                 <RefreshCw className="w-10 h-10 text-[#2563EB] animate-spin" />
@@ -605,7 +594,6 @@ export function MedicineCsvImportModal({
               </div>
             )}
 
-            {/* Step 4: Import Complete Summary */}
             {currentStep === 'results' && finalResult && (
               <div className="space-y-6">
                 <div className="p-6 bg-emerald-50/50 border border-emerald-100 rounded-3xl text-center space-y-2">
@@ -661,7 +649,6 @@ export function MedicineCsvImportModal({
             )}
           </div>
 
-          {/* Modal Footer */}
           <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-between bg-[#FAFBFD]">
             {currentStep === 'upload' && (
               <>
@@ -724,7 +711,6 @@ export function MedicineCsvImportModal({
           </div>
         </motion.div>
 
-        {/* Quick Row Edit Dialog Modal */}
         {editingRow && (
           <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs">
             <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-lg p-5 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto">

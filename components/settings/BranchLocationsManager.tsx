@@ -213,7 +213,6 @@ export function BranchLocationsManager({
 
   return (
     <div className="space-y-4">
-      {/* Section Header Card */}
       <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2.5">
@@ -242,7 +241,6 @@ export function BranchLocationsManager({
         </motion.button>
       </div>
 
-      {/* Cards Grid */}
       {branches.length === 0 ? (
         <div className="bg-white rounded-2xl p-8 border border-dashed border-slate-200 text-center">
           <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
@@ -279,7 +277,6 @@ export function BranchLocationsManager({
                 }`}
               >
                 <div>
-                  {/* Top Bar: Icon, Title & Action Buttons */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center space-x-3 min-w-0">
                       <div
@@ -320,7 +317,6 @@ export function BranchLocationsManager({
                       </div>
                     </div>
 
-                    {/* Actions */}
                     <div className="flex items-center space-x-1 flex-shrink-0">
                       <motion.button
                         whileHover={{ scale: 1.05 }}
@@ -345,7 +341,6 @@ export function BranchLocationsManager({
                     </div>
                   </div>
 
-                  {/* Address */}
                   <div className="mt-4 pt-3.5 border-t border-slate-100 space-y-2">
                     <div className="flex items-start gap-2.5 text-xs text-slate-600">
                       <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
@@ -354,7 +349,6 @@ export function BranchLocationsManager({
                       </p>
                     </div>
 
-                    {/* Phone */}
                     <div className="flex items-center gap-2.5 text-xs text-slate-600">
                       <Phone className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                       <a
@@ -365,7 +359,6 @@ export function BranchLocationsManager({
                       </a>
                     </div>
 
-                    {/* Email */}
                     <div className="flex items-center gap-2.5 text-xs text-slate-600">
                       <Mail className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                       {branch.email ? (
@@ -382,7 +375,6 @@ export function BranchLocationsManager({
                   </div>
                 </div>
 
-                {/* Bottom Primary Action / Indicator */}
                 <div className="mt-4 pt-3 border-t border-slate-100">
                   {isPrimary ? (
                     <div className="flex items-center justify-center gap-1.5 text-[11px] font-bold text-blue-600 py-1 bg-blue-50/60 rounded-xl border border-blue-100">
@@ -406,7 +398,6 @@ export function BranchLocationsManager({
         </div>
       )}
 
-      {/* Add / Edit Branch Modal */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
@@ -451,7 +442,6 @@ export function BranchLocationsManager({
               )}
 
               <form onSubmit={handleSaveBranch} className="space-y-3.5">
-                {/* Branch Name */}
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1.5">
                     Branch Name <span className="text-rose-500">*</span>
@@ -466,7 +456,6 @@ export function BranchLocationsManager({
                   />
                 </div>
 
-                {/* Complete Branch Address */}
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1.5">
                     Complete Branch Address <span className="text-rose-500">*</span>
@@ -481,7 +470,6 @@ export function BranchLocationsManager({
                   />
                 </div>
 
-                {/* Phone & Email */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-bold text-slate-700 block mb-1.5">
@@ -511,9 +499,7 @@ export function BranchLocationsManager({
                   </div>
                 </div>
 
-                {/* Toggles */}
                 <div className="space-y-2.5 pt-1">
-                  {/* Operational Status Toggle */}
                   <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
                     <div>
                       <span className="text-xs font-bold text-slate-800 block">Operational Status</span>
@@ -548,7 +534,6 @@ export function BranchLocationsManager({
                     </div>
                   </div>
 
-                  {/* Primary Branch Toggle */}
                   <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
                     <div>
                       <span className="text-xs font-bold text-slate-800 block">Designate as Primary Branch</span>
@@ -573,7 +558,6 @@ export function BranchLocationsManager({
                   </div>
                 </div>
 
-                {/* Modal Actions */}
                 <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100">
                   <button
                     type="button"
@@ -596,7 +580,6 @@ export function BranchLocationsManager({
         )}
       </AnimatePresence>
 
-      {/* Delete Confirmation Alert Modal */}
       <AnimatePresence>
         {branchToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">

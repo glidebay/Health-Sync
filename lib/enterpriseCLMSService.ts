@@ -127,9 +127,6 @@ export interface GenericMolecule {
 }
 
 class EnterpriseCLMSService {
-  /**
-   * 1. Fetch Dynamic Available Slots with Buffer and Holiday Rules
-   */
   async fetchDoctorSlots(doctorId: string, date: string): Promise<DoctorSlotsResponse> {
     try {
       const { data, error } = await supabase.rpc('get_doctor_available_slots', {
@@ -187,9 +184,6 @@ class EnterpriseCLMSService {
     };
   }
 
-  /**
-   * 2. Atomic Guarded Booking (Double-Booking Row Lock & Suggestions)
-   */
   async bookAppointmentGuarded(params: GuardedBookingParams): Promise<GuardedBookingResponse> {
     try {
       const { data, error } = await supabase.rpc('book_appointment_guarded', {
@@ -314,9 +308,6 @@ class EnterpriseCLMSService {
     }
   }
 
-  /**
-   * 3. Fetch Clean Active Queue (Excluding Cancelled / Reallocated)
-   */
   async fetchActiveQueue(doctorId?: string, date?: string): Promise<ActiveQueueItem[]> {
     const targetDate = date || getTodayIST();
     try {
@@ -374,9 +365,6 @@ class EnterpriseCLMSService {
     });
   }
 
-  /**
-   * 4. Complete Patient Medical History Profile
-   */
   async fetchPatientMedicalProfile(patientId: string): Promise<PatientMedicalHistoryProfile> {
     try {
       const { data, error } = await supabase.rpc('get_patient_medical_history_profile', {
@@ -463,9 +451,6 @@ class EnterpriseCLMSService {
     };
   }
 
-  /**
-   * 5. Case Mix & Pharmacy Financial Valuation Report
-   */
   async getCasemixAndPharmacyValuation(): Promise<CasemixAndValuationReport> {
     try {
       const { data, error } = await supabase.rpc('get_casemix_and_pharmacy_valuation');
@@ -529,9 +514,6 @@ class EnterpriseCLMSService {
     };
   }
 
-  /**
-   * 6. Multi-Field Medicine & Generic Search
-   */
   async searchMedicinesMultiField(searchTerm: string) {
     const q = searchTerm.trim().toLowerCase();
     if (!q) {
@@ -552,9 +534,6 @@ class EnterpriseCLMSService {
     return data || [];
   }
 
-  /**
-   * 7. Fetch Generic Molecules Catalog
-   */
   async fetchGenericMolecules(): Promise<GenericMolecule[]> {
     const { data, error } = await supabase
       .from('generic_molecules')

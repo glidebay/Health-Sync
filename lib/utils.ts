@@ -87,9 +87,6 @@ export function formatPatientToken(p?: {
 }
 
 
-/**
- * Returns today's date in Indian Standard Time (Asia/Kolkata) as YYYY-MM-DD
- */
 export function getTodayIST(): string {
   try {
     return new Intl.DateTimeFormat('en-CA', {

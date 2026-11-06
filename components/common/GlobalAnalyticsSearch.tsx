@@ -286,7 +286,6 @@ export function GlobalAnalyticsSearch({
         </button>
       )}
 
-      {/* Simple Clean Results Dropdown */}
       <AnimatePresence>
         {isOpen && query.trim() && (
           <motion.div

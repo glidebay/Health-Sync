@@ -119,15 +119,6 @@ export function parseFlexibleDate(dateStr?: string | null, fallbackYears: number
   return getFallback();
 }
 
-/**
- * High-performance RFC 4180 CSV / TSV tokenizer.
- * Handles embedded commas inside quotes, multi-line values, escaped quotes (""),
- * and automatically detects delimiters (, ; \t |).
- */
-/**
- * Unwraps whole-line quoted CSV formats (common in Kaggle and Indian medicine scrapers)
- * where entire lines are enclosed in quotes ("col1,col2...").
- */
 export function normalizeRawCsvText(rawText: string): string {
   if (!rawText) return '';
   let cleanText = rawText.replace(/^\uFEFF/, '');
@@ -163,12 +154,6 @@ export function detectCsvFileMetadata(text: string): {
   };
 }
 
-/**
- * Universal, RFC-4180-compliant CSV and DSV text parser.
- * Handles embedded commas inside quotes, multi-line values, escaped quotes (""),
- * whole-line quoted Indian datasets, and automatically detects delimiters (, ; \t |).
- * Supports early termination via optional maxRows for instant high-volume previews.
- */
 export function parseCsvTextToRows(text: string, maxRows?: number): string[][] {
   if (!text || !text.trim()) return [];
 
@@ -2347,11 +2332,6 @@ export interface StreamImportResult {
   speedMedsPerSec: number;
 }
 
-/**
- * Enterprise Chunked Streaming Importer
- * Slices 250,000+ line CSV files into non-blocking chunks, processes them with O(1) flat memory,
- * and feeds real-time metrics to horizontal balancer / progress indicators.
- */
 export async function streamAndIngestCsvToSupabase(
   rawText: string,
   options: {
@@ -2612,10 +2592,6 @@ export interface PaginatedMedicinesResult {
   totalPages: number;
 }
 
-/**
- * Enterprise Paginated Fetch for Inventory View.
- * Handles catalogs with 250,000+ medicines with sub-30ms response times.
- */
 export async function fetchMedicinesPaginated(params: {
   page?: number;
   pageSize?: number;

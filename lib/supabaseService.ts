@@ -683,10 +683,6 @@ export interface AppointmentDateCounts {
   cancelled: number;
 }
 
-/**
- * Fetch Date-Aware Status Counters for UI Filter Badges
- * Powered by get_appointment_date_counts RPC
- */
 export async function fetchAppointmentDateCountsFromDb(
   date?: string,
   doctorId?: string
@@ -707,10 +703,6 @@ export async function fetchAppointmentDateCountsFromDb(
   }
 }
 
-/**
- * Fetch Filtered Patient Appointments with Date & Status Filtering
- * Powered by get_patient_appointments RPC
- */
 export async function fetchPatientAppointmentsFromDb(params?: {
   date?: string;
   status?: string;

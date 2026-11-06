@@ -483,7 +483,6 @@ export function DoctorScheduleHolidayManager() {
 
   return (
     <div className="space-y-4">
-      {/* Toast Notification */}
       <AnimatePresence>
         {toastMessage && (
           <motion.div
@@ -506,7 +505,6 @@ export function DoctorScheduleHolidayManager() {
         )}
       </AnimatePresence>
 
-      {/* Main Header & Sub-Tab Bar */}
       <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2.5">
@@ -529,7 +527,6 @@ export function DoctorScheduleHolidayManager() {
           </div>
         </div>
 
-        {/* Tab Controls */}
         <div className="flex items-center space-x-1.5 bg-slate-100/80 p-1 rounded-xl self-start md:self-auto border border-slate-200/50">
           <button
             type="button"
@@ -580,12 +577,8 @@ export function DoctorScheduleHolidayManager() {
         </div>
       </div>
 
-      {/* --------------------------------------------------------------------- */}
-      {/* TAB 1: WEEKLY SHIFT MATRIX */}
-      {/* --------------------------------------------------------------------- */}
       {activeTab === 'shifts' && (
         <div className="space-y-4">
-          {/* Action Row */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-blue-50/50 border border-blue-100/80 rounded-2xl p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
@@ -628,7 +621,6 @@ export function DoctorScheduleHolidayManager() {
             </div>
           </div>
 
-          {/* Days List (Monday to Sunday) */}
           <div className="space-y-3.5">
             {weeklySchedule.map((day) => {
               const daySlots = day.isEnabled
@@ -644,10 +636,8 @@ export function DoctorScheduleHolidayManager() {
                       : 'border-slate-100 bg-slate-50/50 opacity-80'
                   }`}
                 >
-                  {/* Day Header Row */}
                   <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100">
                     <div className="flex items-center space-x-3">
-                      {/* Day Enable/Disable Toggle */}
                       <button
                         type="button"
                         onClick={() => handleToggleDay(day.dayOfWeek)}
@@ -700,7 +690,6 @@ export function DoctorScheduleHolidayManager() {
                     )}
                   </div>
 
-                  {/* Day Shifts Content */}
                   {day.isEnabled && (
                     <div className="p-4 sm:p-5 space-y-3">
                       {day.shifts.length === 0 ? (
@@ -730,7 +719,6 @@ export function DoctorScheduleHolidayManager() {
                                   : 'bg-slate-50/60 border-slate-200/70 hover:bg-slate-50'
                               }`}
                             >
-                              {/* Shift Header Row */}
                               <div className="flex items-center justify-between gap-2 mb-3">
                                 <div className="flex items-center gap-2">
                                   <span className="w-5 h-5 rounded-md bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center">
@@ -762,9 +750,7 @@ export function DoctorScheduleHolidayManager() {
                                 </div>
                               </div>
 
-                              {/* Controls Grid */}
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                                {/* Start Time */}
                                 <div>
                                   <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                                     Start Time
@@ -779,7 +765,6 @@ export function DoctorScheduleHolidayManager() {
                                   />
                                 </div>
 
-                                {/* End Time */}
                                 <div>
                                   <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                                     End Time
@@ -794,7 +779,6 @@ export function DoctorScheduleHolidayManager() {
                                   />
                                 </div>
 
-                                {/* Slot Duration */}
                                 <div>
                                   <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                                     Slot Duration
@@ -816,7 +800,6 @@ export function DoctorScheduleHolidayManager() {
                                   </select>
                                 </div>
 
-                                {/* Buffer Time */}
                                 <div>
                                   <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                                     Buffer Gap
@@ -839,7 +822,6 @@ export function DoctorScheduleHolidayManager() {
                                 </div>
                               </div>
 
-                              {/* Error Indicators */}
                               {isInvalidTime && (
                                 <p className="text-[11px] font-bold text-rose-600 mt-2 flex items-center gap-1">
                                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -865,12 +847,8 @@ export function DoctorScheduleHolidayManager() {
         </div>
       )}
 
-      {/* --------------------------------------------------------------------- */}
-      {/* TAB 2: HOLIDAY CALENDAR */}
-      {/* --------------------------------------------------------------------- */}
       {activeTab === 'calendar' && (
         <div className="space-y-4">
-          {/* Calendar Navigation & Quick Actions Bar */}
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center space-x-3">
               <div className="flex items-center space-x-1 bg-slate-100 rounded-xl p-1">
@@ -905,7 +883,6 @@ export function DoctorScheduleHolidayManager() {
               </div>
             </div>
 
-            {/* Quick Actions */}
             <div className="flex items-center space-x-2">
               <motion.button
                 whileHover={{ scale: 1.02 }}
@@ -931,9 +908,7 @@ export function DoctorScheduleHolidayManager() {
             </div>
           </div>
 
-          {/* Monthly Calendar Grid */}
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]">
-            {/* Day of Week Header */}
             <div className="grid grid-cols-7 gap-2 mb-2">
               {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
                 <div
@@ -947,7 +922,6 @@ export function DoctorScheduleHolidayManager() {
               ))}
             </div>
 
-            {/* Month Days Grid */}
             <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
               {calendarGridDays.map((cell, idx) => {
                 if (!cell) {
@@ -977,7 +951,6 @@ export function DoctorScheduleHolidayManager() {
                         : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-2xs'
                     }`}
                   >
-                    {/* Top Row: Date Number & Badges */}
                     <div className="flex items-center justify-between">
                       <span
                         className={`text-xs font-bold rounded-md px-1.5 py-0.5 ${
@@ -1000,7 +973,6 @@ export function DoctorScheduleHolidayManager() {
                       )}
                     </div>
 
-                    {/* Indicators Body */}
                     <div className="space-y-1 mt-1">
                       {cell.holiday && (
                         <div
@@ -1033,7 +1005,6 @@ export function DoctorScheduleHolidayManager() {
             </div>
           </div>
 
-          {/* Selected Date Details Panel */}
           <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div>
@@ -1070,9 +1041,7 @@ export function DoctorScheduleHolidayManager() {
               </div>
             </div>
 
-            {/* Date Details Breakdown */}
             <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Working Hours / Shift Schedule */}
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/60">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
                   Day Schedule Matrix
@@ -1097,7 +1066,6 @@ export function DoctorScheduleHolidayManager() {
                 )}
               </div>
 
-              {/* Holiday Status on Date */}
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/60">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
                   Holiday / Exception Status
@@ -1143,7 +1111,6 @@ export function DoctorScheduleHolidayManager() {
                 )}
               </div>
 
-              {/* Quota Overrides on Date */}
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/60">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
                   Doctor Quota Overrides
@@ -1191,7 +1158,6 @@ export function DoctorScheduleHolidayManager() {
             </div>
           </div>
 
-          {/* Scheduled Holidays List */}
           <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -1266,9 +1232,6 @@ export function DoctorScheduleHolidayManager() {
         </div>
       )}
 
-      {/* --------------------------------------------------------------------- */}
-      {/* TAB 3: DATE-SPECIFIC QUOTA OVERRIDES */}
-      {/* --------------------------------------------------------------------- */}
       {activeTab === 'overrides' && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1371,9 +1334,6 @@ export function DoctorScheduleHolidayManager() {
         </div>
       )}
 
-      {/* --------------------------------------------------------------------- */}
-      {/* MODAL: ADD / EDIT HOLIDAY */}
-      {/* --------------------------------------------------------------------- */}
       <AnimatePresence>
         {isHolidayModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
@@ -1532,9 +1492,6 @@ export function DoctorScheduleHolidayManager() {
         )}
       </AnimatePresence>
 
-      {/* --------------------------------------------------------------------- */}
-      {/* MODAL: ADD / EDIT QUOTA OVERRIDE */}
-      {/* --------------------------------------------------------------------- */}
       <AnimatePresence>
         {isOverrideModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
@@ -1685,9 +1642,6 @@ export function DoctorScheduleHolidayManager() {
         )}
       </AnimatePresence>
 
-      {/* --------------------------------------------------------------------- */}
-      {/* DELETE CONFIRMATIONS */}
-      {/* --------------------------------------------------------------------- */}
       <AnimatePresence>
         {holidayToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">

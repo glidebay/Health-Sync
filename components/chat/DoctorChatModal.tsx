@@ -19,9 +19,6 @@ import { formatPatientToken } from '@/lib/utils';
 import { getReadThreadStates, markThreadAsRead, isThreadUnread } from '@/lib/chatStorage';
 import EcgActionLoader from '@/components/loading/EcgActionLoader';
 
-/**
- * Playable WhatsApp Audio Voice Note Player Component
- */
 function AudioVoiceMessagePlayer({
   audioUrl,
   isDoctor,
@@ -155,7 +152,6 @@ function AudioVoiceMessagePlayer({
       )}
 
       <div className="flex items-center gap-2.5">
-        {/* Play/Pause Button */}
         <button
           type="button"
           onClick={togglePlay}

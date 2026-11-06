@@ -225,7 +225,6 @@ export function PatientSlotBookingPortal() {
   return (
     <div className="min-h-screen bg-[#F8F9FB] text-slate-800 py-6 sm:py-10 px-4 sm:px-6 flex flex-col justify-between">
       <div className="max-w-2xl mx-auto w-full">
-        {/* Header Branding */}
         <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200/80">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
@@ -252,7 +251,6 @@ export function PatientSlotBookingPortal() {
           </div>
         </div>
 
-        {/* Confirmed Pass Modal / View */}
         <AnimatePresence mode="wait">
           {confirmedPass ? (
             <motion.div
@@ -262,7 +260,6 @@ export function PatientSlotBookingPortal() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xl overflow-hidden relative"
             >
-              {/* Header Ribbon */}
               <div className="absolute top-0 left-0 right-0 h-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500" />
 
               <div className="text-center pt-2 pb-6 border-b border-dashed border-slate-200">
@@ -284,7 +281,6 @@ export function PatientSlotBookingPortal() {
                 </div>
               </div>
 
-              {/* Pass Details Grid */}
               <div className="py-6 space-y-4 text-xs">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
@@ -338,7 +334,6 @@ export function PatientSlotBookingPortal() {
                 </div>
               </div>
 
-              {/* Action Buttons */}
               <div className="space-y-3 pt-2">
                 <button
                   type="button"
@@ -372,7 +367,6 @@ export function PatientSlotBookingPortal() {
               animate={{ opacity: 1, y: 0 }}
               className="space-y-6"
             >
-              {/* Step 1: Select Doctor */}
               <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
@@ -428,7 +422,6 @@ export function PatientSlotBookingPortal() {
                 </div>
               </div>
 
-              {/* Step 2: Date & Dynamic Slots */}
               <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
@@ -448,7 +441,6 @@ export function PatientSlotBookingPortal() {
                   </div>
                 </div>
 
-                {/* Holiday / Leave Alert */}
                 {slotData?.is_holiday && (
                   <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center space-x-3 mb-4">
                     <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
@@ -461,7 +453,6 @@ export function PatientSlotBookingPortal() {
                   </div>
                 )}
 
-                {/* Collision / Recommended Slots Banner */}
                 {collisionError && (
                   <div className="p-4 bg-red-50 border border-red-200 rounded-2xl mb-4 space-y-2">
                     <div className="flex items-center space-x-2 text-red-700 text-xs font-bold">
@@ -497,7 +488,6 @@ export function PatientSlotBookingPortal() {
                   </div>
                 )}
 
-                {/* Slots Loading Indicator */}
                 {loadingSlots ? (
                   <div className="py-8 flex flex-col items-center justify-center space-y-2">
                     <EcgActionLoader size="md" />
@@ -507,7 +497,6 @@ export function PatientSlotBookingPortal() {
                   </div>
                 ) : !slotData?.is_holiday && (
                   <div className="space-y-4">
-                    {/* Morning Slots */}
                     {groupedSlots.morning.length > 0 && (
                       <div>
                         <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
@@ -542,7 +531,6 @@ export function PatientSlotBookingPortal() {
                       </div>
                     )}
 
-                    {/* Afternoon Slots */}
                     {groupedSlots.afternoon.length > 0 && (
                       <div>
                         <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
@@ -577,7 +565,6 @@ export function PatientSlotBookingPortal() {
                       </div>
                     )}
 
-                    {/* Slot Stats Summary */}
                     <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-100">
                       <span>Available Slots: {slotData?.available_count ?? 0}</span>
                       <span>Daily Quota: {slotData?.daily_quota ?? 35}</span>
@@ -586,7 +573,6 @@ export function PatientSlotBookingPortal() {
                 )}
               </div>
 
-              {/* Step 3: Patient Information */}
               <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
@@ -664,7 +650,6 @@ export function PatientSlotBookingPortal() {
                 </div>
               </div>
 
-              {/* Submit CTA */}
               <button
                 type="submit"
                 disabled={isSubmitting || !selectedSlot || slotData?.is_holiday}
@@ -687,7 +672,6 @@ export function PatientSlotBookingPortal() {
         </AnimatePresence>
       </div>
 
-      {/* Footer */}
       <footer className="mt-8 text-center text-xs text-slate-400">
         <p>Glidebay HealthSync Enterprise CLMS • MCI/KMC Legal Compliance Ready</p>
       </footer>

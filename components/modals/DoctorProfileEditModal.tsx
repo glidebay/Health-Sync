@@ -162,7 +162,6 @@ export function DoctorProfileEditModal({
             transition={{ duration: 0.18, ease: 'easeOut' }}
             className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden max-h-[90vh] flex flex-col"
           >
-            {/* Modal Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-[#F8F9FB] flex-shrink-0">
               <div className="flex items-center space-x-2.5">
                 <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB]">
@@ -184,7 +183,6 @@ export function DoctorProfileEditModal({
               </button>
             </div>
 
-            {/* Modal Body Form */}
             <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
               {errorMsg && (
                 <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 flex items-center gap-2">
@@ -193,7 +191,6 @@ export function DoctorProfileEditModal({
                 </div>
               )}
 
-              {/* Doctor Full Name */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Doctor Full Name <span className="text-rose-500">*</span>
@@ -211,7 +208,6 @@ export function DoctorProfileEditModal({
                 </div>
               </div>
 
-              {/* Specialization Dropdown */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Specialization <span className="text-rose-500">*</span>
@@ -229,9 +225,7 @@ export function DoctorProfileEditModal({
                 </select>
               </div>
 
-              {/* Council Reg No & Daily Quota Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Council Reg No */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
                     Council Reg No. <span className="text-rose-500">*</span>
@@ -249,7 +243,6 @@ export function DoctorProfileEditModal({
                   </div>
                 </div>
 
-                {/* Daily Quota Stepper (Min 1, Max 200) */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
                     Daily Quota (1 – 200) <span className="text-rose-500">*</span>
@@ -288,7 +281,6 @@ export function DoctorProfileEditModal({
                 </div>
               </div>
 
-              {/* Phone & Email Coordinates */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -323,7 +315,6 @@ export function DoctorProfileEditModal({
                 </div>
               </div>
 
-              {/* PIN Setup with Show/Hide Option */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Change Security PIN <span className="text-[10px] text-slate-400 font-normal">(Leave blank to keep current PIN)</span>
@@ -349,7 +340,6 @@ export function DoctorProfileEditModal({
                 </div>
               </div>
 
-              {/* Status Toggle: Active / Inactive */}
               <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
                 <div>
                   <span className="text-xs font-bold text-slate-800 block">Doctor Availability Status</span>
@@ -384,7 +374,6 @@ export function DoctorProfileEditModal({
                 </div>
               </div>
 
-              {/* Modal Footer Buttons */}
               <div className="flex items-center justify-end space-x-2.5 pt-3 border-t border-slate-100 flex-shrink-0">
                 <button
                   type="button"

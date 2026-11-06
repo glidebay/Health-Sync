@@ -235,7 +235,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
 
   return (
     <div className="space-y-4">
-      {/* Toast Notification */}
       <AnimatePresence>
         {toastMessage && (
           <motion.div
@@ -258,7 +257,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
         )}
       </AnimatePresence>
 
-      {/* Header Banner Card */}
       <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2.5">
@@ -287,7 +285,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
         </motion.button>
       </div>
 
-      {/* Directory Cards Grid */}
       {isLoading ? (
         <div className="bg-white rounded-2xl p-8 border border-slate-100 text-center">
           <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
@@ -327,7 +324,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
                 className="bg-white rounded-2xl p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] hover:shadow-md transition-all flex flex-col justify-between group min-w-0"
               >
                 <div>
-                  {/* Top: Avatar, Name, Specialization & Actions */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center space-x-3 min-w-0">
                       <div className="w-10 h-10 rounded-xl bg-gradient-to-tl from-blue-600 to-indigo-500 shadow-md shadow-blue-500/20 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
@@ -343,7 +339,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
                       </div>
                     </div>
 
-                    {/* Actions */}
                     <div className="flex items-center space-x-1 flex-shrink-0">
                       <motion.button
                         whileHover={{ scale: 1.05 }}
@@ -368,7 +363,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
                     </div>
                   </div>
 
-                  {/* Badges & Metrics */}
                   <div className="flex items-center gap-1.5 mt-3 flex-wrap">
                     <span
                       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border shadow-2xs ${
@@ -391,7 +385,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
                     </span>
                   </div>
 
-                  {/* Credentials / Quota Details */}
                   <div className="mt-4 pt-3.5 border-t border-slate-100 space-y-2">
                     <div className="flex items-center justify-between text-xs text-slate-600">
                       <span className="flex items-center gap-1.5 text-slate-400 font-medium">
@@ -415,7 +408,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
                   </div>
                 </div>
 
-                {/* Bottom Status Bar */}
                 <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-medium">
                   <span>Chamber PIN Access</span>
                   <span className={isActive ? 'text-emerald-600 font-bold' : 'text-slate-400 font-medium'}>
@@ -428,7 +420,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
         </div>
       )}
 
-      {/* Doctor Onboarding & Edit Modal */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
@@ -473,7 +464,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
               )}
 
               <form onSubmit={handleSaveDoctor} className="space-y-3.5">
-                {/* Full Name */}
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1.5">
                     Full Name <span className="text-rose-500">*</span>
@@ -488,7 +478,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
                   />
                 </div>
 
-                {/* Specialization Dropdown */}
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1.5">
                     Specialization <span className="text-rose-500">*</span>
@@ -506,7 +495,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
                   </select>
                 </div>
 
-                {/* Council Reg No. */}
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1.5">
                     Council Registration Number <span className="text-rose-500">*</span>
@@ -524,7 +512,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
                   </span>
                 </div>
 
-                {/* Daily Quota Number Stepper (Min 1, Max 200) */}
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1.5">
                     Daily Consultation Quota (1 – 200 Patients) <span className="text-rose-500">*</span>
@@ -563,7 +550,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
                   </span>
                 </div>
 
-                {/* PIN Setup with Show/Hide Option */}
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1.5">
                     Chamber Security PIN Setup {editingDoctor ? '(Optional)' : <span className="text-rose-500">*</span>}
@@ -598,7 +584,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
                   </span>
                 </div>
 
-                {/* Status: Active / Inactive Toggle */}
                 <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl pt-2">
                   <div>
                     <span className="text-xs font-bold text-slate-800 block">Doctor Availability Status</span>
@@ -633,7 +618,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
                   </div>
                 </div>
 
-                {/* Modal Footer Actions */}
                 <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100">
                   <button
                     type="button"
@@ -657,7 +641,6 @@ export function DoctorDirectoryManager({ onDoctorUpdated }: DoctorDirectoryManag
         )}
       </AnimatePresence>
 
-      {/* Delete Confirmation Alert Modal */}
       <AnimatePresence>
         {doctorToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">

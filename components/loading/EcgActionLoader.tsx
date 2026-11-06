@@ -16,12 +16,6 @@ export interface EcgActionLoaderProps {
   badge?: boolean;
 }
 
-/**
- * EcgActionLoader
- * Clean, full-screen centered action loading indicator.
- * Exclusively displays the moving ECG heartbeat pulse animation in the viewport center
- * over a transparent backdrop, with all background boxes/capsules and text removed.
- */
 export function EcgActionLoader({
   isLoading = true,
   text,

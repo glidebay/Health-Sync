@@ -285,7 +285,6 @@ export function PrescriptionPrintModal({
         className="fixed inset-0 bg-black/65 backdrop-blur-xs z-[999999] flex flex-col overflow-y-auto p-2 sm:p-6"
       >
         <div className="max-w-2xl mx-auto w-full my-auto flex flex-col space-y-4">
-          {/* Top Control Bar (Hidden on print) */}
           <div className="no-print bg-white rounded-2xl p-4 border border-[#ECEEF2] shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center space-x-3">
               <span className="text-xs font-bold text-[#16191E] flex items-center space-x-1.5">
@@ -332,18 +331,15 @@ export function PrescriptionPrintModal({
             </div>
           </div>
 
-          {/* Printable Prescription Body */}
           <div
             id="print-modal-content"
             className="w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200"
           >
             {hasCustomTemplate ? (
-              /* Custom Prescription Pad Layout with Exact A4 Aspect Ratio (210 : 297) */
               <div
                 id="printable-prescription-pad"
                 className="relative w-full max-w-xl mx-auto aspect-[210/297] bg-white overflow-hidden select-none"
               >
-                {/* Background Image rendered as <img> for 100% reliable physical print output */}
                 {printBackground && (
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img
@@ -357,7 +353,6 @@ export function PrescriptionPrintModal({
                   />
                 )}
 
-                {/* 1. Patient Name */}
                 {parsedFields.patientName?.visible !== false && (
                   <div
                     style={{
@@ -374,7 +369,6 @@ export function PrescriptionPrintModal({
                   </div>
                 )}
 
-                {/* 2. Patient Age */}
                 {parsedFields.patientAge?.visible !== false && (
                   <div
                     style={{
@@ -391,7 +385,6 @@ export function PrescriptionPrintModal({
                   </div>
                 )}
 
-                {/* 3. Patient Gender / Sex */}
                 {parsedFields.patientGender?.visible !== false && (
                   <div
                     style={{
@@ -408,7 +401,6 @@ export function PrescriptionPrintModal({
                   </div>
                 )}
 
-                {/* 4. Phone Number */}
                 {parsedFields.patientPhone?.visible !== false && printRecord.patientPhone && (
                   <div
                     style={{
@@ -425,7 +417,6 @@ export function PrescriptionPrintModal({
                   </div>
                 )}
 
-                {/* 5. Token Number */}
                 {parsedFields.tokenNumber?.visible !== false && printRecord.tokenNumber && (
                   <div
                     style={{
@@ -442,7 +433,6 @@ export function PrescriptionPrintModal({
                   </div>
                 )}
 
-                {/* 6. Clinical Diagnostics & Advice */}
                 {parsedFields.diagnostics?.visible !== false && (
                   <div
                     style={{
@@ -460,7 +450,6 @@ export function PrescriptionPrintModal({
                   </div>
                 )}
 
-                {/* 7. Prescribed Medicines (Rx) */}
                 {parsedFields.medications?.visible !== false && (
                   <div
                     style={{
@@ -508,7 +497,6 @@ export function PrescriptionPrintModal({
                   </div>
                 )}
 
-                {/* 8. Consultation Date */}
                 {parsedFields.consultationDate?.visible !== false && (
                   <div
                     style={{
@@ -526,7 +514,6 @@ export function PrescriptionPrintModal({
                   </div>
                 )}
 
-                {/* 9. Doctor Name */}
                 {parsedFields.doctorName?.visible !== false && (
                   <div
                     style={{
@@ -544,7 +531,6 @@ export function PrescriptionPrintModal({
                   </div>
                 )}
 
-                {/* 10. Doctor's Signature */}
                 {parsedFields.doctorSignature?.visible !== false && (
                   <div
                     style={{
@@ -563,9 +549,7 @@ export function PrescriptionPrintModal({
                 )}
               </div>
             ) : (
-              /* Standard HealthSync Clinic Prescription Slip (Only if no custom template has been uploaded yet) */
               <div id="printable-prescription-pad" className="p-6 sm:p-10 max-w-2xl mx-auto font-sans bg-white">
-                {/* Header */}
                 <div className="flex justify-between items-start border-b-2 border-[#16191E] pb-4 mb-6">
                   <div className="flex items-center space-x-3">
                     {config?.logo_url ? (
@@ -605,7 +589,6 @@ export function PrescriptionPrintModal({
                   </div>
                 </div>
 
-                {/* Patient Information */}
                 <div className="mb-6 flex flex-col gap-1 text-sm border border-[#ECEEF2] p-4 rounded-xl bg-[#F8F9FB]">
                   <p>
                     <span className="font-bold text-[#16191E]">Patient:</span>
@@ -620,7 +603,6 @@ export function PrescriptionPrintModal({
                   </p>
                 </div>
 
-                {/* Clinical Diagnostics */}
                 <div className="mb-6">
                   <h3 className="font-bold text-[#16191E] border-b pb-1 mb-2 text-sm uppercase tracking-wider">
                     Clinical Diagnostics & Notes
@@ -628,7 +610,6 @@ export function PrescriptionPrintModal({
                   <p className="text-sm text-[#5E6470] leading-relaxed">{printRecord.diagnostics}</p>
                 </div>
 
-                {/* Prescriptions */}
                 <div className="mb-8">
                   <h3 className="font-bold text-[#16191E] border-b pb-1 mb-3 text-sm uppercase tracking-wider">
                     Prescription (Rx)
@@ -661,7 +642,6 @@ export function PrescriptionPrintModal({
                 </div>
 
                 
-                {/* Next Follow-Up Visit Notice */}
                 {printRecord?.nextVisitDate && (
                   <div className="mt-4 p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs font-semibold text-blue-900 flex items-center justify-between">
                     <span>Next Review / Follow-Up Visit Scheduled:</span>
@@ -669,7 +649,6 @@ export function PrescriptionPrintModal({
                   </div>
                 )}
 
-                {/* Signature */}
                 <div className="mt-12 sm:mt-16 text-right">
                   <div className="border-t border-gray-400 inline-block pt-2 pr-16 text-sm font-semibold">
                     <p>{doctorProfile.name}</p>
@@ -677,7 +656,6 @@ export function PrescriptionPrintModal({
                   </div>
                 </div>
 
-                {/* Footer Notice */}
                 {config?.rx_footer_text && (
                   <div className="mt-8 pt-4 border-t border-[#ECEEF2] text-center text-xs text-[#8A909D]">
                     {config.rx_footer_text}
