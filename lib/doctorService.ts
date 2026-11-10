@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
 import bcrypt from 'bcryptjs';
 import { DbDoctor, DbClinicLocation } from '@/types/database';
+import { getDoctorsLocal } from './supabaseService';
 
 export interface DoctorWithBranches extends DbDoctor {
   assigned_branch_ids?: string[];
@@ -105,10 +106,9 @@ export async function verifyBranchDoctorPin(
 ): Promise<VerifyBranchDoctorResult> {
   const cleanPin = pin ? pin.trim() : '';
   if (!cleanPin) return { success: false, message: 'Doctor PIN is required' };
-  if (!branchId) return { success: false, message: 'Active branch context is required' };
+  if (!branchId && !clinicId) return { success: false, message: 'Active clinic context is required' };
 
-  // Check 3-attempt lockout
-  const lockoutKey = `lockout_${branchId}_${cleanPin.slice(0, 2)}`;
+  const lockoutKey = `lockout_${branchId || clinicId || 'clinic'}_${cleanPin.slice(0, 2)}`;
   const lockInfo = chamberFailedAttempts.get(lockoutKey);
   if (lockInfo && lockInfo.lockedUntil > Date.now()) {
     const remainSec = Math.ceil((lockInfo.lockedUntil - Date.now()) / 1000);
@@ -119,26 +119,32 @@ export async function verifyBranchDoctorPin(
   }
 
   try {
-    // 1. Fetch branch information to know its clinic_id
-    const { data: branchData } = await supabase
-      .from('clinic_locations')
-      .select('id, branch_name, branch_code, clinic_id, clinic_name')
-      .eq('id', branchId)
-      .maybeSingle();
+    let branchData: any = null;
+    if (branchId) {
+      const { data } = await supabase
+        .from('clinic_locations')
+        .select('id, branch_name, branch_code, clinic_id, clinic_name')
+        .eq('id', branchId)
+        .maybeSingle();
+      branchData = data;
+    }
 
     const targetClinicId = clinicId || branchData?.clinic_id;
 
-    // 2. Fetch active doctors
-    const { data: doctors, error: docErr } = await supabase
+    let { data: doctors, error: docErr } = await supabase
       .from('doctors')
       .select('*')
       .eq('is_active', true);
 
     if (docErr || !doctors || doctors.length === 0) {
-      return { success: false, message: 'No active doctors found' };
+      const local = getDoctorsLocal();
+      if (local && local.length > 0) {
+        doctors = local;
+      } else {
+        return { success: false, message: 'No active doctors found' };
+      }
     }
 
-    // 3. Match doctor by PIN (plain text or bcrypt)
     let matchedDoctor: DbDoctor | null = null;
     for (const doc of doctors) {
       if (doc.pin_code) {
@@ -156,22 +162,18 @@ export async function verifyBranchDoctorPin(
     }
 
     if (!matchedDoctor) {
-      // Record failed attempt
       const cur = chamberFailedAttempts.get(lockoutKey) || { count: 0, lockedUntil: 0 };
       cur.count += 1;
       if (cur.count >= 3) {
-        cur.lockedUntil = Date.now() + 30 * 1000; // 30 seconds lockout
+        cur.lockedUntil = Date.now() + 30 * 1000;
         cur.count = 0;
       }
       chamberFailedAttempts.set(lockoutKey, cur);
       return { success: false, message: 'Invalid Doctor Security PIN' };
     }
 
-    // Reset lockout counter on success
     chamberFailedAttempts.delete(lockoutKey);
 
-    // 4. Access Control Rules
-    // Rule A: Cross-Clinic Isolation Guard
     if (targetClinicId && matchedDoctor.clinic_id && matchedDoctor.clinic_id !== targetClinicId) {
       const clinicName = branchData?.clinic_name || 'this clinic';
       return {
@@ -180,7 +182,6 @@ export async function verifyBranchDoctorPin(
       };
     }
 
-    // Rule B: Admin Doctor Cross-Branch Authority
     if (matchedDoctor.is_admin_doctor) {
       return {
         success: true,
@@ -188,38 +189,67 @@ export async function verifyBranchDoctorPin(
         doctor_name: matchedDoctor.full_name,
         specialization: matchedDoctor.specialization || 'General Medicine',
         is_admin_doctor: true,
-        authorized_branch_id: branchId,
+        authorized_branch_id: branchId || undefined,
         message: `Admin Doctor Authenticated: Dr. ${matchedDoctor.full_name}`,
         doctor: matchedDoctor,
       };
     }
 
-    // Rule C: Standard Doctor Explicit Branch Assignment Check
-    const { data: assignments } = await supabase
-      .from('doctor_locations')
-      .select('id, location_id')
-      .eq('doctor_id', matchedDoctor.id)
-      .eq('location_id', branchId)
-      .eq('is_active', true);
+    if (branchId) {
+      const { data: assignments } = await supabase
+        .from('doctor_locations')
+        .select('id, location_id')
+        .eq('doctor_id', matchedDoctor.id)
+        .eq('location_id', branchId)
+        .eq('is_active', true);
 
-    if (assignments && assignments.length > 0) {
+      if (assignments && assignments.length > 0) {
+        return {
+          success: true,
+          doctor_id: matchedDoctor.id,
+          doctor_name: matchedDoctor.full_name,
+          specialization: matchedDoctor.specialization || 'General Medicine',
+          is_admin_doctor: false,
+          authorized_branch_id: branchId,
+          message: `Chamber Unlocked: Dr. ${matchedDoctor.full_name}`,
+          doctor: matchedDoctor,
+        };
+      }
+
+      const { data: anyAssignments } = await supabase
+        .from('doctor_locations')
+        .select('id')
+        .eq('doctor_id', matchedDoctor.id)
+        .eq('is_active', true);
+
+      if (!anyAssignments || anyAssignments.length === 0) {
+        return {
+          success: true,
+          doctor_id: matchedDoctor.id,
+          doctor_name: matchedDoctor.full_name,
+          specialization: matchedDoctor.specialization || 'General Medicine',
+          is_admin_doctor: false,
+          authorized_branch_id: branchId,
+          message: `Chamber Unlocked: Dr. ${matchedDoctor.full_name}`,
+          doctor: matchedDoctor,
+        };
+      }
+
+      const branchName = branchData?.branch_name || branchId;
       return {
-        success: true,
-        doctor_id: matchedDoctor.id,
-        doctor_name: matchedDoctor.full_name,
-        specialization: matchedDoctor.specialization || 'General Medicine',
-        is_admin_doctor: false,
-        authorized_branch_id: branchId,
-        message: `Chamber Unlocked: Dr. ${matchedDoctor.full_name}`,
-        doctor: matchedDoctor,
+        success: false,
+        message: `Access Denied: Dr. ${matchedDoctor.full_name} is not assigned to ${branchName}.`,
       };
     }
 
-    // Denied if regular doctor is not assigned to this branch
-    const branchName = branchData?.branch_name || branchId;
     return {
-      success: false,
-      message: `Access Denied: Dr. ${matchedDoctor.full_name} is not assigned to ${branchName}.`,
+      success: true,
+      doctor_id: matchedDoctor.id,
+      doctor_name: matchedDoctor.full_name,
+      specialization: matchedDoctor.specialization || 'General Medicine',
+      is_admin_doctor: false,
+      message: `Chamber Unlocked: Dr. ${matchedDoctor.full_name}`,
+      doctor: matchedDoctor,
     };
   } catch (err: any) {
     console.warn('verifyBranchDoctorPin exception:', err);

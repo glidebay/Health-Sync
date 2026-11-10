@@ -292,7 +292,8 @@ export interface VerifyDoctorPinResult {
 
 export async function verifyDoctorPin(
   pin: string,
-  doctorId?: string
+  doctorId?: string,
+  clinicId?: string
 ): Promise<VerifyDoctorPinResult> {
   const cleanPin = pin ? pin.trim() : '';
   if (!cleanPin) return { success: false, message: 'PIN is required' };
@@ -300,42 +301,48 @@ export async function verifyDoctorPin(
   try {
     let query = supabase
       .from('doctors')
-      .select('id, auth_id, full_name, pin_code, failed_attempts, locked_until, pin_session_until, specialization, reg_no');
+      .select('id, auth_id, full_name, pin_code, failed_attempts, locked_until, pin_session_until, specialization, reg_no, clinic_id, is_admin_doctor');
 
     if (doctorId) {
       query = query.eq('id', doctorId);
     }
+    if (clinicId) {
+      query = query.eq('clinic_id', clinicId);
+    }
 
     const { data: doctors, error } = await query;
 
-    if (error || !doctors || doctors.length === 0) {
-      console.warn('Doctor PIN check query error:', error?.message);
+    let docList: any[] = (doctors as any[]) || [];
+    if (error || docList.length === 0) {
+      const local = getDoctorsLocal();
+      if (local && local.length > 0) {
+        docList = clinicId ? local.filter((d) => !d.clinic_id || d.clinic_id === clinicId) : local;
+      }
+    }
+
+    if (!docList || docList.length === 0) {
       return { success: false, message: 'No doctors found' };
     }
 
     let matchedDoctor: DbDoctor | null = null;
-    for (const doc of doctors) {
+    for (const doc of docList) {
       if (doc.pin_code) {
-        // Direct plain text match (e.g. '1122', '3344', '5566', '4321')
         if (cleanPin === doc.pin_code) {
           matchedDoctor = doc;
           break;
         }
-        // Bcrypt hash comparison
         try {
           if (doc.pin_code.startsWith('$2') && bcrypt.compareSync(cleanPin, doc.pin_code)) {
             matchedDoctor = doc;
             break;
           }
-        } catch {
-          // Ignore bcrypt salt parsing errors
-        }
+        } catch {}
       }
     }
 
     if (!matchedDoctor) {
-      if (doctorId && doctors.length > 0) {
-        const doc = doctors[0];
+      if (doctorId && docList.length > 0) {
+        const doc = docList[0];
         const currentFailed = (doc.failed_attempts || 0) + 1;
         const lockDurationMs = currentFailed >= 3 ? 15 * 60 * 1000 : 30 * 1000;
         const lockExpiry = new Date(Date.now() + lockDurationMs).toISOString();
@@ -349,6 +356,10 @@ export async function verifyDoctorPin(
           .eq('id', doc.id);
       }
       return { success: false, message: 'Invalid Security PIN' };
+    }
+
+    if (clinicId && (matchedDoctor as any).clinic_id && (matchedDoctor as any).clinic_id !== clinicId) {
+      return { success: false, message: `Access Denied: Dr. ${matchedDoctor.full_name} is affiliated with a different clinic organization.` };
     }
 
     if (matchedDoctor.locked_until && new Date(matchedDoctor.locked_until).getTime() > Date.now()) {
@@ -372,9 +383,9 @@ export async function verifyDoctorPin(
       success: true,
       doctor: {
         ...matchedDoctor,
-        clinic_id: clinicInfo.clinicId,
+        clinic_id: (matchedDoctor as any).clinic_id || clinicInfo.clinicId,
         clinic_name: clinicInfo.clinicName,
-        is_admin: clinicInfo.isAdmin,
+        is_admin: Boolean((matchedDoctor as any).is_admin_doctor || clinicInfo.isAdmin),
         pin_session_until: pinSessionUntil,
         failed_attempts: 0,
         locked_until: null,

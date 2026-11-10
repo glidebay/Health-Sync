@@ -658,19 +658,18 @@ function DashboardContent() {
         return;
       }
 
-      // Fallback: Check if the PIN entered at Gateway belongs to a Doctor
-      const docRes = await verifyBranchDoctorPin(clean, currentLocation?.id || 'loc-central', currentClinicId || undefined);
-      if (docRes.success && docRes.doctor) {
-        const docClinicId = docRes.doctor.clinic_id || '9e8b98f5-e268-4b11-8ca1-ec1ce83292ea';
-        const isAdmin = Boolean(docRes.is_admin_doctor);
+      const fallbackDoc = await verifyDoctorPin(clean);
+      if (fallbackDoc.success && fallbackDoc.doctor) {
+        const docClinicId = fallbackDoc.doctor.clinic_id || '9e8b98f5-e268-4b11-8ca1-ec1ce83292ea';
+        const isAdmin = Boolean(fallbackDoc.doctor.is_admin_doctor || fallbackDoc.doctor.is_admin);
 
         saveDoctorSessionLocal({
-          doctorId: docRes.doctor.id,
-          name: docRes.doctor.full_name,
-          title: docRes.doctor.specialization || 'General Medicine',
+          doctorId: fallbackDoc.doctor.id,
+          name: fallbackDoc.doctor.full_name,
+          title: fallbackDoc.doctor.specialization || 'General Medicine',
           expiresAt: Date.now() + 8 * 60 * 60 * 1000,
           clinicId: docClinicId,
-          clinicName: docRes.doctor.clinic_name || undefined,
+          clinicName: fallbackDoc.doctor.clinic_name || undefined,
           isAdmin,
         });
 
@@ -689,8 +688,8 @@ function DashboardContent() {
         }
 
         setDoctorProfile({
-          name: docRes.doctor.full_name,
-          title: docRes.doctor.specialization || 'General Medicine',
+          name: fallbackDoc.doctor.full_name,
+          title: fallbackDoc.doctor.specialization || 'General Medicine',
         });
 
         setShowPinModal(false);
@@ -700,105 +699,86 @@ function DashboardContent() {
         setPortalMode('dashboard');
         setActiveSection(intendedSection || 'dashboard');
         setIntendedSection(null);
-        showToast('success', 'Doctor Authenticated', `Welcome Dr. ${docRes.doctor.full_name} (${isAdmin ? 'Main Doctor / Admin' : 'Attending Physician'})`);
-        syncQueueOnly();
-        return;
-      }
-
-      const fallbackDoc = await verifyDoctorPin(clean);
-      if (fallbackDoc.success && fallbackDoc.doctor) {
-        saveDoctorSessionLocal({
-          doctorId: fallbackDoc.doctor.id,
-          name: fallbackDoc.doctor.full_name,
-          title: fallbackDoc.doctor.specialization || 'General Medicine',
-          expiresAt: Date.now() + 8 * 60 * 60 * 1000,
-        });
-        setIsLoggedIn(true);
-        setDoctorProfile({
-          name: fallbackDoc.doctor.full_name,
-          title: fallbackDoc.doctor.specialization || 'General Medicine',
-        });
-        setShowPinModal(false);
-        setPinError(false);
-        setPinErrorMessage('');
-        setPinInput('');
-        setPortalMode('dashboard');
-        setActiveSection(intendedSection || 'dashboard');
-        setIntendedSection(null);
-        showToast('success', 'Doctor Authenticated', `Welcome Dr. ${fallbackDoc.doctor.full_name}`);
+        showToast('success', 'Doctor Authenticated', `Welcome Dr. ${fallbackDoc.doctor.full_name} (${isAdmin ? 'Main Doctor / Admin' : 'Attending Physician'})`);
         syncQueueOnly();
         return;
       }
 
       setPinError(true);
-      setPinErrorMessage(docRes.message || branchRes.message || 'Invalid Branch Gateway or Doctor PIN');
-      showToast('error', 'Authentication Failed', docRes.message || branchRes.message || 'Invalid Branch Gateway or Doctor PIN');
+      setPinErrorMessage(branchRes.message || fallbackDoc.message || 'Invalid Branch Gateway or Doctor PIN');
+      showToast('error', 'Authentication Failed', branchRes.message || fallbackDoc.message || 'Invalid Branch Gateway or Doctor PIN');
       setTimeout(() => setPinError(false), 2500);
       return;
     }
 
-    // Chamber Unlock inside Dashboard
-    let docRes = await verifyBranchDoctorPin(clean, currentLocation?.id || '', currentClinicId || undefined);
-    if (!docRes.success) {
-      const fallback = await verifyDoctorPin(clean);
-      if (fallback.success && fallback.doctor) {
-        docRes = {
-          success: true,
-          doctor: fallback.doctor,
-          is_admin_doctor: false,
-          message: 'Chamber Unlocked',
-        };
-      }
+    const activeClinicId = currentClinicId || currentLocation?.clinic_id || (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) || undefined;
+    const activeBranchId = currentLocation?.id || '';
+
+    const docRes = await verifyBranchDoctorPin(clean, activeBranchId, activeClinicId);
+
+    if (!docRes.success || !docRes.doctor) {
+      setPinError(true);
+      setPinErrorMessage(docRes.message || 'Invalid Doctor Security PIN');
+      showToast('error', 'Chamber Access Denied', docRes.message || 'Invalid Doctor Security PIN');
+      setTimeout(() => setPinError(false), 2500);
+      return;
     }
-    if (docRes.success && docRes.doctor) {
-      const docClinicId = docRes.doctor.clinic_id || currentClinicId || '9e8b98f5-e268-4b11-8ca1-ec1ce83292ea';
-      const isAdmin = Boolean(docRes.is_admin_doctor);
 
-      saveDoctorSessionLocal({
-        doctorId: docRes.doctor.id,
-        name: docRes.doctor.full_name,
-        title: docRes.doctor.specialization || 'General Medicine',
-        expiresAt: Date.now() + 8 * 60 * 60 * 1000,
-        clinicId: docClinicId,
-        clinicName: docRes.doctor.clinic_name || undefined,
-        isAdmin,
-      });
+    if (activeClinicId && docRes.doctor.clinic_id && docRes.doctor.clinic_id !== activeClinicId) {
+      setPinError(true);
+      const msg = `Access Denied: Dr. ${docRes.doctor.full_name} is affiliated with a different clinic organization and cannot access this clinic.`;
+      setPinErrorMessage(msg);
+      showToast('error', 'Chamber Access Denied', msg);
+      setTimeout(() => setPinError(false), 2500);
+      return;
+    }
 
-      setIsLoggedIn(true);
-      setIsDoctorAdmin(isAdmin);
+    const docClinicId = activeClinicId || docRes.doctor.clinic_id || '9e8b98f5-e268-4b11-8ca1-ec1ce83292ea';
+    const isAdmin = Boolean(docRes.is_admin_doctor);
+
+    saveDoctorSessionLocal({
+      doctorId: docRes.doctor.id,
+      name: docRes.doctor.full_name,
+      title: docRes.doctor.specialization || 'General Medicine',
+      expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+      clinicId: docClinicId,
+      clinicName: docRes.doctor.clinic_name || undefined,
+      isAdmin,
+    });
+
+    setIsLoggedIn(true);
+    setIsDoctorAdmin(isAdmin);
+    if (!currentClinicId && docClinicId) {
       setCurrentClinicId(docClinicId);
       if (typeof window !== 'undefined') {
         localStorage.setItem('healthsync_active_clinic_id', docClinicId);
       }
-
-      setDoctorProfile({
-        name: docRes.doctor.full_name,
-        title: docRes.doctor.specialization || 'General Medicine',
-      });
-
-      setShowPinModal(false);
-      setPinError(false);
-      setPinErrorMessage('');
-      setPinInput('');
-      showToast('success', 'Chamber Unlocked', `Welcome Dr. ${docRes.doctor.full_name} (${isAdmin ? 'Medical Director / Admin' : 'Consultant'})`);
-
-      if (pendingConsultPatient) {
-        const p = pendingConsultPatient;
-        setPendingConsultPatient(null);
-        setTimeout(() => {
-          handleConsultFromSearch(p);
-        }, 100);
-      } else {
-        const target = intendedSection || 'dashboard';
-        setActiveSection(target);
-        setIntendedSection(null);
-      }
-    } else {
-      setPinError(true);
-      setPinErrorMessage(docRes.message || 'Invalid Doctor PIN or not assigned to this branch.');
-      showToast('error', 'Chamber Access Denied', docRes.message || 'Invalid Doctor PIN or not assigned to this branch.');
-      setTimeout(() => setPinError(false), 2500);
     }
+
+    setDoctorProfile({
+      name: docRes.doctor.full_name,
+      title: docRes.doctor.specialization || 'General Medicine',
+    });
+
+    setShowPinModal(false);
+    setPinError(false);
+    setPinErrorMessage('');
+    setPinInput('');
+    showToast('success', 'Chamber Unlocked', `Welcome Dr. ${docRes.doctor.full_name} (${isAdmin ? 'Medical Director / Admin' : 'Consultant'})`);
+
+    if (pendingConsultPatient) {
+      const p = pendingConsultPatient;
+      setPendingConsultPatient(null);
+      setTimeout(() => {
+        handleConsultFromSearch(p);
+      }, 100);
+    } else {
+      const target = intendedSection || 'dashboard';
+      setActiveSection(target);
+      setIntendedSection(null);
+    }
+    syncQueueOnly();
+    return;
   };
 
   const handleLockDoctorSession = async () => {
