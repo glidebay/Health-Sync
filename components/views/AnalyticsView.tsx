@@ -356,9 +356,8 @@ export function AnalyticsView({
                   key={period.id}
                   type="button"
                   onClick={() => setSelectedPeriod(period.id)}
-                  className={`relative px-3.5 py-1.5 text-xs font-bold rounded-xl transition-colors cursor-pointer select-none ${
-                    isActive ? 'text-white' : 'text-slate-600 hover:text-slate-800'
-                  }`}
+                  className={`relative px-3.5 py-1.5 text-xs font-bold rounded-xl transition-colors cursor-pointer select-none ${isActive ? 'text-white' : 'text-slate-600 hover:text-slate-800'
+                    }`}
                 >
                   {isActive && (
                     <motion.div
@@ -426,7 +425,7 @@ export function AnalyticsView({
             </div>
             <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-1">
               <ArrowUpRight className="w-3 h-3 flex-shrink-0" />
-              <span>{activeCount > 0 ? `${ Math.round((whatsappCount / activeCount) * 100) }% ` : '0%'}</span>
+              <span>{activeCount > 0 ? `${Math.round((whatsappCount / activeCount) * 100)}% ` : '0%'}</span>
               <span className="text-slate-400 font-normal">digital adoption</span>
             </span>
           </div>
@@ -453,7 +452,7 @@ export function AnalyticsView({
             </div>
             <span className="text-[11px] text-indigo-600 font-semibold flex items-center gap-1 mt-1">
               <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
-              <span>{activeCount > 0 ? `${ Math.round((completedCount / activeCount) * 100) }% ` : '0%'}</span>
+              <span>{activeCount > 0 ? `${Math.round((completedCount / activeCount) * 100)}% ` : '0%'}</span>
               <span className="text-slate-400 font-normal">consulted</span>
             </span>
           </div>
@@ -480,7 +479,7 @@ export function AnalyticsView({
             </div>
             <span className="text-[11px] text-rose-600 font-semibold flex items-center gap-1 mt-1">
               <ArrowDownRight className="w-3 h-3 flex-shrink-0" />
-              <span>{cancelledCount > 0 ? `${ cancellationRate }% ` : '0%'}</span>
+              <span>{cancelledCount > 0 ? `${cancellationRate}% ` : '0%'}</span>
               <span className="text-slate-400 font-normal">cancellation rate</span>
             </span>
           </div>
@@ -643,7 +642,7 @@ export function AnalyticsView({
                 >
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center space-x-2">
-                      <span className={`w - 2.5 h - 2.5 rounded - full flex - shrink - 0 ${ item.color } `} />
+                      <span className={`w - 2.5 h - 2.5 rounded - full flex - shrink - 0 ${item.color} `} />
                       <span className="text-slate-700 font-medium">{item.label}</span>
                     </div>
                     <span className="text-slate-800 font-bold ml-4">{item.pct}</span>
@@ -653,7 +652,7 @@ export function AnalyticsView({
                       initial={{ width: 0 }}
                       animate={{ width: item.pct }}
                       transition={{ duration: 0.6, ease: 'easeOut' }}
-                      className={`h - full rounded - full ${ item.color } `}
+                      className={`h - full rounded - full ${item.color} `}
                     />
                   </div>
                 </motion.div>

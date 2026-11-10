@@ -11,6 +11,8 @@ export interface NavItemConfig {
   label: string;
   icon: LucideIcon;
   reqAuth: boolean;
+  badge?: string;
+  description?: string;
 }
 
 interface SideMenuProps {
@@ -24,6 +26,7 @@ interface SideMenuProps {
   onLogout: () => void;
   onFullLogout?: () => void;
   requireDoctorPin?: boolean;
+  isAdmin?: boolean;
 }
 
 export function SideMenu({
@@ -37,6 +40,7 @@ export function SideMenu({
   onLogout,
   onFullLogout,
   requireDoctorPin = true,
+  isAdmin = false,
 }: SideMenuProps) {
   return (
     <AnimatePresence initial={false}>
@@ -97,17 +101,26 @@ export function SideMenu({
                             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                           />
                         )}
-                        <div className="relative z-10 flex items-center space-x-3.5">
-                          <Icon
-                            className={`w-5 h-5 transition-transform duration-150 group-hover:scale-110 ${
-                              isActive
-                                ? 'text-[#2563EB] stroke-[2.2]'
-                                : 'text-[#8A909D] group-hover:text-[#2563EB] stroke-[1.8]'
-                            }`}
-                          />
-                          <span>{item.label}</span>
+                        <div className="relative z-10 flex items-center justify-between w-full min-w-0 pr-1">
+                          <div className="flex items-center space-x-3.5 min-w-0">
+                            <Icon
+                              className={`w-5 h-5 flex-shrink-0 transition-transform duration-150 group-hover:scale-110 ${
+                                isActive
+                                  ? 'text-[#2563EB] stroke-[2.2]'
+                                  : 'text-[#8A909D] group-hover:text-[#2563EB] stroke-[1.8]'
+                              }`}
+                            />
+                            <span className="truncate">{item.label}</span>
+                          </div>
+                          <div className="flex items-center space-x-2 flex-shrink-0">
+                            {item.badge && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 uppercase tracking-wider">
+                                {item.badge}
+                              </span>
+                            )}
+                            {isLocked && <Lock className="w-3.5 h-3.5 text-[#8A909D]" />}
+                          </div>
                         </div>
-                        {isLocked && <Lock className="relative z-10 w-3.5 h-3.5 text-[#8A909D]" />}
                       </button>
                     </motion.div>
                   );
@@ -140,7 +153,7 @@ export function SideMenu({
                       {!requireDoctorPin
                         ? 'Open Access'
                         : isLoggedIn
-                        ? 'Doctor Verified'
+                        ? (isAdmin ? 'Main Doctor (Admin)' : 'Doctor Verified')
                         : 'Doctor Locked'}
                     </p>
                     <p className="text-[11px] text-[#8A909D] truncate font-medium">

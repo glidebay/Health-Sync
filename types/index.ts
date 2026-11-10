@@ -23,6 +23,7 @@ export interface Patient {
   notes?: string;
   smsSent?: boolean;
   lastSmsType?: string;
+  locationId?: string;
 }
 
 export interface InventoryItem {
@@ -30,6 +31,7 @@ export interface InventoryItem {
   generic: string;
   brand: string;
   stock: number;
+  locationId?: string;
   unit?: string;
   category?: string;
   batchNo?: string;
@@ -64,9 +66,9 @@ export interface ConsultationRecord {
   demographics?: string;
 }
 
-export type TabType = 'assistant' | 'tables' | 'queue' | 'consult' | 'inventory' | 'analytics' | 'settings';
+export type TabType = 'assistant' | 'tables' | 'queue' | 'consult' | 'inventory' | 'analytics' | 'settings' | 'admin_doctors';
 
-export type NavSection = 'dashboard' | 'tables' | 'booking' | 'assistant' | 'queue' | 'consult' | 'inventory' | 'analytics' | 'settings';
+export type NavSection = 'dashboard' | 'tables' | 'booking' | 'assistant' | 'queue' | 'consult' | 'inventory' | 'analytics' | 'settings' | 'admin_doctors';
 
 export type { AppConfig } from '@/data/default-config';
 export * from './medicine';
@@ -87,6 +89,8 @@ export interface ConfirmedToken {
   assignedSlot?: string;
   message?: string;
   status?: string;
+  locationId?: string;
+  branchName?: string;
 }
 
 export interface BranchLocation {
@@ -99,3 +103,5 @@ export interface BranchLocation {
   status: 'Active' | 'Inactive';
   createdAt?: string;
 }
+
+export type { DbClinicLocation, DbDoctorLocation } from './database';

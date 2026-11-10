@@ -20,6 +20,7 @@ import {
   LogOut,
   ChevronDown,
   Check,
+  MapPin,
 } from 'lucide-react';
 import { useClinic } from '@/context/ClinicContext';
 import EcgActionLoader from '@/components/loading/EcgActionLoader';
@@ -34,12 +35,16 @@ import { PrescriptionTemplateCalibrator } from '@/components/settings/Prescripti
 import { BranchLocationsManager } from '@/components/settings/BranchLocationsManager';
 import { DoctorDirectoryManager } from '@/components/settings/DoctorDirectoryManager';
 import { DoctorScheduleHolidayManager } from '@/components/settings/DoctorScheduleHolidayManager';
+import { BranchLocationManager } from '@/components/settings/BranchLocationManager';
+import { DbClinicLocation } from '@/types/database';
 
 interface SettingsViewProps {
   isMobile?: boolean;
   onLogout?: () => void;
   searchQuery?: string;
   onSearchChange?: (q: string) => void;
+  currentLocation?: DbClinicLocation | null;
+  onSelectLocation?: (loc: DbClinicLocation) => void;
 }
 
 interface CategoryConfig {
@@ -51,6 +56,7 @@ interface CategoryConfig {
 
 const CATEGORIES: CategoryConfig[] = [
   { id: 'Clinic Identity & Branding', label: 'Identity & Branding', icon: Building2 },
+  { id: 'Multi-Branch & Locations', label: 'Branches & Locations', icon: MapPin },
   { id: 'Doctor & Quota Controls', label: 'Doctor & Quotas', icon: UserCog },
   { id: 'Queue & Patient Logistics', label: 'Queue Logistics', icon: UsersRound },
   { id: 'WhatsApp & Communication Automation', label: 'WhatsApp & Comms', icon: MessageSquare },
@@ -168,7 +174,13 @@ function CustomDropdownInput({
   );
 }
 
-  export function SettingsView({ isMobile = false, onLogout, searchQuery = '' }: SettingsViewProps) {
+  export function SettingsView({
+    isMobile = false,
+    onLogout,
+    searchQuery = '',
+    currentLocation,
+    onSelectLocation,
+  }: SettingsViewProps) {
     const { config, updateAllConfigs, resetConfigToDefaults } = useClinic();
 
     const [edits, setEdits] = useState<Partial<AppConfig>>({});
@@ -760,6 +772,25 @@ function CustomDropdownInput({
               />
             </motion.div>
           )}
+
+        {(activeCategory === 'Multi-Branch & Locations' ||
+          ['branch', 'location', 'campus', 'multi'].some((k) =>
+            searchQuery.toLowerCase().includes(k)
+          )) && (
+          <motion.div
+            variants={fadeScale}
+            initial="hidden"
+            animate="visible"
+            className="pt-2"
+          >
+            <BranchLocationManager
+              currentLocationId={currentLocation?.id}
+              onSelectLocation={onSelectLocation}
+              clinicId={currentLocation?.clinic_id}
+              clinicName={currentLocation?.clinic_name}
+            />
+          </motion.div>
+        )}
 
         {(activeCategory === 'Doctor & Quota Controls' ||
           ['doctor', 'quota', 'quotas', 'physician', 'specialist', 'directory', 'onboard'].some((k) =>

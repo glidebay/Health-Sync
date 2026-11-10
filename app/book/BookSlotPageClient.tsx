@@ -1,24 +1,28 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ClinicProvider, useClinic } from '@/context/ClinicContext';
 import { SlotBookingView } from '@/components/views/SlotBookingView';
 import { Patient, ConfirmedToken } from '@/types';
-import { DbDoctor } from '@/types/database';
+import { DbDoctor, DbClinicLocation } from '@/types/database';
 import {
   getDoctors,
   fetchQueueFromDb,
   bookAppointmentSlotDb,
+  fetchClinicLocations,
 } from '@/lib/supabaseService';
 import { validateMobileNumber } from '@/lib/phoneValidation';
 
 function BookSlotInnerClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { config } = useClinic();
 
   const [queue, setQueue] = useState<Patient[]>([]);
   const [availableDoctors, setAvailableDoctors] = useState<DbDoctor[]>([]);
+  const [clinicLocations, setClinicLocations] = useState<DbClinicLocation[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState<DbClinicLocation | null>(null);
   const [doctorProfile, setDoctorProfile] = useState<{ name: string; title: string }>({
     name: 'Dr. Sunny',
     title: 'General Medicine & Family Care',
@@ -43,6 +47,24 @@ function BookSlotInnerClient() {
   }, []);
 
   useEffect(() => {
+    fetchClinicLocations().then((locs) => {
+      if (locs && locs.length > 0) {
+        setClinicLocations(locs);
+        const branchParam = searchParams.get('branch') || searchParams.get('code') || searchParams.get('location');
+        if (branchParam) {
+          const clean = branchParam.trim().toLowerCase();
+          const matched = locs.find(
+            (l) => l.branch_code?.toLowerCase() === clean || l.id.toLowerCase() === clean
+          );
+          if (matched) {
+            setSelectedLocation(matched);
+            return;
+          }
+        }
+        setSelectedLocation(locs[0]);
+      }
+    });
+
     getDoctors().then((docs: DbDoctor[]) => {
       if (docs && docs.length > 0) {
         setAvailableDoctors(docs);
@@ -60,7 +82,7 @@ function BookSlotInnerClient() {
     fetchQueueFromDb().then((q: Patient[]) => {
       if (q) setQueue(q);
     });
-  }, []);
+  }, [searchParams]);
 
   const handleBookSlotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,6 +118,7 @@ function BookSlotInnerClient() {
         date: finalBookingDate,
         slotTime: bookSlotTime,
         reason: bookReason,
+        locationId: selectedLocation?.id,
       });
 
       if (!bookingRes.success) {
@@ -126,6 +149,8 @@ function BookSlotInnerClient() {
         appointmentId: bookingRes.appointmentId,
         message: bookingRes.message,
         status: bookingRes.status || 'Waiting',
+        locationId: selectedLocation?.id,
+        branchName: selectedLocation?.branch_name,
       });
 
       setBookName('');

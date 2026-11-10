@@ -10,6 +10,7 @@ interface DoctorAuthModalProps {
   pinInput: string;
   setPinInput: (val: string) => void;
   pinError: boolean;
+  errorMessage?: string;
   onPinSubmit: () => void;
   title?: string;
   subtitle?: string;
@@ -22,6 +23,7 @@ export function DoctorAuthModal({
   pinInput,
   setPinInput,
   pinError,
+  errorMessage,
   onPinSubmit,
   title = 'Security Verification',
   subtitle = 'Enter your security PIN',
@@ -57,7 +59,11 @@ export function DoctorAuthModal({
               }`}
             />
 
-            {pinError && <p className="text-xs text-red-500 font-medium mb-3">Invalid Security PIN</p>}
+            {pinError && (
+              <p className="text-xs text-red-500 font-medium mb-3 px-1 leading-snug">
+                {errorMessage || 'Invalid Security PIN'}
+              </p>
+            )}
 
             <motion.button
               whileHover={{ scale: 1.02 }}

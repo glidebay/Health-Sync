@@ -27,6 +27,8 @@ import {
   generateCsvErrorReport,
   streamAndIngestCsvToSupabase,
   StreamImportProgress,
+  normalizeRawCsvText,
+  countTrueCsvRows,
 } from '@/lib/medicineService';
 
 interface MedicineCsvImportModalProps {
@@ -62,6 +64,7 @@ export function MedicineCsvImportModal({
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [streamProgress, setStreamProgress] = useState<StreamImportProgress | null>(null);
   const rawFileTextRef = useRef<string>('');
+  const rawGridRef = useRef<any[][] | null>(null);
 
   const PREVIEW_PAGE_SIZE = 25;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -106,26 +109,70 @@ export function MedicineCsvImportModal({
     setEditingRow(null);
   };
 
+  const handleLoadedFileContent = (text: string) => {
+    rawFileTextRef.current = text;
+
+    // Fast quote-aware true row count
+    const clean = normalizeRawCsvText(text);
+    const lineCount = countTrueCsvRows(clean);
+    setTotalDetectedRows(lineCount);
+
+    setTimeout(() => {
+      // If small file (<= 250 rows), preview all rows so edits apply; if larger file, preview 50 rows instantly
+      const previewLimit = lineCount > 0 && lineCount <= 250 ? lineCount + 1 : 50;
+      const { rows, summary: valSummary } = parseAndValidateCsv(text, existingMedicines, previewLimit);
+      setParsedRows(rows);
+      setSummary(valSummary);
+      setPreviewPage(1);
+      setCurrentStep('preview');
+    }, 30);
+  };
+
   const processFile = (file: File) => {
     setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      if (!text) return;
-      rawFileTextRef.current = text;
+    const isExcel =
+      file.name.toLowerCase().endsWith('.xlsx') ||
+      file.name.toLowerCase().endsWith('.xls') ||
+      file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      file.type === 'application/vnd.ms-excel';
 
-      const lineCount = (text.match(/\n/g) || []).length;
-      setTotalDetectedRows(lineCount);
+    if (isExcel) {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const buffer = e.target?.result as ArrayBuffer;
+        if (!buffer) return;
+        try {
+          const XLSX = await import('xlsx');
+          const workbook = XLSX.read(buffer, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          if (!firstSheetName) return;
+          const worksheet = workbook.Sheets[firstSheetName];
+          const rawMatrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as any[][];
+          rawGridRef.current = rawMatrix;
+          rawFileTextRef.current = '';
 
-      setTimeout(() => {
-        const { rows, summary: valSummary } = parseAndValidateCsv(text, existingMedicines, 50);
-        setParsedRows(rows);
-        setSummary(valSummary);
-        setPreviewPage(1);
-        setCurrentStep('preview');
-      }, 30);
-    };
-    reader.readAsText(file);
+          const { rows, summary: valSummary } = parseAndValidateCsv(rawMatrix, existingMedicines, 50);
+          setTotalDetectedRows(valSummary.totalRows);
+          setParsedRows(rows);
+          setSummary(valSummary);
+          setPreviewPage(1);
+          setCurrentStep('preview');
+        } catch (err) {
+          console.error('Failed to parse Excel file:', err);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        if (!text) return;
+        rawGridRef.current = null;
+        rawFileTextRef.current = text;
+        handleLoadedFileContent(text);
+      };
+      reader.readAsText(file);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -146,10 +193,12 @@ export function MedicineCsvImportModal({
     setImportProgress(null);
     setStreamProgress(null);
 
-    if (totalDetectedRows > 200 && rawFileTextRef.current) {
+    const streamInput = rawGridRef.current || rawFileTextRef.current;
+
+    if (streamInput && (totalDetectedRows > 200 || parsedRows.length < totalDetectedRows)) {
       setIsStreaming(true);
       try {
-        const res = await streamAndIngestCsvToSupabase(rawFileTextRef.current, {
+        const res = await streamAndIngestCsvToSupabase(streamInput, {
           updateExisting,
           batchSize: 500,
           responsibleUser,
@@ -158,22 +207,42 @@ export function MedicineCsvImportModal({
           },
         });
 
+        const hasErrors = (res.failedCount || 0) > 0;
         setFinalResult({
           totalRows: res.totalProcessed,
           validRows: res.totalImported,
-          invalidRows: 0,
+          invalidRows: res.failedCount || 0,
           duplicateRows: 0,
           newMedicinesCount: res.totalImported,
           updatedMedicinesCount: 0,
           successfullyImported: res.totalImported,
           skippedRows: res.totalSkipped,
-          failedRows: 0,
-          errors: [],
+          failedRows: res.failedCount || 0,
+          errors: (res.errors || []).map((err, idx) => ({
+            row: idx + 1,
+            field: 'Database',
+            value: '',
+            reason: err,
+          })),
         });
         setCurrentStep('results');
-        onImportComplete();
+        if (res.totalImported > 0) {
+          onImportComplete();
+        }
       } catch (err: any) {
-        console.warn('Streaming notice:', err);
+        console.error('Streaming ingest error:', err);
+        setFinalResult({
+          totalRows: totalDetectedRows,
+          validRows: 0,
+          invalidRows: totalDetectedRows,
+          duplicateRows: 0,
+          newMedicinesCount: 0,
+          updatedMedicinesCount: 0,
+          successfullyImported: 0,
+          skippedRows: 0,
+          failedRows: totalDetectedRows,
+          errors: [{ row: 0, field: 'Import', value: '', reason: err?.message || 'Error occurred during streaming import' }],
+        });
         setCurrentStep('results');
       } finally {
         setIsStreaming(false);
@@ -191,8 +260,23 @@ export function MedicineCsvImportModal({
         );
         setFinalResult(res);
         setCurrentStep('results');
-        onImportComplete();
-      } catch {
+        if (res.successfullyImported > 0) {
+          onImportComplete();
+        }
+      } catch (err: any) {
+        console.error('executeCsvImport error:', err);
+        setFinalResult({
+          totalRows: parsedRows.length,
+          validRows: 0,
+          invalidRows: parsedRows.length,
+          duplicateRows: 0,
+          newMedicinesCount: 0,
+          updatedMedicinesCount: 0,
+          successfullyImported: 0,
+          skippedRows: 0,
+          failedRows: parsedRows.length,
+          errors: [{ row: 0, field: 'Import', value: '', reason: err?.message || 'Failed to import medicine records' }],
+        });
         setCurrentStep('results');
       }
     }
@@ -224,6 +308,7 @@ export function MedicineCsvImportModal({
     setIsStreaming(false);
     setStreamProgress(null);
     rawFileTextRef.current = '';
+    rawGridRef.current = null;
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -260,10 +345,10 @@ export function MedicineCsvImportModal({
               </div>
               <div>
                 <h2 className="text-base sm:text-lg font-black text-[#16191E]">
-                  Medicine Master CSV Import
+                  Medicine Master Import (CSV &amp; Excel)
                 </h2>
                 <p className="text-xs text-[#8A909D] font-medium">
-                  Import medicine catalog, batch inventory, and formulation records
+                  Import medicine catalog, batch inventory, and formulation records from CSV or XLSX
                 </p>
               </div>
             </div>
@@ -277,7 +362,7 @@ export function MedicineCsvImportModal({
 
           <div className="flex items-center border-b border-slate-100 px-6 py-3 bg-[#FAFBFD] text-xs font-semibold gap-2">
             {[
-              { step: 'upload', label: '1. Upload CSV' },
+              { step: 'upload', label: '1. Upload File (CSV / XLSX)' },
               { step: 'preview', label: '2. Validate & Preview' },
               { step: 'results', label: '3. Import Summary' },
             ].map((st, i, arr) => {
@@ -309,7 +394,7 @@ export function MedicineCsvImportModal({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".csv,text/csv"
+                    accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xls,application/vnd.ms-excel"
                     onChange={handleFileChange}
                     className="hidden"
                   />
@@ -317,13 +402,13 @@ export function MedicineCsvImportModal({
                     <UploadCloud className="w-8 h-8" />
                   </div>
                   <h3 className="text-base font-bold text-slate-800">
-                    Click to browse or drop CSV file here
+                    Click to browse or drop CSV or Excel (XLSX) file here
                   </h3>
                   <p className="text-xs text-slate-400 mt-1.5 max-w-sm">
-                    Upload your medicine formulary or inventory CSV file to synchronize catalog records.
+                    Upload your medicine formulary or inventory CSV or XLSX spreadsheet to synchronize catalog records.
                   </p>
                   <span className="mt-5 px-5 py-2.5 bg-white border border-slate-200 group-hover:border-blue-300 text-slate-700 rounded-xl text-xs font-semibold shadow-2xs">
-                    Select CSV File
+                    Select CSV or Excel File
                   </span>
                 </div>
               </div>
@@ -596,17 +681,44 @@ export function MedicineCsvImportModal({
 
             {currentStep === 'results' && finalResult && (
               <div className="space-y-6">
-                <div className="p-6 bg-emerald-50/50 border border-emerald-100 rounded-3xl text-center space-y-2">
-                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-2">
-                    <CheckCircle className="w-6 h-6" />
+                {finalResult.successfullyImported > 0 ? (
+                  <div className="p-6 bg-emerald-50/50 border border-emerald-100 rounded-3xl text-center space-y-2">
+                    <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-2">
+                      <CheckCircle className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-lg font-black text-slate-800">
+                      Import Completed Successfully!
+                    </h3>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      {finalResult.successfullyImported.toLocaleString()} medicines and batch inventory synchronized to Supabase.
+                    </p>
                   </div>
-                  <h3 className="text-lg font-black text-slate-800">
-                    Import Completed Successfully!
-                  </h3>
-                  <p className="text-xs text-slate-500 max-w-md mx-auto">
-                    The medicine master catalog and batch inventory have been synchronized.
-                  </p>
-                </div>
+                ) : finalResult.skippedRows > 0 && finalResult.failedRows === 0 ? (
+                  <div className="p-6 bg-amber-50/50 border border-amber-200 rounded-3xl text-center space-y-2">
+                    <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-2">
+                      <AlertTriangle className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-lg font-black text-slate-800">
+                      Import Completed ({finalResult.skippedRows.toLocaleString()} Skipped)
+                    </h3>
+                    <p className="text-xs text-amber-700 max-w-md mx-auto">
+                      {finalResult.errors[0]?.reason ||
+                        'All rows were skipped because items already exist in database or were flagged as discontinued.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-6 bg-red-50/50 border border-red-200 rounded-3xl text-center space-y-2">
+                    <div className="w-12 h-12 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-2">
+                      <AlertCircle className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-lg font-black text-slate-800">
+                      Import Failed to Synchronize
+                    </h3>
+                    <p className="text-xs text-red-600 max-w-md mx-auto">
+                      {finalResult.errors[0]?.reason || 'Records could not be saved to Supabase. Check error diagnostics below.'}
+                    </p>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-4 bg-[#F8F9FB] rounded-2xl border border-slate-100 text-center">

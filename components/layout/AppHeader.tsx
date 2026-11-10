@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { PanelLeft, HeartPulse, Search, LogIn, Lock } from 'lucide-react';
+import { PanelLeft, HeartPulse, Search, LogIn, Lock, ChevronDown, Building2, Check } from 'lucide-react';
 import { NavSection, Patient, InventoryItem } from '@/types';
+import { DbClinicLocation } from '@/types/database';
 import { GlobalPatientSearch } from '@/components/common/GlobalPatientSearch';
 import { GlobalPharmacySearch } from '@/components/common/GlobalPharmacySearch';
 import { GlobalSettingsSearch } from '@/components/common/GlobalSettingsSearch';
@@ -25,6 +26,12 @@ interface AppHeaderProps {
   queue?: Patient[];
   onSelectConsult?: (patient: Patient) => void;
   inventory?: InventoryItem[];
+  branchName?: string;
+  branchCode?: string;
+  clinicLocations?: DbClinicLocation[];
+  currentLocation?: DbClinicLocation | null;
+  onSelectLocation?: (loc: DbClinicLocation) => void;
+  isAdmin?: boolean;
 }
 
 export function AppHeader({
@@ -43,8 +50,15 @@ export function AppHeader({
   queue = [],
   onSelectConsult,
   inventory = [],
+  branchName,
+  branchCode,
+  clinicLocations = [],
+  currentLocation,
+  onSelectLocation,
+  isAdmin = false,
 }: AppHeaderProps) {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [isBranchDropdownOpen, setIsBranchDropdownOpen] = useState(false);
   const isPharmacyStock = activeSection === 'inventory';
   const isSettings = activeSection === 'settings';
   const isAnalytics = activeSection === 'analytics';
@@ -142,10 +156,85 @@ export function AppHeader({
                 </span>
               </div>
             ) : (
-              <div className="flex items-center space-x-2 flex-shrink-0">
+              <div className="relative flex items-center space-x-2.5 flex-shrink-0">
                 <span className="text-xs font-bold uppercase tracking-wider text-[#8A909D] whitespace-nowrap">
                   CLMS Worklist
                 </span>
+                {branchName && (
+                  <div className="relative">
+                    {isAdmin && clinicLocations && clinicLocations.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsBranchDropdownOpen((prev) => !prev)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#2563EB] border border-blue-100/90 shadow-2xs hover:bg-blue-100/80 transition cursor-pointer"
+                        title="Click to switch clinic branch dashboard (Admin Doctor)"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] animate-pulse flex-shrink-0" />
+                        <span className="truncate max-w-[160px] sm:max-w-[220px]">
+                          {branchName} {branchCode ? `(${branchCode})` : ''}
+                        </span>
+                        <ChevronDown className={`w-3 h-3 text-blue-500 transition-transform duration-150 ${isBranchDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                    ) : (
+                      <div
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100/90 text-slate-700 border border-slate-200/80 shadow-2xs select-none"
+                        title="Branch Allocated Workspace"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                        <span className="truncate max-w-[160px] sm:max-w-[220px]">
+                          {branchName} {branchCode ? `(${branchCode})` : ''}
+                        </span>
+                      </div>
+                    )}
+
+                    {isAdmin && isBranchDropdownOpen && clinicLocations && clinicLocations.length > 0 && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setIsBranchDropdownOpen(false)}
+                        />
+                        <div className="absolute left-0 mt-1.5 w-68 bg-white rounded-2xl shadow-xl border border-slate-200/90 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                          <div className="px-3.5 py-1.5 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <Building2 className="w-3 h-3 text-blue-600" />
+                              <span>Switch Branch</span>
+                            </span>
+                            <span className="text-blue-600 font-semibold">{clinicLocations.length} Locations</span>
+                          </div>
+                          <div className="max-h-64 overflow-y-auto py-1">
+                            {clinicLocations.map((loc) => {
+                              const isCurrent = loc.id === currentLocation?.id || loc.branch_name === branchName;
+                              return (
+                                <button
+                                  key={loc.id}
+                                  type="button"
+                                  onClick={() => {
+                                    if (onSelectLocation) onSelectLocation(loc);
+                                    setIsBranchDropdownOpen(false);
+                                  }}
+                                  className={`w-full px-3.5 py-2 text-left flex items-center justify-between gap-2 text-xs transition cursor-pointer ${
+                                    isCurrent ? 'bg-blue-50/80 font-bold text-blue-700' : 'text-slate-700 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCurrent ? 'bg-blue-600' : 'bg-slate-300'}`} />
+                                      <span className="truncate">{loc.branch_name}</span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 pl-3 truncate">
+                                      {loc.branch_code || 'MAIN'} • {loc.address || 'Kochi'}
+                                    </div>
+                                  </div>
+                                  {isCurrent && <Check className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -206,61 +295,44 @@ export function AppHeader({
               </motion.div>
             )}
 
-            {!['inventory', 'analytics', 'assistant'].includes(activeSection) ? (
-              isLoggedIn || !requireDoctorPin ? (
-                <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
-                  <span
-                    className={`font-bold bg-[#EBECEF] text-[#16191E] rounded-xl border border-[#ECEEF2] flex items-center whitespace-nowrap ${isMobile ? 'h-9 text-[10px] px-2 max-w-[105px] truncate' : 'h-10 text-xs px-3 sm:px-3.5'
-                      }`}
-                  >
-                    <span className="hidden xl:inline">
-                      {doctorProfile.name} ({doctorProfile.title})
-                    </span>
-                    <span className="xl:hidden truncate">{doctorProfile.name}</span>
+            {isLoggedIn || !requireDoctorPin ? (
+              <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
+                <span
+                  className={`font-bold bg-[#EBECEF] text-[#16191E] rounded-xl border border-[#ECEEF2] flex items-center whitespace-nowrap ${isMobile ? 'h-9 text-[10px] px-2 max-w-[105px] truncate' : 'h-10 text-xs px-3 sm:px-3.5'
+                    }`}
+                >
+                  <span className="hidden xl:inline">
+                    {doctorProfile.name} ({doctorProfile.title})
                   </span>
-                  {requireDoctorPin && (
-                    <motion.button
-                      whileHover={{ scale: 1.04 }}
-                      whileTap={{ scale: 0.96 }}
-                      onClick={onLogout}
-                      className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
-                        isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
-                      }`}
-                      title="Lock Doctor Session"
-                    >
-                      <Lock className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
-                      <span>Exit</span>
-                    </motion.button>
-                  )}
-                </div>
-              ) : (
-                <motion.button
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={onOpenPinModal}
-                  className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
-                    isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
-                  }`}
-                >
-                  <LogIn className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
-                  <span className="whitespace-nowrap">Sign In</span>
-                </motion.button>
-              )
+                  <span className="xl:hidden truncate">{doctorProfile.name}</span>
+                </span>
+                {requireDoctorPin && (
+                  <motion.button
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
+                    onClick={onLogout}
+                    className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
+                      isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
+                    }`}
+                    title="Lock Doctor Session"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
+                    <span>Exit</span>
+                  </motion.button>
+                )}
+              </div>
             ) : (
-              isLoggedIn && requireDoctorPin ? (
-                <motion.button
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={onLogout}
-                  className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
-                    isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
-                  }`}
-                  title="Lock Doctor Session"
-                >
-                  <Lock className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
-                  <span>Exit</span>
-                </motion.button>
-              ) : null
+              <motion.button
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.96 }}
+                onClick={onOpenPinModal}
+                className={`bg-[#2563EB] hover:bg-blue-700 text-white font-semibold rounded-xl flex items-center justify-center transition duration-150 cursor-pointer whitespace-nowrap flex-shrink-0 group shadow-2xs ${
+                  isMobile ? 'h-9 text-[11px] px-2.5 min-w-[74px] space-x-1' : 'h-10 text-xs px-3.5 min-w-[82px] space-x-1.5'
+                }`}
+              >
+                <LogIn className="w-3.5 h-3.5 text-blue-200 group-hover:text-white stroke-[2.2] flex-shrink-0" />
+                <span className="whitespace-nowrap">Sign In</span>
+              </motion.button>
             )}
           </div>
         </>

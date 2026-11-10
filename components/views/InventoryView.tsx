@@ -21,6 +21,7 @@ import {
   Check,
   Pill,
   Pencil,
+  RefreshCw,
 } from 'lucide-react';
 import { InventoryItem } from '@/types';
 import { MedicineMaster, DosageForm, Supplier } from '@/types/medicine';
@@ -78,7 +79,7 @@ const DEFAULT_CATEGORIES = [
   'General Medicine',
 ];
 
-const ITEMS_PER_PAGE = 7;
+const ITEMS_PER_PAGE = 10;
 
 export function InventoryView({
   inventory,
@@ -99,6 +100,7 @@ export function InventoryView({
 }: InventoryViewProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [internalSearch, setInternalSearch] = useState(searchQuery);
+  const [syncingChunks, setSyncingChunks] = useState<boolean>(false);
 
   const [medicines, setMedicines] = useState<MedicineMaster[]>([]);
   const [suppliersList, setSuppliersList] = useState<Supplier[]>([]);
@@ -149,16 +151,27 @@ export function InventoryView({
     if (!silent) setLoadingMeds(true);
     try {
       const [data, sups] = await Promise.all([
-        fetchMedicinesMaster(),
+        fetchMedicinesMaster((chunkMeds, totalCount) => {
+          setMedicines(chunkMeds);
+          if (chunkMeds.length < totalCount) {
+            setSyncingChunks(true);
+          } else {
+            setSyncingChunks(false);
+          }
+        }),
         fetchSuppliers(),
       ]);
       setMedicines(data);
       setSuppliersList(sups);
+      setSyncingChunks(false);
       if (onInventorySync) {
         onInventorySync(convertMasterToInventoryItems(data));
       }
+    } catch (err) {
+      console.error('Failed to load medicines master:', err);
     } finally {
       if (!silent) setLoadingMeds(false);
+      setSyncingChunks(false);
     }
   };
 
@@ -407,7 +420,7 @@ export function InventoryView({
               className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Import CSV Master</span>
+              <span>Import CSV / Excel</span>
             </motion.button>
           )}
 
@@ -928,13 +941,19 @@ export function InventoryView({
       <div className="relative space-y-5">
         <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] p-4 sm:p-5 overflow-hidden">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-4 border-b border-slate-100 gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <h3 className="text-base font-bold text-slate-800">
                 Medicine Directory
               </h3>
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
                 {medicines.length} Registered
               </span>
+              {syncingChunks && (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 bg-blue-50/80 px-2 py-0.5 rounded-full border border-blue-100">
+                  <RefreshCw className="w-3 h-3 animate-spin text-blue-500" />
+                  Loading full catalog...
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-2.5 flex-wrap">
