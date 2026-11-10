@@ -561,7 +561,7 @@ function DashboardContent() {
     { id: 'queue', label: 'Doctor Queue', icon: Users, reqAuth: true },
     { id: 'consult', label: 'Consultation', icon: Stethoscope, reqAuth: true },
     { id: 'inventory', label: 'Pharmacy Stock', icon: Boxes, reqAuth: true },
-    { id: 'tables', label: 'Tables', icon: Table, reqAuth: false },
+    { id: 'tables', label: 'Visit Logs', icon: Table, reqAuth: true },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, reqAuth: true },
     {
       id: 'admin_doctors',
@@ -793,7 +793,7 @@ function DashboardContent() {
     try {
       logoutDoctor();
     } catch { }
-    if (['queue', 'consult', 'inventory', 'analytics', 'settings'].includes(activeSection)) {
+    if (['queue', 'consult', 'inventory', 'analytics', 'settings', 'tables', 'admin_doctors'].includes(activeSection)) {
       setActiveSection('assistant');
     }
     if (savedDoc?.doctorId) {
@@ -1742,27 +1742,60 @@ function DashboardContent() {
                 )}
 
                 {activeSection === 'tables' && (
-                  <TablesView
-                    initialQueue={queue}
-                    onOpenConsultation={(patientId) => {
-                      startConsultation(patientId);
-                      setActiveSection('consult');
-                    }}
-                    onPrintRecord={(patient) => {
-                      setPrintRecord({
-                        date: patient.appointmentDate || getTodayIST(),
-                        patientName: patient.name,
-                        patientPhone: patient.phone,
-                        demographics: `${patient.age} Yrs / ${patient.gender}`,
-                        diagnostics: patient.cancellationReason || 'Consultation verified',
-                        items: [],
-                        patientAge: patient.age,
-                        patientGender: patient.gender,
-                        tokenNumber: patient.tokenNumber || patient.displayId || '',
-                      });
-                      setShowPrintModal(true);
-                    }}
-                  />
+                  !isDoctorUnlocked && config.require_doctor_pin ? (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="bg-white rounded-3xl p-8 sm:p-12 border border-slate-100 shadow-sm max-w-lg mx-auto text-center mt-12"
+                    >
+                      <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto mb-4 text-amber-600">
+                        <Lock className="w-8 h-8" />
+                      </div>
+                      <h2 className="text-xl font-bold text-slate-800 mb-2">Doctor Security Verification Required</h2>
+                      <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+                        Visit Logs are protected. Please authenticate with your doctor PIN to access patient encounter records.
+                      </p>
+                      <div className="flex items-center justify-center gap-3">
+                        <button
+                          onClick={() => {
+                            setIntendedSection('tables');
+                            setShowPinModal(true);
+                          }}
+                          className="px-5 py-2.5 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                        >
+                          Unlock Chamber
+                        </button>
+                        <button
+                          onClick={() => setActiveSection('dashboard')}
+                          className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                        >
+                          Back to Dashboard
+                        </button>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <TablesView
+                      initialQueue={queue}
+                      onOpenConsultation={(patientId) => {
+                        startConsultation(patientId);
+                        setActiveSection('consult');
+                      }}
+                      onPrintRecord={(patient) => {
+                        setPrintRecord({
+                          date: patient.appointmentDate || getTodayIST(),
+                          patientName: patient.name,
+                          patientPhone: patient.phone,
+                          demographics: `${patient.age} Yrs / ${patient.gender}`,
+                          diagnostics: patient.cancellationReason || 'Consultation verified',
+                          items: [],
+                          patientAge: patient.age,
+                          patientGender: patient.gender,
+                          tokenNumber: patient.tokenNumber || patient.displayId || '',
+                        });
+                        setShowPrintModal(true);
+                      }}
+                    />
+                  )
                 )}
 
                 {activeSection === 'assistant' && (

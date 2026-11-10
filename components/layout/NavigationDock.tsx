@@ -26,7 +26,7 @@ export function NavigationDock({
       case 'dashboard':
         return 'Home';
       case 'tables':
-        return 'Tables';
+        return 'Visits';
       case 'assistant':
         return 'Desk';
       case 'queue':
