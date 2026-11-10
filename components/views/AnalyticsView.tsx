@@ -300,54 +300,54 @@ export function AnalyticsView({
     );
   }, [searchQuery, topSellingMedicines]);
 
-const filteredCases = useMemo(() => {
-  const q = searchQuery.trim().toLowerCase();
-  if (!q) return casesData;
-  return casesData.filter((c) => (c.label || '').toLowerCase().includes(q));
+  const filteredCases = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return casesData;
+    return casesData.filter((c) => (c.label || '').toLowerCase().includes(q));
   }, [searchQuery]);
 
-const filteredCancelled = useMemo(() => {
-  const q = searchQuery.trim().toLowerCase();
-  if (!q) return cancelledList;
-  return cancelledList.filter(
-    (p) =>
-      (p.name || '').toLowerCase().includes(q) ||
-      (p.phone || '').toLowerCase().includes(q) ||
-      (p.cancellationReason || '').toLowerCase().includes(q)
-  );
+  const filteredCancelled = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return cancelledList;
+    return cancelledList.filter(
+      (p) =>
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.phone || '').toLowerCase().includes(q) ||
+        (p.cancellationReason || '').toLowerCase().includes(q)
+    );
   }, [searchQuery, cancelledList]);
 
-const totalCancelledPages = Math.max(1, Math.ceil(filteredCancelled.length / CANCELLED_PER_PAGE));
+  const totalCancelledPages = Math.max(1, Math.ceil(filteredCancelled.length / CANCELLED_PER_PAGE));
 
-useEffect(() => {
-  if (cancelledPage > totalCancelledPages) {
-    setCancelledPage(totalCancelledPages);
-  }
-}, [cancelledPage, totalCancelledPages]);
+  useEffect(() => {
+    if (cancelledPage > totalCancelledPages) {
+      setCancelledPage(totalCancelledPages);
+    }
+  }, [cancelledPage, totalCancelledPages]);
 
-const paginatedCancelled = useMemo(() => {
-  const start = (cancelledPage - 1) * CANCELLED_PER_PAGE;
-  return filteredCancelled.slice(start, start + CANCELLED_PER_PAGE);
-}, [filteredCancelled, cancelledPage]);
+  const paginatedCancelled = useMemo(() => {
+    const start = (cancelledPage - 1) * CANCELLED_PER_PAGE;
+    return filteredCancelled.slice(start, start + CANCELLED_PER_PAGE);
+  }, [filteredCancelled, cancelledPage]);
 
-return (
-  <motion.section
-    key="analytics-view"
-    initial={{ opacity: 0, y: 12 }}
-    animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0, y: -12 }}
-    transition={{ duration: 0.25 }}
-    className="space-y-5 sm:space-y-6 pb-12"
-  >
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
-      <div>
-        <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
-          Clinic Analytics &amp; Practice Insights
-        </h2>
-        <p className="text-xs text-slate-400 mt-0.5">
-          Monitor patient volume trends, consultation dynamics, digital adoption, and pharmacy metrics
-        </p>
-      </div>
+  return (
+    <motion.section
+      key="analytics-view"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -12 }}
+      transition={{ duration: 0.25 }}
+      className="space-y-5 sm:space-y-6 pb-12"
+    >
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
+        <div>
+          <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
+            Clinic Analytics &amp; Practice Insights
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Monitor patient volume trends, consultation dynamics, digital adoption, and pharmacy metrics
+          </p>
+        </div>
 
         <div className="flex items-center space-x-3 self-start sm:self-auto">
           <div className="flex items-center bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/80 p-1 shadow-xs hover:border-slate-300 transition-all">
@@ -358,9 +358,8 @@ return (
                   key={period.id}
                   type="button"
                   onClick={() => setSelectedPeriod(period.id)}
-                  className={`relative px-3.5 py-1.5 text-xs font-bold rounded-xl transition-colors cursor-pointer select-none ${
-                    isActive ? 'text-white' : 'text-slate-600 hover:text-slate-800'
-                  }`}
+                  className={`relative px-3.5 py-1.5 text-xs font-bold rounded-xl transition-colors cursor-pointer select-none ${isActive ? 'text-white' : 'text-slate-600 hover:text-slate-800'
+                    }`}
                 >
                   {isActive && (
                     <motion.div
@@ -428,7 +427,7 @@ return (
             </div>
             <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-1">
               <ArrowUpRight className="w-3 h-3 flex-shrink-0" />
-              <span>{activeCount > 0 ? `${ Math.round((whatsappCount / activeCount) * 100) }% ` : '0%'}</span>
+              <span>{activeCount > 0 ? `${Math.round((whatsappCount / activeCount) * 100)}% ` : '0%'}</span>
               <span className="text-slate-400 font-normal">digital adoption</span>
             </span>
           </div>
@@ -455,7 +454,7 @@ return (
             </div>
             <span className="text-[11px] text-indigo-600 font-semibold flex items-center gap-1 mt-1">
               <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
-              <span>{activeCount > 0 ? `${ Math.round((completedCount / activeCount) * 100) }% ` : '0%'}</span>
+              <span>{activeCount > 0 ? `${Math.round((completedCount / activeCount) * 100)}% ` : '0%'}</span>
               <span className="text-slate-400 font-normal">consulted</span>
             </span>
           </div>
@@ -482,7 +481,7 @@ return (
             </div>
             <span className="text-[11px] text-rose-600 font-semibold flex items-center gap-1 mt-1">
               <ArrowDownRight className="w-3 h-3 flex-shrink-0" />
-              <span>{cancelledCount > 0 ? `${ cancellationRate }% ` : '0%'}</span>
+              <span>{cancelledCount > 0 ? `${cancellationRate}% ` : '0%'}</span>
               <span className="text-slate-400 font-normal">cancellation rate</span>
             </span>
           </div>
@@ -645,7 +644,7 @@ return (
                 >
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center space-x-2">
-                      <span className={`w - 2.5 h - 2.5 rounded - full flex - shrink - 0 ${ item.color } `} />
+                      <span className={`w - 2.5 h - 2.5 rounded - full flex - shrink - 0 ${item.color} `} />
                       <span className="text-slate-700 font-medium">{item.label}</span>
                     </div>
                     <span className="text-slate-800 font-bold ml-4">{item.pct}</span>
@@ -655,7 +654,7 @@ return (
                       initial={{ width: 0 }}
                       animate={{ width: item.pct }}
                       transition={{ duration: 0.6, ease: 'easeOut' }}
-                      className={`h - full rounded - full ${ item.color } `}
+                      className={`h - full rounded - full ${item.color} `}
                     />
                   </div>
                 </motion.div>

@@ -37,6 +37,8 @@ export function NavigationDock({
         return 'Stock';
       case 'analytics':
         return 'Stats';
+      case 'admin_doctors':
+        return 'Doctors';
       case 'settings':
         return 'Settings';
       default:

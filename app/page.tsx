@@ -15,6 +15,7 @@ import {
   SlidersHorizontal,
   Lock,
   UserCog,
+  ShieldAlert,
 } from 'lucide-react';
 
 import { ClinicProvider, useClinic } from '@/context/ClinicContext';
@@ -38,6 +39,7 @@ import {
   verifyClinicPin,
   verifyClinicOrDoctorPin,
   getDoctors,
+  fetchClinicLocations,
   subscribeToClinicUpdates,
   subscribeToChatUpdates,
   fetchInboundChatThreads,
@@ -58,7 +60,7 @@ import {
   PortalMode,
   ConfirmedToken,
 } from '@/types';
-import { DbDoctor } from '@/types/database';
+import { DbDoctor, DbClinicLocation } from '@/types/database';
 
 import EcgLoadingScreen from '@/components/loading/EcgLoadingScreen';
 import { SideMenu, NavItemConfig } from '@/components/layout/SideMenu';
@@ -90,6 +92,8 @@ import { InventoryView } from '@/components/views/InventoryView';
 import { dispenseFefo, fetchMedicinesMaster, convertMasterToInventoryItems } from '@/lib/medicineService';
 import { AnalyticsView } from '@/components/views/AnalyticsView';
 import { SettingsView } from '@/components/views/SettingsView';
+import { DoctorManagementSettings } from '@/components/settings/DoctorManagementSettings';
+import { verifyBranchGatewayLogin, verifyBranchDoctorPin } from '@/lib/doctorService';
 import { ToastNotification, ToastMessage, ToastType } from '@/components/ui/ToastNotification';
 import { getTodayIST } from '@/lib/utils';
 
@@ -213,6 +217,25 @@ function DashboardContent() {
   const [pendingConsultPatient, setPendingConsultPatient] = useState<Patient | null>(null);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
+  const [pinErrorMessage, setPinErrorMessage] = useState('');
+  const [clinicLocations, setClinicLocations] = useState<DbClinicLocation[]>([]);
+  const [currentLocation, setCurrentLocation] = useState<DbClinicLocation | null>(null);
+
+  const [currentClinicId, setCurrentClinicId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('healthsync_active_clinic_id') || null;
+    }
+    return null;
+  });
+
+  const [isDoctorAdmin, setIsDoctorAdmin] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const doc = getDoctorSessionLocal();
+      if (doc?.isAdmin) return true;
+      if (doc?.doctorId === '7ff87d97-4c12-42c3-b1b3-44a7a5933a83' || doc?.doctorId === 'defefb30-c455-45e6-b524-d1bbe65bb696') return true;
+    }
+    return false;
+  });
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -229,12 +252,17 @@ function DashboardContent() {
       setPortalMode('dashboard');
       if (docSession) {
         setIsLoggedIn(true);
+        if (docSession.clinicId) setCurrentClinicId(docSession.clinicId);
+        const adminFlag = Boolean(docSession.isAdmin || docSession.doctorId === '7ff87d97-4c12-42c3-b1b3-44a7a5933a83' || docSession.doctorId === 'defefb30-c455-45e6-b524-d1bbe65bb696');
+        setIsDoctorAdmin(adminFlag);
         setDoctorProfile({
           name: docSession.name,
           title: docSession.title,
         });
       } else if (clinicSession) {
         setIsLoggedIn(false);
+        setIsDoctorAdmin(false);
+        if (clinicSession.clinicId) setCurrentClinicId(clinicSession.clinicId);
         setDoctorProfile({
           name: clinicSession.name || 'Clinic Assistant',
           title: 'Reception & Triage',
@@ -242,6 +270,7 @@ function DashboardContent() {
       }
     } else {
       setIsLoggedIn(false);
+      setIsDoctorAdmin(false);
       setDoctorProfile({
         name: 'Clinic Assistant',
         title: 'Reception & Triage',
@@ -297,22 +326,38 @@ function DashboardContent() {
 
   const syncQueueOnly = useCallback(async () => {
     try {
-      const dbQueue = await fetchQueueFromDb();
+      const locId = currentLocation?.id;
+      const dbQueue = await fetchQueueFromDb(undefined, undefined, locId);
       if (dbQueue && Array.isArray(dbQueue)) {
         setQueue(sortQueueWithCompletedAtEnd(dbQueue));
       }
     } catch (err) {
       console.warn('Queue live sync error:', err);
     }
-  }, []);
+  }, [currentLocation]);
 
   const syncClinicData = useCallback(async (silent: boolean = true) => {
     try {
-      const [dbQueue, dbInventory, dbDoctors] = await Promise.all([
-        fetchQueueFromDb(),
+      const activeClinic = currentClinicId || (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) || undefined;
+      const locId = currentLocation?.id;
+      const [dbQueue, dbInventory, dbDoctors, locs] = await Promise.all([
+        fetchQueueFromDb(undefined, undefined, locId),
         fetchInventoryFromDb(),
-        getDoctors(),
+        getDoctors(activeClinic),
+        fetchClinicLocations(activeClinic),
       ]);
+
+      if (locs && locs.length > 0) {
+        setClinicLocations(locs);
+        if (!currentLocation || !locs.find((l) => l.id === currentLocation.id)) {
+          const stored = typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') : null;
+          const matched = locs.find((l) => l.id === stored) || locs[0];
+          setCurrentLocation(matched);
+          if (typeof window !== 'undefined' && matched) {
+            localStorage.setItem('healthsync_active_location_id', matched.id);
+          }
+        }
+      }
 
       if (dbQueue) {
         setQueue(sortQueueWithCompletedAtEnd(dbQueue));
@@ -331,6 +376,18 @@ function DashboardContent() {
     } catch (err) {
       if (!silent) console.warn('Failed to sync Supabase data:', err);
     }
+  }, [currentLocation, currentClinicId]);
+
+  const handleSelectLocation = useCallback((loc: DbClinicLocation) => {
+    setCurrentLocation(loc);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('healthsync_active_location_id', loc.id);
+    }
+    fetchQueueFromDb(undefined, undefined, loc.id).then((fresh) => {
+      if (fresh && Array.isArray(fresh)) {
+        setQueue(sortQueueWithCompletedAtEnd(fresh));
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -338,13 +395,21 @@ function DashboardContent() {
 
     async function initialLoad() {
       try {
-        const [dbQueue, dbInventory, dbDoctors] = await Promise.all([
-          fetchQueueFromDb(),
+        const storedLoc = typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') : null;
+        const storedClinic = typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null;
+        const [dbQueue, dbInventory, dbDoctors, locs] = await Promise.all([
+          fetchQueueFromDb(undefined, undefined, storedLoc || undefined),
           fetchInventoryFromDb(),
-          getDoctors(),
+          getDoctors(storedClinic || undefined),
+          fetchClinicLocations(storedClinic || undefined),
         ]);
 
         if (isMounted) {
+          if (locs && locs.length > 0) {
+            setClinicLocations(locs);
+            const matched = locs.find((l) => l.id === storedLoc) || locs[0];
+            setCurrentLocation(matched);
+          }
           if (dbQueue) {
             setQueue(sortQueueWithCompletedAtEnd(dbQueue));
           }
@@ -490,7 +555,7 @@ function DashboardContent() {
     };
   }, []);
 
-  const navItems: NavItemConfig[] = [
+  const allNavItems: NavItemConfig[] = [
     { id: 'dashboard', label: 'Dashboard', icon: Home, reqAuth: false },
     { id: 'tables', label: 'Tables', icon: Table, reqAuth: false },
     { id: 'assistant', label: 'Assistant Desk', icon: ClipboardList, reqAuth: false },
@@ -498,12 +563,35 @@ function DashboardContent() {
     { id: 'consult', label: 'Consultation', icon: Stethoscope, reqAuth: true },
     { id: 'inventory', label: 'Pharmacy Stock', icon: Boxes, reqAuth: true },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, reqAuth: true },
+    {
+      id: 'admin_doctors',
+      label: 'Doctor Management',
+      icon: Stethoscope,
+      reqAuth: true,
+      badge: 'Admin',
+      description: 'Clinic & Branch Assignments, Quotas, PINs',
+    },
     { id: 'settings', label: 'Settings', icon: SlidersHorizontal, reqAuth: true },
   ];
 
+  const navItems = React.useMemo(() => {
+    return allNavItems.filter((item) => {
+      // ONLY the active Main Doctor with Admin Access can see Settings & Doctor Management!
+      if (item.id === 'settings' || item.id === 'admin_doctors') {
+        return isDoctorAdmin;
+      }
+      return true;
+    });
+  }, [isDoctorAdmin]);
+
   const handleNavClick = (section: NavSection, reqAuth: boolean) => {
+    if ((section === 'settings' || section === 'admin_doctors') && !isDoctorAdmin) {
+      showToast('error', 'Admin Access Required', 'Only the Main Doctor / Medical Director with Admin Access can configure branches, doctors, and settings.');
+      return;
+    }
     if (reqAuth && !isLoggedIn && config.require_doctor_pin) {
       setIntendedSection(section);
+      setPinErrorMessage('');
       setShowPinModal(true);
       return;
     }
@@ -515,48 +603,138 @@ function DashboardContent() {
     const clean = pinInput.trim();
     if (!clean) {
       setPinError(true);
+      setPinErrorMessage('Please enter a PIN');
       return;
     }
 
     if (portalMode === 'gateway') {
-      const clinicRes = await verifyClinicPin(clean);
-      if (clinicRes.success) {
+      const branchRes = await verifyBranchGatewayLogin(clean);
+      if (branchRes.success && branchRes.branch_id) {
+        const clinicId = branchRes.clinic_id || '9e8b98f5-e268-4b11-8ca1-ec1ce83292ea';
+        const clinicName = branchRes.clinic_name || 'Clinic';
+        const locationId = branchRes.branch_id;
+
         saveClinicSessionLocal({
           role: 'assistant',
-          name: 'Clinic Assistant',
+          name: branchRes.branch_name ? `${branchRes.branch_name} Assistant` : 'Clinic Assistant',
           expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+          clinicId,
+          clinicName,
+          locationId,
+          isAdmin: false,
         });
 
         clearDoctorSessionLocal();
         setIsLoggedIn(false);
+        setIsDoctorAdmin(false);
+        setCurrentClinicId(clinicId);
+
+        const freshLocs = await fetchClinicLocations(clinicId);
+        setClinicLocations(freshLocs);
+        const matched = freshLocs.find((l) => l.id === locationId) || freshLocs[0];
+        if (matched) {
+          setCurrentLocation(matched);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('healthsync_active_location_id', matched.id);
+            localStorage.setItem('healthsync_active_clinic_id', clinicId);
+          }
+        }
+
         setDoctorProfile({
-          name: 'Clinic Assistant',
+          name: branchRes.branch_name ? `${branchRes.branch_name} Assistant` : 'Clinic Assistant',
           title: 'Reception & Triage',
         });
 
         setShowPinModal(false);
         setPinError(false);
+        setPinErrorMessage('');
+        setPinInput('');
+        setPortalMode('dashboard');
+        // When assistant opens with their branch PIN, route directly to Assistant Desk
+        setActiveSection(intendedSection || 'assistant');
+        setIntendedSection(null);
+        showToast('success', 'Branch Gateway Connected', `Active Location: ${branchRes.branch_name} (${branchRes.branch_code || 'HS'})`);
+        syncQueueOnly();
+        return;
+      }
+
+      // Fallback: Check if the PIN entered at Gateway belongs to a Doctor
+      const docRes = await verifyBranchDoctorPin(clean, currentLocation?.id || 'loc-central', currentClinicId || undefined);
+      if (docRes.success && docRes.doctor) {
+        const docClinicId = docRes.doctor.clinic_id || '9e8b98f5-e268-4b11-8ca1-ec1ce83292ea';
+        const isAdmin = Boolean(docRes.is_admin_doctor);
+
+        saveDoctorSessionLocal({
+          doctorId: docRes.doctor.id,
+          name: docRes.doctor.full_name,
+          title: docRes.doctor.specialization || 'General Medicine',
+          expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+          clinicId: docClinicId,
+          clinicName: docRes.doctor.clinic_name || undefined,
+          isAdmin,
+        });
+
+        setIsLoggedIn(true);
+        setIsDoctorAdmin(isAdmin);
+        setCurrentClinicId(docClinicId);
+
+        const freshLocs = await fetchClinicLocations(docClinicId);
+        setClinicLocations(freshLocs);
+        if (freshLocs.length > 0) {
+          setCurrentLocation(freshLocs[0]);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('healthsync_active_location_id', freshLocs[0].id);
+            localStorage.setItem('healthsync_active_clinic_id', docClinicId);
+          }
+        }
+
+        setDoctorProfile({
+          name: docRes.doctor.full_name,
+          title: docRes.doctor.specialization || 'General Medicine',
+        });
+
+        setShowPinModal(false);
+        setPinError(false);
+        setPinErrorMessage('');
         setPinInput('');
         setPortalMode('dashboard');
         setActiveSection(intendedSection || 'dashboard');
         setIntendedSection(null);
-      } else {
-        setPinError(true);
-        setTimeout(() => setPinError(false), 2200);
+        showToast('success', 'Doctor Authenticated', `Welcome Dr. ${docRes.doctor.full_name} (${isAdmin ? 'Main Doctor / Admin' : 'Attending Physician'})`);
+        syncQueueOnly();
+        return;
       }
+
+      setPinError(true);
+      setPinErrorMessage(docRes.message || branchRes.message || 'Invalid Branch Gateway or Doctor PIN');
+      showToast('error', 'Authentication Failed', docRes.message || branchRes.message || 'Invalid Branch Gateway or Doctor PIN');
+      setTimeout(() => setPinError(false), 2500);
       return;
     }
 
-    const docRes = await verifyDoctorPin(clean);
+    // Chamber Unlock inside Dashboard
+    const docRes = await verifyBranchDoctorPin(clean, currentLocation?.id || '', currentClinicId || undefined);
     if (docRes.success && docRes.doctor) {
+      const docClinicId = docRes.doctor.clinic_id || currentClinicId || '9e8b98f5-e268-4b11-8ca1-ec1ce83292ea';
+      const isAdmin = Boolean(docRes.is_admin_doctor);
+
       saveDoctorSessionLocal({
         doctorId: docRes.doctor.id,
         name: docRes.doctor.full_name,
         title: docRes.doctor.specialization || 'General Medicine',
         expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+        clinicId: docClinicId,
+        clinicName: docRes.doctor.clinic_name || undefined,
+        isAdmin,
       });
 
       setIsLoggedIn(true);
+      setIsDoctorAdmin(isAdmin);
+      setCurrentClinicId(docClinicId);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('healthsync_active_clinic_id', docClinicId);
+      }
+
       setDoctorProfile({
         name: docRes.doctor.full_name,
         title: docRes.doctor.specialization || 'General Medicine',
@@ -564,7 +742,9 @@ function DashboardContent() {
 
       setShowPinModal(false);
       setPinError(false);
+      setPinErrorMessage('');
       setPinInput('');
+      showToast('success', 'Chamber Unlocked', `Welcome Dr. ${docRes.doctor.full_name} (${isAdmin ? 'Medical Director / Admin' : 'Consultant'})`);
 
       if (pendingConsultPatient) {
         const p = pendingConsultPatient;
@@ -579,7 +759,9 @@ function DashboardContent() {
       }
     } else {
       setPinError(true);
-      setTimeout(() => setPinError(false), 2200);
+      setPinErrorMessage(docRes.message || 'Invalid Doctor PIN or not assigned to this branch.');
+      showToast('error', 'Chamber Access Denied', docRes.message || 'Invalid Doctor PIN or not assigned to this branch.');
+      setTimeout(() => setPinError(false), 2500);
     }
   };
 
@@ -587,6 +769,7 @@ function DashboardContent() {
     const savedDoc = getDoctorSessionLocal();
     clearDoctorSessionLocal();
     setIsLoggedIn(false);
+    setIsDoctorAdmin(false);
     setDoctorProfile({
       name: 'Clinic Assistant',
       title: 'Reception & Triage',
@@ -595,7 +778,7 @@ function DashboardContent() {
       logoutDoctor();
     } catch { }
     if (['queue', 'consult', 'inventory', 'analytics', 'settings'].includes(activeSection)) {
-      setActiveSection('dashboard');
+      setActiveSection('assistant');
     }
     if (savedDoc?.doctorId) {
       await logoutDoctorSessionDb(savedDoc.doctorId);
@@ -609,6 +792,13 @@ function DashboardContent() {
     clearClinicSessionLocal();
     clearDoctorSessionLocal();
     setIsLoggedIn(false);
+    setIsDoctorAdmin(false);
+    setCurrentClinicId(null);
+    setCurrentLocation(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('healthsync_active_clinic_id');
+      localStorage.removeItem('healthsync_active_location_id');
+    }
     setDoctorProfile({
       name: 'Clinic Assistant',
       title: 'Reception & Triage',
@@ -657,11 +847,12 @@ function DashboardContent() {
         gender: walkinGender,
         phone: walkinPhone.trim(),
         priority: walkinPriority,
+        locationId: currentLocation?.id,
       });
 
       if (res && res.success) {
-        setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, { ...res, visitType: 'Walk-in' }]));
-        fetchQueueFromDb().then((fresh) => {
+        setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, { ...res, visitType: 'Walk-in', locationId: currentLocation?.id }]));
+        fetchQueueFromDb(undefined, undefined, currentLocation?.id).then((fresh) => {
           if (fresh && fresh.length > 0) {
             setQueue(sortQueueWithCompletedAtEnd(fresh));
           }
@@ -1334,6 +1525,7 @@ function DashboardContent() {
               onLogout={handleLockDoctorSession}
               onFullLogout={handleFullLogout}
               requireDoctorPin={config.require_doctor_pin}
+              isAdmin={isDoctorAdmin}
             />
           )}
 
@@ -1357,6 +1549,12 @@ function DashboardContent() {
               queue={queue}
               onSelectConsult={handleConsultFromSearch}
               inventory={inventory}
+              branchName={currentLocation?.branch_name}
+              branchCode={currentLocation?.branch_code || undefined}
+              clinicLocations={clinicLocations}
+              currentLocation={currentLocation}
+              onSelectLocation={handleSelectLocation}
+              isAdmin={isDoctorAdmin}
             />
 
             <main
@@ -1625,14 +1823,7 @@ function DashboardContent() {
                 )}
 
                 {activeSection === 'settings' && (
-                  isDoctorUnlocked ? (
-                    <SettingsView
-                      isMobile={isMobile}
-                      onLogout={handleFullLogout}
-                      searchQuery={searchQuery}
-                      onSearchChange={setSearchQuery}
-                    />
-                  ) : (
+                  !isDoctorUnlocked ? (
                     <motion.div
                       initial={{ opacity: 0, scale: 0.96 }}
                       animate={{ opacity: 1, scale: 1 }}
@@ -1656,6 +1847,86 @@ function DashboardContent() {
                         <span>Unlock with Doctor PIN</span>
                       </button>
                     </motion.div>
+                  ) : !isDoctorAdmin ? (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center"
+                    >
+                      <div className="w-16 h-16 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center text-red-600 mb-4 shadow-xs">
+                        <ShieldAlert className="w-8 h-8 stroke-[2]" />
+                      </div>
+                      <h3 className="text-lg font-bold text-[#16191E] mb-1">Admin Access Required</h3>
+                      <p className="text-xs text-[#8A909D] max-w-sm mb-6 leading-relaxed">
+                        Only the Active Main Doctor / Medical Director with Admin Privileges can manage clinic branches, doctors, and configuration.
+                      </p>
+                      <button
+                        onClick={() => setActiveSection('dashboard')}
+                        className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                      >
+                        Return to Dashboard
+                      </button>
+                    </motion.div>
+                  ) : (
+                    <SettingsView
+                      isMobile={isMobile}
+                      onLogout={handleFullLogout}
+                      searchQuery={searchQuery}
+                      onSearchChange={setSearchQuery}
+                      currentLocation={currentLocation}
+                      onSelectLocation={handleSelectLocation}
+                    />
+                  )
+                )}
+
+                {activeSection === 'admin_doctors' && (
+                  !isDoctorUnlocked ? (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center"
+                    >
+                      <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mb-4 shadow-xs">
+                        <Lock className="w-8 h-8 stroke-[2]" />
+                      </div>
+                      <h3 className="text-lg font-bold text-[#16191E] mb-1">Doctor Verification Required</h3>
+                      <p className="text-xs text-[#8A909D] max-w-sm mb-6 leading-relaxed">
+                        Doctor rosters, branch assignments, daily consultation quotas, and security PINs require Doctor Authentication.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setIntendedSection('admin_doctors');
+                          setPinErrorMessage('');
+                          setShowPinModal(true);
+                        }}
+                        className="px-5 py-2.5 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition cursor-pointer flex items-center space-x-2"
+                      >
+                        <Lock className="w-4 h-4" />
+                        <span>Unlock with Doctor PIN</span>
+                      </button>
+                    </motion.div>
+                  ) : !isDoctorAdmin ? (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center"
+                    >
+                      <div className="w-16 h-16 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center text-red-600 mb-4 shadow-xs">
+                        <ShieldAlert className="w-8 h-8 stroke-[2]" />
+                      </div>
+                      <h3 className="text-lg font-bold text-[#16191E] mb-1">Admin Access Required</h3>
+                      <p className="text-xs text-[#8A909D] max-w-sm mb-6 leading-relaxed">
+                        Only the Active Main Doctor / Medical Director with Admin Privileges can manage doctor assignments, quotas, and PINs.
+                      </p>
+                      <button
+                        onClick={() => setActiveSection('dashboard')}
+                        className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                      >
+                        Return to Dashboard
+                      </button>
+                    </motion.div>
+                  ) : (
+                    <DoctorManagementSettings currentClinicId={currentClinicId || currentLocation?.clinic_id} />
                   )
                 )}
               </AnimatePresence>
@@ -1734,6 +2005,7 @@ function DashboardContent() {
         pinInput={pinInput}
         setPinInput={setPinInput}
         pinError={pinError}
+        errorMessage={pinErrorMessage}
         onPinSubmit={handlePinSubmit}
         title={portalMode === 'gateway' ? 'Clinic Gateway Security' : 'Doctor Security Verification'}
         subtitle={

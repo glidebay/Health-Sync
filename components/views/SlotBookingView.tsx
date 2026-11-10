@@ -435,6 +435,11 @@ export function SlotBookingView({
   isStandalone = false,
 }: SlotBookingViewProps) {
   const { config } = useClinic();
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const maxAdvanceBookingDays = config?.max_advance_booking_days
     ? Number(config.max_advance_booking_days)
     : 14;
@@ -1261,13 +1266,13 @@ export function SlotBookingView({
       >
         <header className="bg-white border-b border-[#ECEEF2] px-3.5 sm:px-8 py-2.5 sm:py-3.5 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center space-x-2.5 sm:space-x-3.5 min-w-0">
-            {config?.logo_url ? (
+            {isMounted && config?.logo_url ? (
               <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl border border-[#ECEEF2] bg-white overflow-hidden flex items-center justify-center p-1 shadow-2xs flex-shrink-0">
-
                 <img
                   src={config.logo_url}
                   alt={config.clinic_name || 'Clinic Logo'}
                   className="w-full h-full object-contain"
+                  suppressHydrationWarning
                 />
               </div>
             ) : (
@@ -1277,27 +1282,27 @@ export function SlotBookingView({
             )}
             <div className="min-w-0">
               <div className="flex items-center space-x-1.5 sm:space-x-2">
-                <span className="text-sm sm:text-lg font-bold text-[#16191E] truncate">
-                  {config?.clinic_name || 'HealthSync Clinic'}
+                <span className="text-sm sm:text-lg font-bold text-[#16191E] truncate" suppressHydrationWarning>
+                  {isMounted ? (config?.clinic_name || 'HealthSync Clinic') : 'HealthSync Clinic'}
                 </span>
                 <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-blue-50 text-[9px] sm:text-[10px] font-bold text-[#2563EB] tracking-wide uppercase flex-shrink-0">
                   Slot Booking
                 </span>
               </div>
               <div className="flex items-center gap-2 sm:gap-3 text-[11px] text-[#8A909D] font-medium flex-wrap mt-0.5">
-                {config?.clinic_address && (
+                {isMounted && config?.clinic_address && (
                   <span className="flex items-center gap-1 truncate max-w-[220px] sm:max-w-none">
                     <MapPin className="w-3 h-3 text-[#2563EB] flex-shrink-0" />
                     <span className="truncate">{config.clinic_address}</span>
                   </span>
                 )}
-                {config?.clinic_phone && (
+                {isMounted && config?.clinic_phone && (
                   <span className="flex items-center gap-1 flex-shrink-0">
                     <Phone className="w-3 h-3 text-[#2563EB]" />
                     <span>{config.clinic_phone}</span>
                   </span>
                 )}
-                {!config?.clinic_address && !config?.clinic_phone && (
+                {(!isMounted || (!config?.clinic_address && !config?.clinic_phone)) && (
                   <span className="hidden sm:inline">
                     Live OPD Consultation Scheduling & Instant Token Assignment
                   </span>

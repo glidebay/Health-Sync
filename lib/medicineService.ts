@@ -151,6 +151,57 @@ export function normalizeRawCsvText(rawText: string): string {
   return cleanText;
 }
 
+export function countTrueCsvRows(text: string): number {
+  if (!text) return 0;
+  let count = 0;
+  let inQuote = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') inQuote = !inQuote;
+    else if (ch === '\n' && !inQuote) count++;
+  }
+  if (text.length > 0 && !text.endsWith('\n')) count++;
+  return count;
+}
+
+export function parseCsvRow(rowStr: string, delimiter: string = ','): string[] {
+  const cells: string[] = [];
+  let inQ = false;
+  let curr = '';
+  for (let c = 0; c < rowStr.length; c++) {
+    const ch = rowStr[c];
+    if (ch === '"') {
+      if (inQ && rowStr[c + 1] === '"') {
+        curr += '"';
+        c++;
+      } else {
+        inQ = !inQ;
+      }
+    } else if (ch === delimiter && !inQ) {
+      cells.push(curr.trim().replace(/^["']|["']$/g, ''));
+      curr = '';
+    } else {
+      curr += ch;
+    }
+  }
+  cells.push(curr.trim().replace(/^["']|["']$/g, ''));
+  return cells;
+}
+
+export const CSV_BRAND_ALIASES = [
+  'brand_name', 'brand', 'medicine_name', 'med_name', 'product_name', 'product',
+  'item_name', 'item', 'name', 'drug_name', 'drug', 'commercial_name', 'trade_name',
+  'formulation_name', 'sku_name', 'medicine', 'title', 'description', 'substance_name',
+  'label', 'proprietary_name', 'medicine_brand', 'drug_title'
+];
+
+export const CSV_GENERIC_ALIASES = [
+  'generic_name', 'generic', 'composition', 'salt', 'salt_composition', 'salts',
+  'molecule', 'active_ingredient', 'active_substance', 'formula', 'chemical_name',
+  'constituents', 'inn', 'non_proprietary_name', 'molecule_name', 'drug_composition',
+  'active_molecule', 'active_salt'
+];
+
 export function detectCsvFileMetadata(text: string): {
   totalEstimatedRows: number;
   isLargeDataset: boolean;
@@ -159,11 +210,11 @@ export function detectCsvFileMetadata(text: string): {
 } {
   const clean = normalizeRawCsvText(text);
   const sampleLines = clean.slice(0, 4000).split(/\r?\n/).filter((l) => l.trim().length > 0);
-  const totalNewlines = (text.match(/\n/g) || []).length;
+  const totalTrueRows = countTrueCsvRows(clean);
   const firstRow = sampleLines.length > 0 ? sampleLines[0].split(',') : [];
   return {
-    totalEstimatedRows: Math.max(1, totalNewlines),
-    isLargeDataset: totalNewlines > 2000,
+    totalEstimatedRows: Math.max(1, totalTrueRows),
+    isLargeDataset: totalTrueRows > 2000,
     isWholeLineQuoted: text.slice(0, 500).trim().startsWith('"'),
     sampleColumns: firstRow.map((c) => c.trim().replace(/^["']|["']$/g, '')),
   };
@@ -364,16 +415,20 @@ export function saveStoredMovements(movements: StockMovement[]) {
   } catch {}
 }
 
-export async function fetchMedicinesMaster(): Promise<MedicineMaster[]> {
+export async function fetchMedicinesMaster(
+  onProgressChunk?: (loadedMeds: MedicineMaster[], totalCount: number) => void
+): Promise<MedicineMaster[]> {
   try {
-    const { data: dbMeds, error: medError } = await supabase
+    const PAGE_SIZE = 1000;
+    const { data: firstSlice, count, error: firstErr } = await supabase
       .from('medicines')
-      .select('*, batches:medicine_batches(*)')
-      .order('brand_name', { ascending: true });
+      .select('*, batches:medicine_batches(*)', { count: 'exact' })
+      .order('brand_name', { ascending: true })
+      .range(0, PAGE_SIZE - 1);
 
-    if (!medError && Array.isArray(dbMeds)) {
+    if (!firstErr && Array.isArray(firstSlice)) {
       const suppliers = await fetchSuppliers();
-      const mapped: MedicineMaster[] = dbMeds.map((m: any) => {
+      const mapRawDbMed = (m: any): MedicineMaster => {
         const rawBatches: any[] = m.batches || [];
         const batches: MedicineBatch[] = rawBatches.map((b) => ({
           id: b.id,
@@ -423,12 +478,43 @@ export async function fetchMedicinesMaster(): Promise<MedicineMaster[]> {
           createdAt: m.created_at,
           updatedAt: m.updated_at,
         };
-      });
+      };
 
-      saveStoredMedicines(mapped);
-      return mapped;
+      const allMapped: MedicineMaster[] = firstSlice.map(mapRawDbMed);
+      const total = count || allMapped.length;
+
+      if (onProgressChunk) {
+        onProgressChunk([...allMapped], total);
+      }
+
+      // If there are more rows beyond the 1,000 limit, slice them lazily
+      if (total > PAGE_SIZE) {
+        let from = PAGE_SIZE;
+        while (from < total) {
+          const to = Math.min(from + PAGE_SIZE - 1, total - 1);
+          const { data: slice, error: sliceErr } = await supabase
+            .from('medicines')
+            .select('*, batches:medicine_batches(*)')
+            .order('brand_name', { ascending: true })
+            .range(from, to);
+
+          if (sliceErr || !Array.isArray(slice)) break;
+          const sliceMapped = slice.map(mapRawDbMed);
+          allMapped.push(...sliceMapped);
+
+          if (onProgressChunk) {
+            onProgressChunk([...allMapped], total);
+          }
+          from += PAGE_SIZE;
+        }
+      }
+
+      saveStoredMedicines(allMapped);
+      return allMapped;
     }
-  } catch {}
+  } catch (err) {
+    console.error('fetchMedicinesMaster range load error:', err);
+  }
 
   return loadStoredMedicines();
 }
@@ -1508,15 +1594,38 @@ export function generateSampleCsvTemplate(): string {
   return `${headers}\n${rows}`;
 }
 
+export function findHeaderRowIndex(rows: any[][]): number {
+  if (!rows || rows.length === 0) return 0;
+  for (let i = 0; i < Math.min(15, rows.length); i++) {
+    const row = rows[i];
+    if (!Array.isArray(row)) continue;
+    const cleanCells = row.map((c) => String(c ?? '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+    const hasNameKey = cleanCells.some((c) =>
+      c.includes('brand') || c.includes('name') || c.includes('product') || c.includes('item') || c.includes('medicine') || c.includes('drug')
+    );
+    const hasAttrKey = cleanCells.some((c) =>
+      c.includes('code') || c.includes('sku') || c.includes('mrp') || c.includes('price') || c.includes('ptr') || c.includes('composition') || c.includes('pack') || c.includes('salt') || c.includes('category') || c.includes('rate') || c.includes('strength')
+    );
+
+    if (hasNameKey && hasAttrKey) {
+      return i;
+    }
+  }
+  return 0;
+}
+
 export function parseAndValidateCsv(
-  csvText: string,
+  csvOrRows: string | any[][],
   existingMedicines: MedicineMaster[],
   maxRows: number = 5000
 ): {
   rows: CsvParsedRow[];
   summary: CsvImportSummary;
 } {
-  const rawRows = parseCsvTextToRows(csvText, maxRows);
+  const rawRows: any[][] = typeof csvOrRows === 'string'
+    ? parseCsvTextToRows(csvOrRows, maxRows)
+    : (maxRows ? csvOrRows.slice(0, maxRows + 15) : csvOrRows);
 
   if (rawRows.length < 2) {
     return {
@@ -1531,25 +1640,35 @@ export function parseAndValidateCsv(
         successfullyImported: 0,
         skippedRows: 0,
         failedRows: 0,
-        errors: [{ row: 0, field: 'file', value: '', reason: 'CSV file is empty or missing data rows' }],
+        errors: [{ row: 0, field: 'file', value: '', reason: 'CSV/Excel file is empty or missing data rows' }],
       },
     };
   }
 
-  const rawHeaders = rawRows[0];
+  const headerIndex = findHeaderRowIndex(rawRows);
+  const rawHeaders = rawRows[headerIndex] || [];
   const headerIndices: Record<string, number> = {};
   rawHeaders.forEach((h, idx) => {
-    const clean = h.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const clean = String(h ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
     if (clean) headerIndices[clean] = idx;
   });
 
-  const getCol = (cells: string[], ...aliases: string[]): string => {
+  const getCol = (cells: any[], ...aliases: string[]): string => {
     for (const alias of aliases) {
       const cleanAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
       const idx = headerIndices[cleanAlias];
       if (idx !== undefined && idx < cells.length) {
-        const val = cells[idx].trim().replace(/^["']|["']$/g, '');
+        const val = String(cells[idx] ?? '').trim().replace(/^["']|["']$/g, '');
         if (val) return val;
+      }
+    }
+    for (const alias of aliases) {
+      const cleanAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
+      for (const [hdr, idx] of Object.entries(headerIndices)) {
+        if ((hdr.includes(cleanAlias) || cleanAlias.includes(hdr)) && idx < cells.length) {
+          const val = String(cells[idx] ?? '').trim().replace(/^["']|["']$/g, '');
+          if (val) return val;
+        }
       }
     }
     return '';
@@ -1567,10 +1686,10 @@ export function parseAndValidateCsv(
     if (m.barcode) existingBarcodeMap.set(m.barcode, m);
   }
 
-  for (let i = 1; i < rawRows.length; i++) {
-    const rowNum = i + 1;
+  for (let i = headerIndex + 1; i < rawRows.length; i++) {
+    const rowNum = i - headerIndex;
     const cells = rawRows[i];
-    if (cells.length === 0 || cells.every((c) => c === '')) continue;
+    if (!cells || cells.length === 0 || cells.every((c) => c === '' || c === null || c === undefined)) continue;
 
     // Filter out discontinued products automatically so they never pollute active clinic inventory
     const isDiscontinued = getCol(cells, 'is_discontinued', 'discontinued', 'isdiscontinued').toLowerCase();
@@ -1606,10 +1725,15 @@ export function parseAndValidateCsv(
     if (!brandName && genericName) brandName = genericName;
     if (!genericName && brandName) genericName = brandName;
 
+    // Normalize multiline composition into single clean string
+    if (genericName) {
+      genericName = genericName.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
     // Fallback: If still empty, scan row for any valid text cell with medicine-like string
     if (!brandName) {
       for (const cell of cells) {
-        const trimmed = cell.trim().replace(/^["']|["']$/g, '');
+        const trimmed = String(cell ?? '').trim().replace(/^["']|["']$/g, '');
         if (trimmed.length >= 3 && !/^\d+(\.\d+)?$/.test(trimmed)) {
           brandName = trimmed;
           if (!genericName) genericName = trimmed;
@@ -1653,7 +1777,7 @@ export function parseAndValidateCsv(
 
     const manufacturer = getCol(
       cells,
-      'manufacturer', 'mfg', 'company', 'brand_owner', 'maker', 'pharma', 'lab',
+      'marketing_division', 'manufacturer', 'mfg', 'company', 'brand_owner', 'maker', 'pharma', 'lab',
       'marketer', 'marketed_by', 'manufacturer_name', 'mfg_by', 'mkt_by', 'producer', 'distributor'
     ) || 'Standard Healthcare';
 
@@ -1847,10 +1971,14 @@ export function parseAndValidateCsv(
   const newMedicinesCount = parsedRows.filter((r) => r.isValid && !r.isExisting).length;
   const updatedMedicinesCount = parsedRows.filter((r) => r.isValid && r.isExisting).length;
 
+  const totalAvailableRows = Array.isArray(csvOrRows)
+    ? Math.max(parsedRows.length, csvOrRows.length - (headerIndex + 1))
+    : parsedRows.length;
+
   return {
     rows: parsedRows,
     summary: {
-      totalRows: parsedRows.length,
+      totalRows: totalAvailableRows,
       validRows,
       invalidRows,
       duplicateRows,
@@ -2247,12 +2375,30 @@ export async function executeCsvImport(
     const CHUNK_SIZE = 100;
     if (dbMedsToUpsert.length > 0) {
       for (let i = 0; i < dbMedsToUpsert.length; i += CHUNK_SIZE) {
-        const chunk = dbMedsToUpsert.slice(i, i + CHUNK_SIZE);
-        const { data: upsertedMeds } = await supabase
+        const rawChunk = dbMedsToUpsert.slice(i, i + CHUNK_SIZE);
+        // Deduplicate chunk by SKU and omit client-generated id to prevent FK constraint violations
+        const chunkMap = new Map<string, any>();
+        for (const item of rawChunk) {
+          const { id, ...medWithoutId } = item;
+          chunkMap.set(item.sku.toUpperCase(), medWithoutId);
+        }
+        const chunk = Array.from(chunkMap.values());
+
+        const { data: upsertedMeds, error: medError } = await supabase
           .from('medicines')
           .upsert(chunk, { onConflict: 'sku' })
           .select('id, sku');
-        if (Array.isArray(upsertedMeds)) {
+
+        if (medError) {
+          console.error('executeCsvImport: medicines upsert error:', medError);
+          failedCount += chunk.length;
+          failureErrors.push({
+            row: i + 1,
+            field: 'database',
+            value: '',
+            reason: medError.message || 'Database error during medicines upsert',
+          });
+        } else if (Array.isArray(upsertedMeds)) {
           for (const um of upsertedMeds) {
             if (um.sku && um.id) {
               dbSkuToId.set(um.sku.toUpperCase(), um.id);
@@ -2265,38 +2411,58 @@ export async function executeCsvImport(
     if (dbBatchesToUpsert.length > 0) {
       const alignedBatches = dbBatchesToUpsert.map((b) => {
         const med = finalMeds.find((m) => m.id === b.medicine_id);
-        const realId = med?.sku ? dbSkuToId.get(med.sku.toUpperCase()) || b.medicine_id : b.medicine_id;
+        const skuKey = med?.sku?.toUpperCase();
+        const realId = (skuKey && dbSkuToId.get(skuKey)) || b.medicine_id;
         return { ...b, medicine_id: realId };
       });
-      for (let i = 0; i < alignedBatches.length; i += CHUNK_SIZE) {
-        const chunk = alignedBatches.slice(i, i + CHUNK_SIZE);
-        await supabase
+
+      // Deduplicate batches by medicine_id + batch_number
+      const batchMap = new Map<string, any>();
+      for (const b of alignedBatches) {
+        batchMap.set(`${b.medicine_id}::${b.batch_number}`, b);
+      }
+      const uniqueBatches = Array.from(batchMap.values());
+
+      for (let i = 0; i < uniqueBatches.length; i += CHUNK_SIZE) {
+        const chunk = uniqueBatches.slice(i, i + CHUNK_SIZE);
+        const { error: batchErr } = await supabase
           .from('medicine_batches')
           .upsert(chunk, { onConflict: 'medicine_id,batch_number' });
+        if (batchErr) {
+          console.warn('executeCsvImport: medicine_batches notice:', batchErr);
+        }
       }
     }
 
     if (dbPurchasesToInsert.length > 0) {
       const alignedPurchases = dbPurchasesToInsert.map((p) => {
         const med = finalMeds.find((m) => m.id === p.medicine_id);
-        const realId = med?.sku ? dbSkuToId.get(med.sku.toUpperCase()) || p.medicine_id : p.medicine_id;
+        const skuKey = med?.sku?.toUpperCase();
+        const realId = (skuKey && dbSkuToId.get(skuKey)) || p.medicine_id;
         return { ...p, medicine_id: realId };
       });
       for (let i = 0; i < alignedPurchases.length; i += CHUNK_SIZE) {
         const chunk = alignedPurchases.slice(i, i + CHUNK_SIZE);
-        await supabase.from('purchase_records').insert(chunk);
+        const { error: purErr } = await supabase.from('purchase_records').insert(chunk);
+        if (purErr) {
+          console.warn('executeCsvImport: purchase_records notice:', purErr);
+        }
       }
     }
 
     if (dbMovementsToInsert.length > 0) {
       const alignedMovements = dbMovementsToInsert.map((mv) => {
         const med = finalMeds.find((m) => m.id === mv.medicine_id);
-        const realId = med?.sku ? dbSkuToId.get(med.sku.toUpperCase()) || mv.medicine_id : mv.medicine_id;
+        const skuKey = med?.sku?.toUpperCase();
+        const realId = (skuKey && dbSkuToId.get(skuKey)) || mv.medicine_id;
         return { ...mv, medicine_id: realId };
       });
       for (let i = 0; i < alignedMovements.length; i += CHUNK_SIZE) {
         const chunk = alignedMovements.slice(i, i + CHUNK_SIZE);
-        await supabase.from('stock_movements').insert(chunk);
+        const { error: movErr } = await supabase.from('stock_movements').insert(chunk);
+        if (movErr) {
+          console.warn('executeCsvImport: stock_movements notice:', movErr);
+        }
       }
     }
 
@@ -2311,7 +2477,9 @@ export async function executeCsvImport(
         error_log: failureErrors,
       },
     ]);
-  } catch {}
+  } catch (err) {
+    console.error('executeCsvImport outer error:', err);
+  }
 
   return {
     totalRows: parsedRows.length,
@@ -2364,17 +2532,19 @@ export interface StreamImportResult {
   totalProcessed: number;
   totalImported: number;
   totalSkipped: number;
+  failedCount?: number;
+  errors?: string[];
   durationMs: number;
   speedMedsPerSec: number;
 }
 
 /**
  * Enterprise Chunked Streaming Importer
- * Slices 250,000+ line CSV files into non-blocking chunks, processes them with O(1) flat memory,
- * and feeds real-time metrics to horizontal balancer / progress indicators.
+ * Slices 250,000+ line CSV files or structured Excel 2D matrices into non-blocking chunks,
+ * processes them with O(1) flat memory, and feeds real-time metrics to progress indicators.
  */
 export async function streamAndIngestCsvToSupabase(
-  rawText: string,
+  input: string | any[][],
   options: {
     updateExisting?: boolean;
     batchSize?: number;
@@ -2392,56 +2562,350 @@ export async function streamAndIngestCsvToSupabase(
   } = options;
 
   const startTime = Date.now();
+  let processedCount = 0;
+  let importedCount = 0;
+  let skippedCount = 0;
+  let failedCount = 0;
+  const batchErrors: string[] = [];
+
+  // Branch A: Structured 2D Array (from Excel or in-memory grid)
+  if (Array.isArray(input)) {
+    const rawMatrix = input;
+    if (rawMatrix.length < 2) {
+      return { totalProcessed: 0, totalImported: 0, totalSkipped: 0, failedCount: 0, errors: [], durationMs: 0, speedMedsPerSec: 0 };
+    }
+    const hIdx = findHeaderRowIndex(rawMatrix);
+    const rawHeaders = rawMatrix[hIdx] || [];
+    const headers = rawHeaders.map((h) => String(h ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+    const getIndex = (...aliases: string[]): number => {
+      for (const a of aliases) {
+        const cleanA = a.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const idx = headers.findIndex((h) => h === cleanA || h.includes(cleanA));
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    };
+
+    const idIdx = getIndex('id', 'medid', 'code');
+    const nameIdx = getIndex(...CSV_BRAND_ALIASES);
+    const priceIdx = getIndex('mrp', 'price', 'priceinr', 'sellingprice', 'rate', 'unitprice', 'pts');
+    const discIdx = getIndex('is_discontinued', 'discontinued', 'isdiscontinued');
+    const mfgIdx = getIndex('marketingdivision', 'manufacturername', 'manufacturer', 'company', 'mfg');
+    const typeIdx = getIndex('type', 'category');
+    const packIdx = getIndex('packing', 'packsizelabel', 'packsize', 'package');
+    const comp1Idx = getIndex(...CSV_GENERIC_ALIASES, 'short_composition1', 'shortcomposition1', 'composition1', 'salt1');
+    const comp2Idx = getIndex('short_composition2', 'shortcomposition2', 'composition2', 'salt2');
+    const skuIdx = getIndex('productcode', 'itemcode', 'sku', 'code');
+    const dosageIdx = getIndex('dosageform', 'form', 'dosagetype');
+    const strengthIdx = getIndex('strength', 'dosage', 'potency');
+    const unitIdx = getIndex('unit', 'uom', 'packunit');
+    const batchIdx = getIndex('batchnumber', 'batchno', 'batch', 'lotnumber', 'lot');
+    const expIdx = getIndex('shelflife', 'expirydate', 'expdate', 'expiry', 'exp');
+    const mfgDateIdx = getIndex('manufacturingdate', 'mfgdate', 'mfd');
+    const qtyIdx = getIndex('quantity', 'qty', 'stock', 'initialquantity');
+    const costIdx = getIndex('netptr', 'ptr', 'purchaseprice', 'buyprice', 'costprice', 'cost');
+    const suppIdx = getIndex('suppliername', 'supplier', 'vendor', 'distributor');
+
+    if (nameIdx === -1 && comp1Idx === -1) {
+      batchErrors.push('Could not detect Medicine Name or Composition column in Excel headers.');
+    }
+
+    const dataRows = rawMatrix.slice(hIdx + 1);
+    const totalDataRows = dataRows.length;
+    const totalBatches = Math.ceil(totalDataRows / batchSize);
+
+    for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+      if (controlSignal?.aborted) break;
+      while (controlSignal?.paused) {
+        if (controlSignal.aborted) break;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+
+      const chunkStart = batchIdx * batchSize;
+      const chunkEnd = Math.min((batchIdx + 1) * batchSize, totalDataRows);
+      const batchMedsMap = new Map<string, any>();
+      const batchBatchesMap = new Map<string, any>();
+      let lastBrandName = '';
+
+      for (let r = chunkStart; r < chunkEnd; r++) {
+        const cells = dataRows[r];
+        if (!cells || cells.length === 0 || cells.every((c) => c === '' || c === null || c === undefined)) {
+          skippedCount++;
+          processedCount++;
+          continue;
+        }
+
+        const rawDisc = discIdx !== -1 ? String(cells[discIdx] ?? '').trim().toLowerCase() : '';
+        const isDisc = rawDisc === 'true' || rawDisc === 'yes' || rawDisc === '1';
+        if (isDisc) {
+          skippedCount++;
+          processedCount++;
+          continue;
+        }
+
+        let brand = nameIdx !== -1 ? String(cells[nameIdx] ?? '').trim() : '';
+        const comp1 = comp1Idx !== -1 ? String(cells[comp1Idx] ?? '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
+        const comp2 = comp2Idx !== -1 ? String(cells[comp2Idx] ?? '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
+        let combinedGeneric = [comp1, comp2].filter(Boolean).join(' + ');
+
+        if (!brand && combinedGeneric) brand = combinedGeneric;
+        if (!combinedGeneric && brand) combinedGeneric = brand;
+
+        if (!brand) {
+          for (const cell of cells) {
+            const trimmed = String(cell ?? '').trim().replace(/^["']|["']$/g, '');
+            if (trimmed.length >= 3 && !/^\d+(\.\d+)?$/.test(trimmed)) {
+              brand = trimmed;
+              if (!combinedGeneric) combinedGeneric = trimmed;
+              break;
+            }
+          }
+        }
+
+        if (!brand) {
+          skippedCount++;
+          processedCount++;
+          continue;
+        }
+        lastBrandName = brand;
+
+        const manufacturer = (mfgIdx !== -1 && cells[mfgIdx] ? String(cells[mfgIdx]).trim() : '') || 'Standard Healthcare';
+        const packLabel = packIdx !== -1 ? String(cells[packIdx] ?? '').trim() : '';
+
+        let dosageForm = dosageIdx !== -1 && cells[dosageIdx] ? String(cells[dosageIdx]).trim() : 'Tablet';
+        let unit = unitIdx !== -1 && cells[unitIdx] ? String(cells[unitIdx]).trim() : 'Strips';
+        const plLower = packLabel.toLowerCase();
+        if (plLower.includes('tablet') || plLower.includes('tab')) {
+          dosageForm = 'Tablet';
+          unit = 'Strips';
+        } else if (plLower.includes('capsule') || plLower.includes('cap')) {
+          dosageForm = 'Capsule';
+          unit = 'Strips';
+        } else if (plLower.includes('syrup') || plLower.includes('suspension') || plLower.includes('liquid') || plLower.includes('bottle')) {
+          dosageForm = 'Syrup';
+          unit = 'Bottles';
+        } else if (plLower.includes('injection') || plLower.includes('ampoule') || plLower.includes('vial')) {
+          dosageForm = 'Injection';
+          unit = 'Ampoules';
+        } else if (plLower.includes('ointment') || plLower.includes('cream') || plLower.includes('gel') || plLower.includes('tube')) {
+          dosageForm = 'Ointment';
+          unit = 'Tubes';
+        } else if (plLower.includes('drop')) {
+          dosageForm = 'Drops';
+          unit = 'Vials';
+        }
+
+        const rawPrice = priceIdx !== -1 ? cells[priceIdx] : '';
+        const numPrice = typeof rawPrice === 'number' ? rawPrice : parseFloat(String(rawPrice || '').replace(/[^0-9.]/g, ''));
+        const sellingPrice = isNaN(numPrice) ? 0 : numPrice;
+
+        const explicitSku = skuIdx !== -1 ? String(cells[skuIdx] ?? '').trim() : '';
+        const rowId = idIdx !== -1 ? String(cells[idIdx] ?? '').trim() : '';
+        const cleanSlug = (brand.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)) || 'MED';
+        const sku = (explicitSku ? (explicitSku.startsWith('MED-') ? explicitSku : `MED-${explicitSku}`) : (rowId ? `MED-${cleanSlug}-${rowId}` : `MED-${cleanSlug}-${r + 1}`)).toUpperCase();
+
+        const batchNum = (batchIdx !== -1 && cells[batchIdx]) ? String(cells[batchIdx]).trim() : `BCH-${new Date().getFullYear()}-${(r + 1).toString().slice(-4)}`;
+        const expiryDate = (expIdx !== -1 && cells[expIdx]) ? parseFlexibleDate(String(cells[expIdx]), 3) : `${new Date().getFullYear() + 2}-12-31`;
+        const mfgDate = (mfgDateIdx !== -1 && cells[mfgDateIdx]) ? parseFlexibleDate(String(cells[mfgDateIdx]), 1) : formatYmd(new Date());
+        const rawQty = qtyIdx !== -1 ? cells[qtyIdx] : '';
+        const parsedQty = typeof rawQty === 'number' ? Math.max(0, rawQty) : Math.max(0, parseInt(String(rawQty || '').replace(/[^0-9]/g, ''), 10) || 0);
+        const rawCost = costIdx !== -1 ? cells[costIdx] : '';
+        const costNum = typeof rawCost === 'number' ? rawCost : parseFloat(String(rawCost || '').replace(/[^0-9.]/g, ''));
+        const purchasePrice = !isNaN(costNum) && costNum > 0 ? costNum : (sellingPrice > 0 ? Math.round(sellingPrice * 0.7 * 100) / 100 : 0);
+        const supplierName = (suppIdx !== -1 && cells[suppIdx]) ? String(cells[suppIdx]).trim() : null;
+
+        batchMedsMap.set(sku, {
+          sku,
+          brand_name: brand,
+          generic_name: combinedGeneric,
+          manufacturer,
+          category: typeIdx !== -1 && cells[typeIdx] ? String(cells[typeIdx]).trim() : 'Allopathy',
+          dosage_form: dosageForm,
+          strength: strengthIdx !== -1 && cells[strengthIdx] ? String(cells[strengthIdx]).trim() : 'Standard',
+          unit,
+          selling_price: sellingPrice > 0 ? sellingPrice : null,
+          minimum_stock_level: 20,
+          updated_at: new Date().toISOString(),
+        });
+
+        if (sellingPrice > 0 || parsedQty > 0) {
+          batchBatchesMap.set(sku, {
+            batch_number: batchNum,
+            manufacturing_date: mfgDate,
+            expiry_date: expiryDate,
+            purchase_price: purchasePrice > 0 ? purchasePrice : null,
+            selling_price: sellingPrice > 0 ? sellingPrice : null,
+            initial_quantity: parsedQty,
+            available_quantity: parsedQty,
+            supplier_name: supplierName,
+          });
+        }
+
+        processedCount++;
+      }
+
+      const dbBatchMeds = Array.from(batchMedsMap.values());
+      if (dbBatchMeds.length > 0) {
+        try {
+          const { data: upsertedMeds, error: medErr } = await supabase
+            .from('medicines')
+            .upsert(dbBatchMeds, { onConflict: 'sku' })
+            .select('id, sku');
+
+          if (medErr) {
+            console.error('Batch medicines upsert failed:', medErr);
+            failedCount += dbBatchMeds.length;
+            if (batchErrors.length < 5) batchErrors.push(medErr.message);
+          } else {
+            const actualCount = upsertedMeds?.length || dbBatchMeds.length;
+            importedCount += actualCount;
+
+            if (upsertedMeds && upsertedMeds.length > 0 && batchBatchesMap.size > 0) {
+              const skuToId = new Map(upsertedMeds.map((m: any) => [m.sku.toUpperCase(), m.id]));
+              const dbBatchBatches: any[] = [];
+              for (const [bSku, bData] of batchBatchesMap.entries()) {
+                const medId = skuToId.get(bSku.toUpperCase());
+                if (medId) {
+                  dbBatchBatches.push({ ...bData, medicine_id: medId });
+                }
+              }
+
+              if (dbBatchBatches.length > 0) {
+                const { error: batchErr } = await supabase
+                  .from('medicine_batches')
+                  .upsert(dbBatchBatches, { onConflict: 'medicine_id,batch_number' });
+                if (batchErr) {
+                  console.warn('Batch inventory upsert notice:', batchErr);
+                }
+              }
+            }
+          }
+        } catch (err: any) {
+          console.error('Batch upsert exception:', err);
+          failedCount += dbBatchMeds.length;
+          if (batchErrors.length < 5) batchErrors.push(err?.message || 'Database error');
+        }
+      }
+
+      const elapsedSec = (Date.now() - startTime) / 1000;
+      const speed = Math.round(processedCount / Math.max(0.1, elapsedSec));
+      const remaining = Math.max(0, totalDataRows - processedCount);
+      const etaSeconds = speed > 0 ? Math.round(remaining / speed) : 0;
+      const percent = Math.min(100, Math.round((processedCount / totalDataRows) * 100));
+
+      if (onProgress) {
+        onProgress({
+          processed: processedCount,
+          total: totalDataRows,
+          percent,
+          currentBatch: batchIdx + 1,
+          totalBatches,
+          speedMedsPerSec: speed,
+          etaSeconds,
+          currentMedicineName: lastBrandName,
+          status: batchIdx === totalBatches - 1 ? 'completed' : 'running',
+        });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    const durationMs = Date.now() - startTime;
+    return {
+      totalProcessed: processedCount,
+      totalImported: importedCount,
+      totalSkipped: skippedCount,
+      failedCount,
+      errors: batchErrors,
+      durationMs,
+      speedMedsPerSec: Math.round(processedCount / Math.max(0.1, durationMs / 1000)),
+    };
+  }
+
+  // Branch B: Raw CSV Text
+  const rawText = input;
   const cleanText = normalizeRawCsvText(rawText);
 
-  // 1. Line splitter via index search (avoids giant memory allocations of .split('\n'))
-  const lineEnds: number[] = [];
-  let pos = 0;
-  while ((pos = cleanText.indexOf('\n', pos)) !== -1) {
-    lineEnds.push(pos);
-    pos++;
+  // 1. Auto-detect delimiter from the first 4KB of cleanText
+  const firstChunk = cleanText.slice(0, 4000);
+  let delimiter = ',';
+  const commaCount = (firstChunk.match(/,/g) || []).length;
+  const semiCount = (firstChunk.match(/;/g) || []).length;
+  const tabCount = (firstChunk.match(/\t/g) || []).length;
+  const pipeCount = (firstChunk.match(/\|/g) || []).length;
+  if (semiCount > commaCount && semiCount > tabCount) delimiter = ';';
+  else if (tabCount > commaCount && tabCount > semiCount) delimiter = '\t';
+  else if (pipeCount > commaCount && pipeCount > semiCount) delimiter = '|';
+
+  // 2. Quote-aware row splitting: newlines inside quotes are NOT row separators
+  const rowEnds: number[] = [];
+  let inQuote = false;
+  for (let i = 0; i < cleanText.length; i++) {
+    const ch = cleanText[i];
+    if (ch === '"') {
+      inQuote = !inQuote;
+    } else if (ch === '\n' && !inQuote) {
+      rowEnds.push(i);
+    }
   }
-  if (cleanText.length > 0 && (lineEnds.length === 0 || lineEnds[lineEnds.length - 1] < cleanText.length - 1)) {
-    lineEnds.push(cleanText.length);
+  if (cleanText.length > 0 && (rowEnds.length === 0 || rowEnds[rowEnds.length - 1] < cleanText.length - 1)) {
+    rowEnds.push(cleanText.length);
   }
 
-  const totalLines = lineEnds.length;
+  const totalLines = rowEnds.length;
   if (totalLines <= 1) {
-    return { totalProcessed: 0, totalImported: 0, totalSkipped: 0, durationMs: 0, speedMedsPerSec: 0 };
+    return { totalProcessed: 0, totalImported: 0, totalSkipped: 0, failedCount: 0, errors: [], durationMs: 0, speedMedsPerSec: 0 };
   }
 
-  // 2. Parse Header
-  const headerLine = cleanText.slice(0, lineEnds[0]).replace(/\r$/, '');
-  const headers = headerLine.split(',').map((h) => h.trim().toLowerCase().replace(/[^a-z0-9]/g, ''));
+  // 3. Scan first 15 true rows for table header without skipping blank rows so indices align 1:1
+  const sampleRows: string[][] = [];
+  for (let i = 0; i < Math.min(15, rowEnds.length); i++) {
+    const lStart = i === 0 ? 0 : rowEnds[i - 1] + 1;
+    const lEnd = rowEnds[i];
+    const lRaw = cleanText.slice(lStart, lEnd).replace(/\r$/, '');
+    sampleRows.push(parseCsvRow(lRaw, delimiter));
+  }
+  const hIdx = findHeaderRowIndex(sampleRows);
+  const rawHeaders = sampleRows[hIdx] || [];
+  const headers = rawHeaders.map((h) => String(h ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, ''));
+
   const getIndex = (...aliases: string[]): number => {
     for (const a of aliases) {
       const cleanA = a.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const idx = headers.indexOf(cleanA);
+      const idx = headers.findIndex((h) => h === cleanA || h.includes(cleanA));
       if (idx !== -1) return idx;
     }
     return -1;
   };
 
   const idIdx = getIndex('id', 'medid', 'code');
-  const nameIdx = getIndex('name', 'brandname', 'brand', 'medicine');
-  const priceIdx = getIndex('price', 'priceinr', 'mrp', 'sellingprice', 'rate');
-  const discIdx = getIndex('isdiscontinued', 'discontinued', 'status');
-  const mfgIdx = getIndex('manufacturername', 'manufacturer', 'company');
+  const nameIdx = getIndex(...CSV_BRAND_ALIASES);
+  const priceIdx = getIndex('mrp', 'price', 'priceinr', 'sellingprice', 'rate', 'unitprice', 'pts');
+  const discIdx = getIndex('is_discontinued', 'discontinued', 'isdiscontinued');
+  const mfgIdx = getIndex('marketingdivision', 'manufacturername', 'manufacturer', 'company', 'mfg');
   const typeIdx = getIndex('type', 'category');
-  const packIdx = getIndex('packsizelabel', 'packsize', 'package');
-  const comp1Idx = getIndex('shortcomposition1', 'composition1', 'salt1', 'generic');
-  const comp2Idx = getIndex('shortcomposition2', 'composition2', 'salt2');
-  const skuIdx = getIndex('sku', 'itemcode');
-  const dosageIdx = getIndex('dosageform', 'form');
-  const strengthIdx = getIndex('strength');
-  const unitIdx = getIndex('unit');
+  const packIdx = getIndex('packing', 'packsizelabel', 'packsize', 'package');
+  const comp1Idx = getIndex(...CSV_GENERIC_ALIASES, 'short_composition1', 'shortcomposition1', 'composition1', 'salt1');
+  const comp2Idx = getIndex('short_composition2', 'shortcomposition2', 'composition2', 'salt2');
+  const skuIdx = getIndex('productcode', 'itemcode', 'sku', 'code');
+  const dosageIdx = getIndex('dosageform', 'form', 'dosagetype');
+  const strengthIdx = getIndex('strength', 'dosage', 'potency');
+  const unitIdx = getIndex('unit', 'uom', 'packunit');
+  const batchIdx = getIndex('batchnumber', 'batchno', 'batch', 'lotnumber', 'lot');
+  const expIdx = getIndex('shelflife', 'expirydate', 'expdate', 'expiry', 'exp');
+  const mfgDateIdx = getIndex('manufacturingdate', 'mfgdate', 'mfd');
+  const qtyIdx = getIndex('quantity', 'qty', 'stock', 'initialquantity');
+  const costIdx = getIndex('netptr', 'ptr', 'purchaseprice', 'buyprice', 'costprice', 'cost');
+  const suppIdx = getIndex('suppliername', 'supplier', 'vendor', 'distributor');
 
-  const totalDataRows = totalLines - 1;
+  if (nameIdx === -1 && comp1Idx === -1) {
+    batchErrors.push('Could not detect Medicine Name or Composition column in CSV headers.');
+  }
+
+  const dataLineStart = hIdx + 1;
+  const totalDataRows = totalLines - dataLineStart;
   const totalBatches = Math.ceil(totalDataRows / batchSize);
-
-  let processedCount = 0;
-  let importedCount = 0;
-  let skippedCount = 0;
 
   for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
     // Check pause or cancel signals
@@ -2466,45 +2930,55 @@ export async function streamAndIngestCsvToSupabase(
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
 
-    const startLineIdx = batchIdx * batchSize + 1;
-    const endLineIdx = Math.min((batchIdx + 1) * batchSize, totalDataRows);
+    const startLineIdx = dataLineStart + batchIdx * batchSize;
+    const endLineIdx = Math.min(dataLineStart + (batchIdx + 1) * batchSize - 1, totalLines - 1);
 
-    const dbBatchMeds: any[] = [];
-    const dbBatchBatches: any[] = [];
+    const batchMedsMap = new Map<string, any>();
+    const batchBatchesMap = new Map<string, any>();
     let lastBrandName = '';
 
     for (let lineNum = startLineIdx; lineNum <= endLineIdx; lineNum++) {
-      const lineStart = lineEnds[lineNum - 2] + 1;
-      const lineEnd = lineEnds[lineNum - 1];
+      const lineStart = lineNum === 0 ? 0 : rowEnds[lineNum - 1] + 1;
+      const lineEnd = rowEnds[lineNum];
       const rawLine = cleanText.slice(lineStart, lineEnd).replace(/\r$/, '').trim();
       if (!rawLine) continue;
 
-      // Parse CSV line respecting quotes
-      const cells: string[] = [];
-      let inQuote = false;
-      let curr = '';
-      for (let c = 0; c < rawLine.length; c++) {
-        const ch = rawLine[c];
-        if (ch === '"') {
-          inQuote = !inQuote;
-        } else if (ch === ',' && !inQuote) {
-          cells.push(curr.trim().replace(/^["']|["']$/g, ''));
-          curr = '';
-        } else {
-          curr += ch;
-        }
+      // Parse CSV line respecting quotes & detected delimiter
+      const cells = parseCsvRow(rawLine, delimiter);
+      if (!cells || cells.length === 0 || cells.every((c) => !c)) {
+        skippedCount++;
+        processedCount++;
+        continue;
       }
-      cells.push(curr.trim().replace(/^["']|["']$/g, ''));
 
       // Check discontinued status
-      const isDisc = discIdx !== -1 && (cells[discIdx] || '').toUpperCase() === 'TRUE';
+      const rawDisc = discIdx !== -1 ? (cells[discIdx] || '').trim().toLowerCase() : '';
+      const isDisc = rawDisc === 'true' || rawDisc === 'yes' || rawDisc === '1';
       if (isDisc) {
         skippedCount++;
         processedCount++;
         continue;
       }
 
-      const brand = nameIdx !== -1 ? cells[nameIdx] || '' : '';
+      let brand = nameIdx !== -1 ? (cells[nameIdx] || '').trim() : '';
+      const comp1 = comp1Idx !== -1 ? (cells[comp1Idx] || '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
+      const comp2 = comp2Idx !== -1 ? (cells[comp2Idx] || '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
+      let combinedGeneric = [comp1, comp2].filter(Boolean).join(' + ');
+
+      if (!brand && combinedGeneric) brand = combinedGeneric;
+      if (!combinedGeneric && brand) combinedGeneric = brand;
+
+      if (!brand) {
+        for (const cell of cells) {
+          const trimmed = String(cell ?? '').trim().replace(/^["']|["']$/g, '');
+          if (trimmed.length >= 3 && !/^\d+(\.\d+)?$/.test(trimmed)) {
+            brand = trimmed;
+            if (!combinedGeneric) combinedGeneric = trimmed;
+            break;
+          }
+        }
+      }
+
       if (!brand) {
         skippedCount++;
         processedCount++;
@@ -2512,10 +2986,7 @@ export async function streamAndIngestCsvToSupabase(
       }
       lastBrandName = brand;
 
-      const comp1 = comp1Idx !== -1 ? cells[comp1Idx] || '' : '';
-      const comp2 = comp2Idx !== -1 ? cells[comp2Idx] || '' : '';
-      const combinedGeneric = [comp1, comp2].filter(Boolean).join(' + ') || brand;
-      const manufacturer = mfgIdx !== -1 && cells[mfgIdx] ? cells[mfgIdx] : 'Indian Pharmaceuticals Ltd';
+      const manufacturer = (mfgIdx !== -1 && cells[mfgIdx] ? cells[mfgIdx].trim() : '') || 'Standard Healthcare';
       const packLabel = packIdx !== -1 ? cells[packIdx] || '' : '';
 
       // Infer dosage form and unit from pack label
@@ -2546,14 +3017,23 @@ export async function streamAndIngestCsvToSupabase(
       const numPrice = rawPrice ? parseFloat(rawPrice.replace(/[^0-9.]/g, '')) : 0;
       const sellingPrice = isNaN(numPrice) ? 0 : numPrice;
 
-      const explicitSku = skuIdx !== -1 ? cells[skuIdx] : '';
-      const rowId = idIdx !== -1 ? cells[idIdx] : '';
-      const cleanSlug = brand.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
-      const sku = explicitSku || (rowId ? `MED-${cleanSlug}-${rowId}` : `MED-${cleanSlug}-${lineNum}`);
+      const explicitSku = skuIdx !== -1 ? cells[skuIdx]?.trim() : '';
+      const rowId = idIdx !== -1 ? cells[idIdx]?.trim() : '';
+      const cleanSlug = (brand.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)) || 'MED';
+      const sku = (explicitSku || (rowId ? `MED-${cleanSlug}-${rowId}` : `MED-${cleanSlug}-${lineNum}`)).toUpperCase();
 
-      const medUuid = generateSafeUuid();
-      dbBatchMeds.push({
-        id: medUuid,
+      const batchNum = (batchIdx !== -1 && cells[batchIdx]) ? cells[batchIdx].trim() : `BCH-${new Date().getFullYear()}-${lineNum.toString().slice(-4)}`;
+      const expiryDate = (expIdx !== -1 && cells[expIdx]) ? parseFlexibleDate(cells[expIdx], 3) : `${new Date().getFullYear() + 2}-12-31`;
+      const mfgDate = (mfgDateIdx !== -1 && cells[mfgDateIdx]) ? parseFlexibleDate(cells[mfgDateIdx], 1) : formatYmd(new Date());
+      const rawQty = qtyIdx !== -1 ? cells[qtyIdx] : '';
+      const parsedQty = rawQty ? Math.max(0, parseInt(rawQty.replace(/[^0-9]/g, ''), 10) || 0) : 0;
+      const rawCost = costIdx !== -1 ? cells[costIdx] : '';
+      const costNum = rawCost ? parseFloat(rawCost.replace(/[^0-9.]/g, '')) : (sellingPrice > 0 ? Math.round(sellingPrice * 0.7 * 100) / 100 : 0);
+      const purchasePrice = isNaN(costNum) ? 0 : costNum;
+      const supplierName = (suppIdx !== -1 && cells[suppIdx]) ? cells[suppIdx].trim() : null;
+
+      // Deduplicate by SKU within batch: omit id so Postgres retains existing id or creates new id without FK violation
+      batchMedsMap.set(sku, {
         sku,
         brand_name: brand,
         generic_name: combinedGeneric,
@@ -2567,33 +3047,70 @@ export async function streamAndIngestCsvToSupabase(
         updated_at: new Date().toISOString(),
       });
 
-      if (sellingPrice > 0) {
-        dbBatchBatches.push({
-          id: generateSafeUuid(),
-          medicine_id: medUuid,
-          batch_number: `BCH-${new Date().getFullYear()}-${lineNum.toString().slice(-4)}`,
-          manufacturing_date: new Date().toISOString().split('T')[0],
-          expiry_date: `${new Date().getFullYear() + 2}-12-31`,
-          purchase_price: Math.round(sellingPrice * 0.7 * 100) / 100,
-          selling_price: sellingPrice,
-          initial_quantity: 0,
-          available_quantity: 0,
+      if (sellingPrice > 0 || parsedQty > 0) {
+        batchBatchesMap.set(sku, {
+          batch_number: batchNum,
+          manufacturing_date: mfgDate,
+          expiry_date: expiryDate,
+          purchase_price: purchasePrice > 0 ? purchasePrice : null,
+          selling_price: sellingPrice > 0 ? sellingPrice : null,
+          initial_quantity: parsedQty,
+          available_quantity: parsedQty,
+          supplier_name: supplierName,
         });
       }
 
-      importedCount++;
       processedCount++;
     }
 
     // Upsert chunk to Supabase
+    const dbBatchMeds = Array.from(batchMedsMap.values());
     if (dbBatchMeds.length > 0) {
       try {
-        await supabase.from('medicines').upsert(dbBatchMeds, { onConflict: 'sku' });
-        if (dbBatchBatches.length > 0) {
-          await supabase.from('medicine_batches').upsert(dbBatchBatches, { onConflict: 'medicine_id,batch_number' });
+        const { data: upsertedMeds, error: medErr } = await supabase
+          .from('medicines')
+          .upsert(dbBatchMeds, { onConflict: 'sku' })
+          .select('id, sku');
+
+        if (medErr) {
+          console.error('Batch medicines upsert failed:', medErr);
+          failedCount += dbBatchMeds.length;
+          if (batchErrors.length < 5) {
+            batchErrors.push(medErr.message || 'Medicines batch upsert error');
+          }
+        } else {
+          const actualCount = upsertedMeds?.length || dbBatchMeds.length;
+          importedCount += actualCount;
+
+          if (upsertedMeds && upsertedMeds.length > 0 && batchBatchesMap.size > 0) {
+            const skuToId = new Map(upsertedMeds.map((m: any) => [m.sku.toUpperCase(), m.id]));
+            const dbBatchBatches: any[] = [];
+            for (const [bSku, bData] of batchBatchesMap.entries()) {
+              const medId = skuToId.get(bSku.toUpperCase());
+              if (medId) {
+                dbBatchBatches.push({
+                  ...bData,
+                  medicine_id: medId,
+                });
+              }
+            }
+
+            if (dbBatchBatches.length > 0) {
+              const { error: batchErr } = await supabase
+                .from('medicine_batches')
+                .upsert(dbBatchBatches, { onConflict: 'medicine_id,batch_number' });
+              if (batchErr) {
+                console.warn('Batch inventory upsert notice:', batchErr);
+              }
+            }
+          }
         }
-      } catch (err) {
-        console.warn('Batch upsert non-blocking notice:', err);
+      } catch (err: any) {
+        console.error('Batch upsert exception:', err);
+        failedCount += dbBatchMeds.length;
+        if (batchErrors.length < 5) {
+          batchErrors.push(err?.message || 'Network or database error');
+        }
       }
     }
 
@@ -2629,6 +3146,8 @@ export async function streamAndIngestCsvToSupabase(
     totalProcessed: processedCount,
     totalImported: importedCount,
     totalSkipped: skippedCount,
+    failedCount,
+    errors: batchErrors,
     durationMs,
     speedMedsPerSec,
   };
