@@ -492,11 +492,11 @@ function DashboardContent() {
 
   const navItems: NavItemConfig[] = [
     { id: 'dashboard', label: 'Dashboard', icon: Home, reqAuth: false },
-    { id: 'tables', label: 'Tables', icon: Table, reqAuth: false },
     { id: 'assistant', label: 'Assistant Desk', icon: ClipboardList, reqAuth: false },
     { id: 'queue', label: 'Doctor Queue', icon: Users, reqAuth: true },
     { id: 'consult', label: 'Consultation', icon: Stethoscope, reqAuth: true },
     { id: 'inventory', label: 'Pharmacy Stock', icon: Boxes, reqAuth: true },
+    { id: 'tables', label: 'Tables', icon: Table, reqAuth: false },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, reqAuth: true },
     { id: 'settings', label: 'Settings', icon: SlidersHorizontal, reqAuth: true },
   ];

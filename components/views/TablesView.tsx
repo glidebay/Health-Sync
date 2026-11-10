@@ -238,7 +238,7 @@ export function TablesView({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-1 gap-3">
         <div>
           <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
-            Patient Tables
+            Visit Logs
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             Verified encounter records and cancellation audits for {formatDisplayDate(selectedDate, todayIST)}
@@ -302,7 +302,7 @@ export function TablesView({
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <h3 className="text-base font-bold text-slate-800">
-                Completed Patients
+                Completed Visits
               </h3>
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">
                 {completedPatients.length} Done
@@ -414,7 +414,7 @@ export function TablesView({
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <h3 className="text-base font-bold text-slate-800">
-                Cancelled Patients
+                Cancellation Log
               </h3>
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-100">
                 {cancelledPatients.length} Cancelled
