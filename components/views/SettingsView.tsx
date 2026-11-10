@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Building2,
@@ -19,8 +19,11 @@ import {
   Trash2,
   LogOut,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Check,
   MapPin,
+  FileText,
 } from 'lucide-react';
 import { useClinic } from '@/context/ClinicContext';
 import EcgActionLoader from '@/components/loading/EcgActionLoader';
@@ -32,7 +35,6 @@ import {
 import { AnimatedCounter } from '@/components/common/AnimatedCounter';
 import { staggerContainer, fadeScale } from '@/lib/constants';
 import { PrescriptionTemplateCalibrator } from '@/components/settings/PrescriptionTemplateCalibrator';
-import { BranchLocationsManager } from '@/components/settings/BranchLocationsManager';
 import { DoctorDirectoryManager } from '@/components/settings/DoctorDirectoryManager';
 import { DoctorScheduleHolidayManager } from '@/components/settings/DoctorScheduleHolidayManager';
 import { BranchLocationManager } from '@/components/settings/BranchLocationManager';
@@ -56,6 +58,7 @@ interface CategoryConfig {
 
 const CATEGORIES: CategoryConfig[] = [
   { id: 'Clinic Identity & Branding', label: 'Identity & Branding', icon: Building2 },
+  { id: 'Custom Prescription', label: 'Custom Prescription', icon: FileText },
   { id: 'Multi-Branch & Locations', label: 'Branches & Locations', icon: MapPin },
   { id: 'Doctor & Quota Controls', label: 'Doctor & Quotas', icon: UserCog },
   { id: 'Queue & Patient Logistics', label: 'Queue Logistics', icon: UsersRound },
@@ -189,6 +192,34 @@ function CustomDropdownInput({
     const [isSaved, setIsSaved] = useState(false);
     const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+    const menuScrollRef = useRef<HTMLDivElement>(null);
+    const [canScrollLeft, setCanScrollLeft] = useState(false);
+    const [canScrollRight, setCanScrollRight] = useState(false);
+
+    const checkScroll = useCallback(() => {
+      if (menuScrollRef.current) {
+        const { scrollLeft, scrollWidth, clientWidth } = menuScrollRef.current;
+        setCanScrollLeft(scrollLeft > 4);
+        setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 4);
+      }
+    }, []);
+
+    useEffect(() => {
+      checkScroll();
+      window.addEventListener('resize', checkScroll);
+      return () => window.removeEventListener('resize', checkScroll);
+    }, [checkScroll]);
+
+    const scrollMenu = (direction: 'left' | 'right') => {
+      if (menuScrollRef.current) {
+        menuScrollRef.current.scrollBy({
+          left: direction === 'left' ? -220 : 220,
+          behavior: 'smooth',
+        });
+        setTimeout(checkScroll, 300);
+      }
+    };
+
     const formData = useMemo(() => ({ ...config, ...edits }), [config, edits]);
 
     const changedKeys = useMemo(() => {
@@ -273,6 +304,7 @@ function CustomDropdownInput({
       transition={{ duration: 0.25 }}
       className={`space-y-6 ${isMobile ? 'pb-24' : 'pb-6'}`}
     >
+      <EcgActionLoader isLoading={isSaving} text="Saving configuration..." />
       <motion.section
         variants={staggerContainer}
         initial="hidden"
@@ -430,59 +462,79 @@ function CustomDropdownInput({
         </div>
       </div>
 
-            <div className="flex items-center gap-1.5 p-1 bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-xs overflow-x-auto scrollbar-none max-w-full">
-              {CATEGORIES.map((cat) => {
-                const Icon = cat.icon;
-                const isActive = activeCategory === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => setActiveCategory(cat.id)}
-                    className={`relative flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors cursor-pointer flex-shrink-0 select-none ${isActive
-                        ? 'text-white'
-                        : 'text-slate-600 hover:text-slate-800 hover:bg-slate-100/60'
-                      }`}
-                  >
-                    {isActive && (
-                      <motion.div
-                        layoutId="activeSettingsCategory"
-                        className="absolute inset-0 bg-[#2563EB] rounded-xl shadow-xs"
-                        transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-                      />
-                    )}
-                    <Icon className={`relative z-10 w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                    <span className="relative z-10 whitespace-nowrap">{cat.label}</span>
-                  </button>
-          );
-        })}
-        </div>
+      <div className="relative w-full">
+        {canScrollLeft && (
+          <button
+            type="button"
+            onClick={() => scrollMenu('left')}
+            className="absolute left-1 top-1/2 -translate-y-1/2 z-20 w-6 h-6 rounded-full bg-white/95 shadow-md border border-slate-200 flex items-center justify-center text-slate-600 hover:text-blue-600 cursor-pointer"
+            aria-label="Scroll menu left"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {canScrollRight && (
+          <button
+            type="button"
+            onClick={() => scrollMenu('right')}
+            className="absolute right-1 top-1/2 -translate-y-1/2 z-20 w-6 h-6 rounded-full bg-white/95 shadow-md border border-slate-200 flex items-center justify-center text-slate-600 hover:text-blue-600 cursor-pointer"
+            aria-label="Scroll menu right"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        )}
 
-        <div className="relative min-h-[160px]">
-          <EcgActionLoader isLoading={isSaving} text="Saving configuration..." />
-          <AnimatePresence mode="popLayout">
-            {filteredParameters.length === 0 ? (
-              <motion.div
-                key="empty-params"
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.96 }}
-                className="bg-white rounded-2xl p-12 text-center border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]"
+        <div
+          ref={menuScrollRef}
+          onScroll={checkScroll}
+          onWheel={(e) => {
+            if (e.deltaY !== 0 && menuScrollRef.current) {
+              menuScrollRef.current.scrollLeft += e.deltaY;
+              checkScroll();
+            }
+          }}
+          className="flex items-center gap-1.5 p-1 bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-xs overflow-x-auto scroll-smooth w-full select-none"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
+          {CATEGORIES.map((cat) => {
+            const Icon = cat.icon;
+            const isActive = activeCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                onClick={(e) => {
+                  setActiveCategory(cat.id);
+                  e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                }}
+                className={`relative flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors cursor-pointer flex-shrink-0 select-none ${isActive
+                    ? 'text-white'
+                    : 'text-slate-600 hover:text-slate-800 hover:bg-slate-100/60'
+                  }`}
               >
-                <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-3 shadow-2xs border border-blue-100/60">
-                  <Search className="w-6 h-6 stroke-[1.8]" />
-                </div>
-                <h4 className="text-sm font-bold text-slate-800">No parameters found</h4>
-                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                  No clinic parameters configured in this category.
-                </p>
-              </motion.div>
-            ) : (
-              <motion.div
-                key={activeCategory}
-                variants={staggerContainer}
-                initial="hidden"
-                animate="visible"
-                className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5"
+                {isActive && (
+                  <motion.div
+                    layoutId="activeSettingsCategory"
+                    className="absolute inset-0 bg-[#2563EB] rounded-xl shadow-xs"
+                    transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+                  />
+                )}
+                <Icon className={`relative z-10 w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                <span className="relative z-10 whitespace-nowrap">{cat.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {filteredParameters.length > 0 ? (
+        <div className="relative">
+          <AnimatePresence mode="popLayout">
+            <motion.div
+              key={activeCategory}
+              variants={staggerContainer}
+              initial="hidden"
+              animate="visible"
+              className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5"
               >
                 {filteredParameters.map((meta) => {
                   const val = formData[meta.key];
@@ -725,32 +777,30 @@ function CustomDropdownInput({
                   );
                 })}
               </motion.div>
-            )}
           </AnimatePresence>
         </div>
+      ) : searchQuery.trim() !== '' ? (
+        <motion.div
+          key="empty-params"
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.96 }}
+          className="bg-white rounded-2xl p-12 text-center border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]"
+        >
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-3 shadow-2xs border border-blue-100/60">
+            <Search className="w-6 h-6 stroke-[1.8]" />
+          </div>
+          <h4 className="text-sm font-bold text-slate-800">No parameters found</h4>
+          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+            No clinic parameters configured in this category.
+          </p>
+        </motion.div>
+      ) : null}
 
-        {(activeCategory === 'Clinic Identity & Branding' ||
-          ['branch', 'location', 'locations', 'branches'].some((k) =>
+        {(activeCategory === 'Custom Prescription' ||
+          (searchQuery.trim() !== '' && ['prescription', 'template', 'rx', 'pad', 'letterhead', 'calibrator'].some((k) =>
             searchQuery.toLowerCase().includes(k)
-          )) && (
-            <motion.div
-              variants={fadeScale}
-              initial="hidden"
-              animate="visible"
-              className="pt-2"
-            >
-              <BranchLocationsManager
-                defaultClinicName={formData.clinic_name}
-                defaultClinicAddress={formData.clinic_address}
-                defaultClinicPhone={formData.clinic_phone}
-              />
-            </motion.div>
-          )}
-
-        {(activeCategory === 'Clinic Identity & Branding' ||
-          ['prescription', 'template', 'rx', 'pad', 'letterhead'].some((k) =>
-          searchQuery.toLowerCase().includes(k)
-          )) && (
+          ))) && (
             <motion.div
               variants={fadeScale}
               initial="hidden"
