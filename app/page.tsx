@@ -568,7 +568,6 @@ function DashboardContent() {
       label: 'Doctor Management',
       icon: Stethoscope,
       reqAuth: true,
-      badge: 'Admin',
       description: 'Clinic & Branch Assignments, Quotas, PINs',
     },
     { id: 'settings', label: 'Settings', icon: SlidersHorizontal, reqAuth: true },
