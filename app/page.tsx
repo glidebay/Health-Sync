@@ -574,7 +574,6 @@ function DashboardContent() {
 
   const navItems = React.useMemo(() => {
     return allNavItems.filter((item) => {
-      // ONLY the active Main Doctor with Admin Access can see Settings & Doctor Management!
       if (item.id === 'settings' || item.id === 'admin_doctors') {
         return isDoctorAdmin;
       }
