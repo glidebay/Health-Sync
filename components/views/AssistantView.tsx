@@ -18,19 +18,11 @@ interface AssistantViewProps {
     strategy: ReallocateStrategy;
     newSlotTime: string;
     newDate?: string;
-    newDoctorId?: string;
-    newDoctorName?: string;
     reason: string;
     swapWithPatientId?: string;
     delayMinutes?: number;
     cascadeAll?: boolean;
     setUrgentPriority?: boolean;
-  }) => Promise<void> | void;
-  onReassignDoctor?: (params: {
-    appointmentId: string;
-    newDoctorId: string;
-    newDoctorName: string;
-    reason: string;
   }) => Promise<void> | void;
   onBulkReassignDoctor?: (params: {
     fromDoctorId: string;
@@ -48,7 +40,6 @@ export function AssistantView({
   onReallocate,
   onCancelAppointment,
   onReschedulePatient,
-  onReassignDoctor,
   onBulkReassignDoctor,
   onStartConsultation,
 }: AssistantViewProps) {
@@ -67,7 +58,6 @@ export function AssistantView({
         onRegisterWalkin={onRegisterWalkin}
         onCancelAppointment={onCancelAppointment}
         onReschedulePatient={onReschedulePatient}
-        onReassignDoctor={onReassignDoctor}
         onBulkReassignDoctor={onBulkReassignDoctor}
         onStartConsultation={onStartConsultation}
       />

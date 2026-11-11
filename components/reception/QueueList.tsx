@@ -13,7 +13,6 @@ import {
   AlertTriangle,
   UserCheck,
   UserX,
-  Stethoscope,
   Globe,
 } from 'lucide-react';
 import { Patient } from '@/types';
@@ -37,19 +36,11 @@ interface QueueListProps {
     strategy: ReallocateStrategy;
     newSlotTime: string;
     newDate?: string;
-    newDoctorId?: string;
-    newDoctorName?: string;
     reason: string;
     swapWithPatientId?: string;
     delayMinutes?: number;
     cascadeAll?: boolean;
     setUrgentPriority?: boolean;
-  }) => Promise<void> | void;
-  onReassignDoctor?: (params: {
-    appointmentId: string;
-    newDoctorId: string;
-    newDoctorName: string;
-    reason: string;
   }) => Promise<void> | void;
   onBulkReassignDoctor?: (params: {
     fromDoctorId: string;
@@ -132,7 +123,6 @@ export function QueueList({
   onRegisterWalkin,
   onCancelAppointment,
   onReschedulePatient,
-  onReassignDoctor,
   onBulkReassignDoctor,
   onStartConsultation,
   itemsPerPage = 10,
@@ -145,7 +135,6 @@ export function QueueList({
 
   const [selectedPatientForReschedule, setSelectedPatientForReschedule] = useState<Patient | null>(null);
   const [selectedPatientForCancel, setSelectedPatientForCancel] = useState<Patient | null>(null);
-  const [selectedPatientForReassign, setSelectedPatientForReassign] = useState<Patient | null>(null);
   const [isBulkReassignOpen, setIsBulkReassignOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -402,15 +391,6 @@ export function QueueList({
                                 <Clock className="w-3 h-3 text-slate-400" />
                                 <span>Slot: {p.time}</span>
                               </span>
-                              {p.doctorName && (
-                                <>
-                                  <span>•</span>
-                                  <span className="inline-flex items-center gap-1 text-blue-600 font-semibold truncate max-w-[150px]">
-                                    <Stethoscope className="w-3 h-3 text-blue-500 shrink-0" />
-                                    <span className="truncate">{p.doctorName}</span>
-                                  </span>
-                                </>
-                              )}
                             </div>
                           </div>
                         </div>
@@ -453,18 +433,6 @@ export function QueueList({
 
                       {isWaiting && (
                         <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
-                          {onReassignDoctor && (
-                            <motion.button
-                              whileHover={{ scale: 1.04 }}
-                              whileTap={{ scale: 0.96 }}
-                              onClick={() => setSelectedPatientForReassign(p)}
-                              className="text-xs font-semibold px-2.5 sm:px-3 py-1.5 border border-indigo-200/80 text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100/70 rounded-xl transition cursor-pointer flex items-center gap-1"
-                              title="Reassign to another doctor (Doctor on leave)"
-                            >
-                              <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
-                              <span>Reassign</span>
-                            </motion.button>
-                          )}
                           <motion.button
                             whileHover={{ scale: 1.04 }}
                             whileTap={{ scale: 0.96 }}
@@ -515,7 +483,6 @@ export function QueueList({
         isOpen={!!selectedPatientForReschedule}
         patient={selectedPatientForReschedule}
         queue={currentPatients.length > 0 ? currentPatients : queue}
-        doctors={doctors}
         onClose={() => setSelectedPatientForReschedule(null)}
         onReschedulePatient={async (params) => {
           await onReschedulePatient(params);
@@ -524,21 +491,13 @@ export function QueueList({
       />
 
       <ReassignDoctorModal
-        isOpen={!!selectedPatientForReassign || isBulkReassignOpen}
-        patient={selectedPatientForReassign}
+        isOpen={isBulkReassignOpen}
+        patient={null}
         queue={currentPatients.length > 0 ? currentPatients : queue}
         doctors={doctors || []}
-        isBulkMode={isBulkReassignOpen}
-        onClose={() => {
-          setSelectedPatientForReassign(null);
-          setIsBulkReassignOpen(false);
-        }}
-        onConfirmReassign={async (params) => {
-          if (onReassignDoctor) {
-            await onReassignDoctor(params);
-            loadData(true);
-          }
-        }}
+        isBulkMode={true}
+        onClose={() => setIsBulkReassignOpen(false)}
+        onConfirmReassign={() => {}}
         onConfirmBulkReassign={async (params) => {
           if (onBulkReassignDoctor) {
             await onBulkReassignDoctor(params);
