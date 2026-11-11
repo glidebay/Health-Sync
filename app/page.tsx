@@ -66,7 +66,6 @@ import EcgLoadingScreen from '@/components/loading/EcgLoadingScreen';
 import { SideMenu, NavItemConfig } from '@/components/layout/SideMenu';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { GlobalPatientSearch } from '@/components/common/GlobalPatientSearch';
-import { GlobalPharmacySearch } from '@/components/common/GlobalPharmacySearch';
 import { GlobalSettingsSearch } from '@/components/common/GlobalSettingsSearch';
 import { GlobalAnalyticsSearch } from '@/components/common/GlobalAnalyticsSearch';
 import { NavigationDock } from '@/components/layout/NavigationDock';
@@ -1633,20 +1632,14 @@ function DashboardContent() {
                 </motion.section>
               )}
 
-              {isMobile && (
+              {isMobile && activeSection !== 'inventory' && (
                 <motion.div
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.15 }}
                   className="relative w-full mb-6"
                 >
-                  {activeSection === 'inventory' ? (
-                    <GlobalPharmacySearch
-                      isMobile
-                      inventory={inventory}
-                      placeholder="Search medicines..."
-                    />
-                  ) : activeSection === 'settings' ? (
+                  {activeSection === 'settings' ? (
                     <GlobalSettingsSearch
                       isMobile
                       placeholder="Search settings..."

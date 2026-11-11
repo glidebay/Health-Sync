@@ -6,7 +6,6 @@ import { PanelLeft, HeartPulse, Search, LogIn, Lock, ChevronDown, Building2, Che
 import { NavSection, Patient, InventoryItem } from '@/types';
 import { DbClinicLocation } from '@/types/database';
 import { GlobalPatientSearch } from '@/components/common/GlobalPatientSearch';
-import { GlobalPharmacySearch } from '@/components/common/GlobalPharmacySearch';
 import { GlobalSettingsSearch } from '@/components/common/GlobalSettingsSearch';
 import { GlobalAnalyticsSearch } from '@/components/common/GlobalAnalyticsSearch';
 
@@ -72,8 +71,10 @@ export function AppHeader({
         return;
       }
       if (e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) {
-        e.preventDefault();
-        setIsSearchExpanded(true);
+        if (!isPharmacyStock) {
+          e.preventDefault();
+          setIsSearchExpanded(true);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -88,16 +89,9 @@ export function AppHeader({
       className={`w-full bg-[#F8F9FB] flex items-center justify-between no-print relative z-40 ${isMobile ? 'px-4 py-3.5 border-b border-[#ECEEF2]' : 'px-5 lg:px-8 py-5'
         }`}
     >
-      {isSearchExpanded ? (
+      {isSearchExpanded && !isPharmacyStock ? (
         <div className="w-full flex items-center">
-          {isPharmacyStock ? (
-            <GlobalPharmacySearch
-              isExpanded={true}
-              onClose={() => setIsSearchExpanded(false)}
-              inventory={inventory}
-              placeholder="Search medicines by brand or molecule..."
-            />
-          ) : isSettings ? (
+          {isSettings ? (
             <GlobalSettingsSearch
               isExpanded={true}
               onClose={() => setIsSearchExpanded(false)}
@@ -240,15 +234,13 @@ export function AppHeader({
           </div>
 
           <div className={`flex items-center min-w-0 ${isMobile ? 'space-x-1.5' : 'space-x-2.5 sm:space-x-3'}`}>
-            {isMobile && (
+            {isMobile && !isPharmacyStock && (
               <button
                 type="button"
                 onClick={() => setIsSearchExpanded(true)}
                 className="w-9 h-9 rounded-xl bg-white border border-[#ECEEF2] flex items-center justify-center text-[#2563EB] shadow-2xs hover:bg-blue-50 transition cursor-pointer flex-shrink-0"
                 title={
-                  isPharmacyStock
-                    ? 'Search medicines'
-                    : isSettings
+                  isSettings
                     ? 'Search settings'
                     : isAnalytics
                     ? 'Search analytics'
@@ -259,7 +251,7 @@ export function AppHeader({
               </button>
             )}
 
-            {!isMobile && (
+            {!isMobile && !isPharmacyStock && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.92 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -270,9 +262,7 @@ export function AppHeader({
                   onClick={() => setIsSearchExpanded(true)}
                   className="relative flex items-center cursor-pointer w-44 sm:w-56 md:w-64 lg:w-72 xl:w-80 h-10 pl-10 pr-3.5 bg-[#ECEEF2] hover:bg-[#E6E8ED] border border-transparent rounded-xl text-xs text-gray-500 transition-all duration-200 group"
                   title={
-                    isPharmacyStock
-                      ? 'Search medicines'
-                      : isSettings
+                    isSettings
                       ? 'Search settings'
                       : isAnalytics
                       ? 'Search analytics'
@@ -283,9 +273,7 @@ export function AppHeader({
                     <Search className="w-4 h-4 stroke-[2]" />
                   </span>
                   <span className="truncate text-gray-500 group-hover:text-gray-700">
-                    {isPharmacyStock
-                      ? 'Search medicines...'
-                      : isSettings
+                    {isSettings
                       ? 'Search settings...'
                       : isAnalytics
                       ? 'Search analytics & insights...'
