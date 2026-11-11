@@ -29,6 +29,8 @@ import {
   cancelAppointmentDb,
   rescheduleAppointmentDb,
   rescheduleAppointmentAdvancedDb,
+  reassignPatientDoctorDb,
+  bulkReassignDoctorAppointmentsDb,
   swapPatientSlotsDb,
   cascadeDoctorDelayDb,
   updateAppointmentStatusDb,
@@ -1087,6 +1089,8 @@ function DashboardContent() {
     strategy: ReallocateStrategy;
     newSlotTime: string;
     newDate?: string;
+    newDoctorId?: string;
+    newDoctorName?: string;
     reason: string;
     swapWithPatientId?: string;
     delayMinutes?: number;
@@ -1098,12 +1102,24 @@ function DashboardContent() {
       strategy,
       newSlotTime,
       newDate,
+      newDoctorId,
+      newDoctorName,
       reason,
       swapWithPatientId,
       delayMinutes = 20,
       cascadeAll = true,
       setUrgentPriority,
     } = params;
+
+    if (strategy === 'doctor_leave' && newDoctorId) {
+      await reassignPatientDoctorDb({
+        appointmentId: patientId,
+        newDoctorId,
+        newDoctorName,
+        reason,
+        newTimeIso: newSlotTime ? convertSlotToFutureIso(newSlotTime, newDate, delayMinutes) : undefined,
+      });
+    }
 
     const currentPatient = queue.find((p) => p.id === patientId);
 
@@ -1122,7 +1138,7 @@ function DashboardContent() {
       notes: reason,
     });
 
-    if (result.success) {
+    if (result.success || strategy === 'doctor_leave') {
       let toastTitle = 'Appointment Rescheduled';
       if (strategy === 'patient_late') {
         toastTitle = result.swapped_patient ? 'Slot Reallocated & Delayed' : 'Patient Delayed';
@@ -1130,15 +1146,19 @@ function DashboardContent() {
         toastTitle = 'Doctor Delay Applied';
       } else if (strategy === 'emergency_shift') {
         toastTitle = 'Emergency Priority Activated';
+      } else if (strategy === 'doctor_leave') {
+        toastTitle = 'Doctor Reassigned (On Leave)';
       }
 
       showToast(
         'success',
         toastTitle,
-        result.message ||
-        (result.new_slot
-          ? `${result.patient_name || currentPatient?.name || 'Patient'} moved to ${result.new_slot}`
-          : 'Appointment moved successfully!')
+        strategy === 'doctor_leave'
+          ? `Patient reassigned to ${newDoctorName || 'covering physician'}.`
+          : result.message ||
+            (result.new_slot
+              ? `${result.patient_name || currentPatient?.name || 'Patient'} moved to ${result.new_slot}`
+              : 'Appointment moved successfully!')
       );
 
       const dbQueue = await fetchQueueFromDb();
@@ -1173,6 +1193,54 @@ function DashboardContent() {
         showToast('error', 'Reschedule Failed', result.error || 'Could not reschedule appointment.');
       }
       throw new Error(result.error || 'Reschedule failed');
+    }
+  };
+
+  const handleReassignDoctor = async (params: {
+    appointmentId: string;
+    newDoctorId: string;
+    newDoctorName: string;
+    reason: string;
+  }) => {
+    const result = await reassignPatientDoctorDb({
+      appointmentId: params.appointmentId,
+      newDoctorId: params.newDoctorId,
+      newDoctorName: params.newDoctorName,
+      reason: params.reason,
+    });
+
+    if (result.success) {
+      showToast('success', 'Doctor Reassigned', result.message || `Reassigned to ${params.newDoctorName}`);
+      const dbQueue = await fetchQueueFromDb();
+      if (dbQueue && dbQueue.length > 0) {
+        setQueue(sortQueueWithCompletedAtEnd(dbQueue));
+      }
+    } else {
+      showToast('error', 'Reassignment Failed', result.error || 'Failed to reassign doctor.');
+    }
+  };
+
+  const handleBulkReassignDoctor = async (params: {
+    fromDoctorId: string;
+    toDoctorId: string;
+    toDoctorName: string;
+    reason: string;
+  }) => {
+    const result = await bulkReassignDoctorAppointmentsDb({
+      fromDoctorId: params.fromDoctorId,
+      toDoctorId: params.toDoctorId,
+      toDoctorName: params.toDoctorName,
+      reason: params.reason,
+    });
+
+    if (result.success) {
+      showToast('success', 'Doctor Queue Reassigned', result.message || 'Queue reassigned successfully.');
+      const dbQueue = await fetchQueueFromDb();
+      if (dbQueue && dbQueue.length > 0) {
+        setQueue(sortQueueWithCompletedAtEnd(dbQueue));
+      }
+    } else {
+      showToast('error', 'Queue Transfer Failed', result.error || 'Failed to reassign doctor queue.');
     }
   };
 
@@ -1792,10 +1860,13 @@ function DashboardContent() {
                 {activeSection === 'assistant' && (
                   <AssistantView
                     queue={queue}
+                    doctors={availableDoctors}
                     onRegisterWalkin={() => setShowWalkinModal(true)}
                     onReallocate={handleReallocate}
                     onCancelAppointment={handleCancelAppointment}
                     onReschedulePatient={handleReschedulePatient}
+                    onReassignDoctor={handleReassignDoctor}
+                    onBulkReassignDoctor={handleBulkReassignDoctor}
                     onStartConsultation={startConsultation}
                   />
                 )}

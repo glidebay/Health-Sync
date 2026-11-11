@@ -3,11 +3,13 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Patient } from '@/types';
+import { DbDoctor } from '@/types/database';
 import { QueueList } from '@/components/reception/QueueList';
 import { ReallocateStrategy } from '@/components/reception/RescheduleModal';
 
 interface AssistantViewProps {
   queue: Patient[];
+  doctors?: DbDoctor[];
   onRegisterWalkin: () => void;
   onReallocate?: (id: string) => void;
   onCancelAppointment: (patientId: string, reason: string) => Promise<void> | void;
@@ -15,21 +17,39 @@ interface AssistantViewProps {
     patientId: string;
     strategy: ReallocateStrategy;
     newSlotTime: string;
+    newDate?: string;
+    newDoctorId?: string;
+    newDoctorName?: string;
     reason: string;
     swapWithPatientId?: string;
     delayMinutes?: number;
     cascadeAll?: boolean;
     setUrgentPriority?: boolean;
   }) => Promise<void> | void;
+  onReassignDoctor?: (params: {
+    appointmentId: string;
+    newDoctorId: string;
+    newDoctorName: string;
+    reason: string;
+  }) => Promise<void> | void;
+  onBulkReassignDoctor?: (params: {
+    fromDoctorId: string;
+    toDoctorId: string;
+    toDoctorName: string;
+    reason: string;
+  }) => Promise<void> | void;
   onStartConsultation?: (patientId: string) => void;
 }
 
 export function AssistantView({
   queue,
+  doctors = [],
   onRegisterWalkin,
   onReallocate,
   onCancelAppointment,
   onReschedulePatient,
+  onReassignDoctor,
+  onBulkReassignDoctor,
   onStartConsultation,
 }: AssistantViewProps) {
   return (
@@ -43,9 +63,12 @@ export function AssistantView({
     >
       <QueueList
         queue={queue}
+        doctors={doctors}
         onRegisterWalkin={onRegisterWalkin}
         onCancelAppointment={onCancelAppointment}
         onReschedulePatient={onReschedulePatient}
+        onReassignDoctor={onReassignDoctor}
+        onBulkReassignDoctor={onBulkReassignDoctor}
         onStartConsultation={onStartConsultation}
       />
     </motion.section>

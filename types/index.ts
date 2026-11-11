@@ -24,6 +24,8 @@ export interface Patient {
   smsSent?: boolean;
   lastSmsType?: string;
   locationId?: string;
+  doctorId?: string;
+  doctorName?: string;
 }
 
 export interface InventoryItem {

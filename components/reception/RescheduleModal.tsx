@@ -2,8 +2,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Check, AlertTriangle } from 'lucide-react';
+import { X, Check, AlertTriangle, Stethoscope, UserX } from 'lucide-react';
 import { Patient } from '@/types';
+import { DbDoctor } from '@/types/database';
 import { AVAILABLE_SLOTS } from '@/lib/constants';
 import { useClinic } from '@/context/ClinicContext';
 import { formatPatientToken } from '@/lib/utils';
@@ -13,18 +14,22 @@ export type ReallocateStrategy =
   | 'patient_late'
   | 'doctor_delay'
   | 'emergency_shift'
-  | 'custom_slot';
+  | 'custom_slot'
+  | 'doctor_leave';
 
 interface RescheduleModalProps {
   isOpen: boolean;
   patient: Patient | null;
   queue: Patient[];
+  doctors?: DbDoctor[];
   onClose: () => void;
   onReschedulePatient: (params: {
     patientId: string;
     strategy: ReallocateStrategy;
     newSlotTime: string;
     newDate?: string;
+    newDoctorId?: string;
+    newDoctorName?: string;
     reason: string;
     swapWithPatientId?: string;
     delayMinutes?: number;
@@ -39,6 +44,7 @@ export function RescheduleModal({
   isOpen,
   patient,
   queue,
+  doctors = [],
   onClose,
   onReschedulePatient,
 }: RescheduleModalProps) {
@@ -46,6 +52,7 @@ export function RescheduleModal({
   const [strategy, setStrategy] = useState<ReallocateStrategy>('patient_late');
   const [delayMinutes, setDelayMinutes] = useState<number>(20);
   const [selectedSlotTime, setSelectedSlotTime] = useState<string>('');
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
   const [customPickerMode, setCustomPickerMode] = useState<'grid' | 'standard'>('grid');
   const [customDate, setCustomDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [customTime, setCustomTime] = useState('10:00');
@@ -71,6 +78,17 @@ export function RescheduleModal({
       setReadyPatientId(otherWaitingPatients[0].id);
     }
   }, [otherWaitingPatients, readyPatientId]);
+
+  const activeDoctors = useMemo(() => {
+    return doctors.filter((d) => d.is_active !== false);
+  }, [doctors]);
+
+  useEffect(() => {
+    if (activeDoctors.length > 0 && !selectedDoctorId) {
+      const alt = activeDoctors.find((d) => d.id !== patient?.doctorId);
+      setSelectedDoctorId(alt ? alt.id : activeDoctors[0].id);
+    }
+  }, [activeDoctors, selectedDoctorId, patient]);
 
   useEffect(() => {
     if (patient) {
@@ -121,16 +139,24 @@ export function RescheduleModal({
       } else if (strategy === 'emergency_shift') {
         targetNewTime = patient.time;
         finalReason = 'Emergency Priority Shift';
+      } else if (strategy === 'doctor_leave') {
+        targetNewTime = selectedSlotTime || patient.time;
+        const coveringDoctor = activeDoctors.find((d) => d.id === selectedDoctorId);
+        finalReason = `Doctor on Leave - Reassigned to ${coveringDoctor?.full_name || 'Covering Physician'}`;
       } else if (strategy === 'custom_slot') {
         targetNewTime = selectedSlotTime || patient.time;
         finalReason = `Reallocated to ${targetNewTime}`;
       }
 
+      const coveringDoc = activeDoctors.find((d) => d.id === selectedDoctorId);
+
       await onReschedulePatient({
         patientId: patient.id,
         strategy,
         newSlotTime: targetNewTime,
-        newDate: strategy === 'custom_slot' && customPickerMode === 'standard' ? customDate : undefined,
+        newDate: (strategy === 'custom_slot' || strategy === 'doctor_leave') && customPickerMode === 'standard' ? customDate : undefined,
+        newDoctorId: strategy === 'doctor_leave' ? selectedDoctorId : undefined,
+        newDoctorName: strategy === 'doctor_leave' ? coveringDoc?.full_name : undefined,
         reason: finalReason,
         swapWithPatientId:
           strategy === 'patient_late' && fastTrackReadyPatient ? readyPatientId : undefined,
@@ -190,10 +216,11 @@ export function RescheduleModal({
               <label className="text-xs font-semibold text-[#8A909D] block mb-1.5">
                 Reschedule Reason
               </label>
-              <div className="grid grid-cols-4 gap-1.5 bg-[#F8F9FB] p-1 rounded-xl border border-[#ECEEF2]">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 bg-[#F8F9FB] p-1 rounded-xl border border-[#ECEEF2]">
                 {[
                   { id: 'patient_late', label: 'Patient Late' },
                   { id: 'doctor_delay', label: 'Doctor Delay' },
+                  { id: 'doctor_leave', label: 'Doctor on Leave' },
                   { id: 'emergency_shift', label: 'Emergency' },
                   { id: 'custom_slot', label: 'New Slot' },
                 ].map((item) => {
@@ -203,7 +230,7 @@ export function RescheduleModal({
                       key={item.id}
                       type="button"
                       onClick={() => setStrategy(item.id as ReallocateStrategy)}
-                      className={`py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      className={`py-1.5 px-1 rounded-lg text-xs font-semibold transition cursor-pointer text-center truncate ${
                         isSelected
                           ? 'bg-white text-[#2563EB] shadow-xs'
                           : 'text-[#5E6470] hover:text-[#16191E]'
@@ -215,6 +242,34 @@ export function RescheduleModal({
                 })}
               </div>
             </div>
+
+            {strategy === 'doctor_leave' && (
+              <div className="space-y-3 bg-amber-50/70 border border-amber-200/80 p-3.5 rounded-xl">
+                <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                  <Stethoscope className="w-4 h-4 text-amber-600" />
+                  <span>Reassign to Covering Doctor (Doctor on Leave)</span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-tight">
+                  The assigned physician is on leave. Choose an active doctor to cover this consultation:
+                </p>
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                    Select Covering Doctor *
+                  </label>
+                  <select
+                    value={selectedDoctorId}
+                    onChange={(e) => setSelectedDoctorId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-amber-300 rounded-xl focus:border-blue-500 outline-none font-medium text-slate-800 cursor-pointer"
+                  >
+                    {activeDoctors.map((doc) => (
+                      <option key={doc.id} value={doc.id}>
+                        {doc.full_name} ({doc.specialization || 'General'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
 
             {(strategy === 'patient_late' || strategy === 'doctor_delay') && (
               <div className="space-y-2">

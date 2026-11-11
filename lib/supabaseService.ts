@@ -747,6 +747,8 @@ export async function fetchQueueFromDb(targetDate?: string, doctorId?: string, l
           visitType: isOnline ? 'Online' : 'Walk-in',
           cancellationReason: item.cancellation_reason || undefined,
           locationId: item.location_id || undefined,
+          doctorId: item.doctor_id || undefined,
+          doctorName: item.doctor_name || undefined,
         };
       });
 
@@ -780,6 +782,11 @@ export async function fetchQueueFromDb(targetDate?: string, doctorId?: string, l
           created_at,
           patient_number,
           display_id
+        ),
+        doctor:doctors (
+          id,
+          full_name,
+          specialization
         )
       `)
       .gte('scheduled_time', startIso)
@@ -839,6 +846,8 @@ export async function fetchQueueFromDb(targetDate?: string, doctorId?: string, l
         visitType,
         cancellationReason: item.cancellation_reason || undefined,
         locationId: item.location_id || undefined,
+        doctorId: item.doctor_id || item.doctor?.id || undefined,
+        doctorName: item.doctor?.full_name || undefined,
       };
     });
 
@@ -921,6 +930,8 @@ export async function fetchPatientAppointmentsFromDb(params?: {
         scheduledTime: item.scheduled_time,
         visitType: item.visit_type || 'Walk-in',
         cancellationReason: item.cancellation_reason || undefined,
+        doctorId: item.doctor_id || undefined,
+        doctorName: item.doctor_name || undefined,
       };
     });
 
@@ -1350,12 +1361,129 @@ export async function rescheduleAppointmentDb(params: {
   newDoctorId?: string | null;
   reason: string;
 }): Promise<RescheduleResult> {
+  if (params.newDoctorId) {
+    try {
+      await supabase
+        .from('appointments')
+        .update({ doctor_id: params.newDoctorId })
+        .eq('id', params.appointmentId);
+    } catch {
+      // ignore
+    }
+  }
   return rescheduleAppointmentAdvancedDb({
     appointmentId: params.appointmentId,
     mode: 'New Slot',
     newTimeIso: params.newTimeIso,
     notes: params.reason,
   });
+}
+
+export async function reassignPatientDoctorDb(params: {
+  appointmentId: string;
+  newDoctorId: string;
+  newDoctorName?: string;
+  reason?: string;
+  newTimeIso?: string | null;
+}): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const updatePayload: Record<string, any> = {
+      doctor_id: params.newDoctorId,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (params.newTimeIso) {
+      updatePayload.scheduled_time = params.newTimeIso;
+    }
+
+    const { error: updateErr } = await supabase
+      .from('appointments')
+      .update(updatePayload)
+      .eq('id', params.appointmentId);
+
+    if (updateErr) {
+      console.warn('Direct appointments update failed:', updateErr);
+      return { success: false, error: updateErr.message };
+    }
+
+    try {
+      await supabase.from('appointment_logs').insert([
+        {
+          appointment_id: params.appointmentId,
+          reason: params.reason || `Reassigned to ${params.newDoctorName || 'covering doctor'} (Doctor on leave)`,
+          new_time: params.newTimeIso || null,
+        },
+      ]);
+    } catch {
+      // ignore non-fatal log error
+    }
+
+    return {
+      success: true,
+      message: `Patient successfully reassigned to ${params.newDoctorName || 'doctor'}.`,
+    };
+  } catch (err: any) {
+    console.warn('reassignPatientDoctorDb exception:', err);
+    return { success: false, error: err?.message || 'Failed to reassign doctor' };
+  }
+}
+
+export async function bulkReassignDoctorAppointmentsDb(params: {
+  fromDoctorId: string;
+  toDoctorId: string;
+  toDoctorName?: string;
+  date?: string;
+  reason?: string;
+}): Promise<{ success: boolean; reassignedCount: number; message?: string; error?: string }> {
+  try {
+    const targetDate = params.date || getTodayIST();
+    const startIso = `${targetDate}T00:00:00+05:30`;
+    const endIso = `${targetDate}T23:59:59.999+05:30`;
+
+    const { data: appts, error: fetchErr } = await supabase
+      .from('appointments')
+      .select('id')
+      .eq('doctor_id', params.fromDoctorId)
+      .in('status', ['Waiting', 'In Progress'])
+      .gte('scheduled_time', startIso)
+      .lte('scheduled_time', endIso);
+
+    if (fetchErr) return { success: false, reassignedCount: 0, error: fetchErr.message };
+
+    if (!appts || appts.length === 0) {
+      return { success: true, reassignedCount: 0, message: 'No waiting appointments found for this doctor today.' };
+    }
+
+    const ids = appts.map((a: any) => a.id);
+    const { error: updateErr } = await supabase
+      .from('appointments')
+      .update({
+        doctor_id: params.toDoctorId,
+        updated_at: new Date().toISOString(),
+      })
+      .in('id', ids);
+
+    if (updateErr) return { success: false, reassignedCount: 0, error: updateErr.message };
+
+    try {
+      const logEntries = ids.map((id: string) => ({
+        appointment_id: id,
+        reason: params.reason || `Reassigned to ${params.toDoctorName || 'covering doctor'} (Doctor on leave)`,
+      }));
+      await supabase.from('appointment_logs').insert(logEntries);
+    } catch {
+      // ignore non-fatal log error
+    }
+
+    return {
+      success: true,
+      reassignedCount: ids.length,
+      message: `Successfully reassigned ${ids.length} patient${ids.length === 1 ? '' : 's'} to ${params.toDoctorName || 'covering doctor'}.`,
+    };
+  } catch (err: any) {
+    console.warn('bulkReassignDoctorAppointmentsDb exception:', err);
+    return { success: false, reassignedCount: 0, error: err?.message || 'Bulk reassignment failed' };
+  }
 }
 
 export async function swapPatientSlotsDb(params: {

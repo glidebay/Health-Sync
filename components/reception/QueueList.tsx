@@ -12,12 +12,16 @@ import {
   Clock,
   AlertTriangle,
   UserCheck,
+  UserX,
+  Stethoscope,
   Globe,
 } from 'lucide-react';
 import { Patient } from '@/types';
+import { DbDoctor } from '@/types/database';
 import { NumberedPagination } from '@/components/ui/pagination';
 import { RescheduleModal, ReallocateStrategy } from './RescheduleModal';
 import { CancelModal } from './CancelModal';
+import { ReassignDoctorModal } from './ReassignDoctorModal';
 import { formatPatientToken } from '@/lib/utils';
 import { fetchPatientAppointmentsFromDb } from '@/lib/supabaseService';
 import { supabase } from '@/lib/supabaseClient';
@@ -25,17 +29,33 @@ import { EcgActionLoader } from '@/components/loading/EcgActionLoader';
 
 interface QueueListProps {
   queue: Patient[];
+  doctors?: DbDoctor[];
   onRegisterWalkin?: () => void;
   onCancelAppointment: (patientId: string, reason: string) => Promise<void> | void;
   onReschedulePatient: (params: {
     patientId: string;
     strategy: ReallocateStrategy;
     newSlotTime: string;
+    newDate?: string;
+    newDoctorId?: string;
+    newDoctorName?: string;
     reason: string;
     swapWithPatientId?: string;
     delayMinutes?: number;
     cascadeAll?: boolean;
     setUrgentPriority?: boolean;
+  }) => Promise<void> | void;
+  onReassignDoctor?: (params: {
+    appointmentId: string;
+    newDoctorId: string;
+    newDoctorName: string;
+    reason: string;
+  }) => Promise<void> | void;
+  onBulkReassignDoctor?: (params: {
+    fromDoctorId: string;
+    toDoctorId: string;
+    toDoctorName: string;
+    reason: string;
   }) => Promise<void> | void;
   onStartConsultation?: (patientId: string) => void;
   itemsPerPage?: number;
@@ -108,9 +128,12 @@ const cardVariants = {
 
 export function QueueList({
   queue,
+  doctors = [],
   onRegisterWalkin,
   onCancelAppointment,
   onReschedulePatient,
+  onReassignDoctor,
+  onBulkReassignDoctor,
   onStartConsultation,
   itemsPerPage = 10,
 }: QueueListProps) {
@@ -122,6 +145,8 @@ export function QueueList({
 
   const [selectedPatientForReschedule, setSelectedPatientForReschedule] = useState<Patient | null>(null);
   const [selectedPatientForCancel, setSelectedPatientForCancel] = useState<Patient | null>(null);
+  const [selectedPatientForReassign, setSelectedPatientForReassign] = useState<Patient | null>(null);
+  const [isBulkReassignOpen, setIsBulkReassignOpen] = useState<boolean>(false);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -269,6 +294,19 @@ export function QueueList({
             </button>
           )}
 
+          {onBulkReassignDoctor && doctors && doctors.length > 1 && (
+            <motion.button
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setIsBulkReassignOpen(true)}
+              className="bg-white hover:bg-amber-50/70 border border-amber-200 text-amber-800 font-semibold text-xs px-3.5 py-2.5 rounded-2xl shadow-2xs hover:shadow-xs transition-all cursor-pointer flex items-center space-x-1.5 self-start sm:self-auto"
+              title="Doctor on leave? Transfer queue to another doctor"
+            >
+              <UserX className="w-3.5 h-3.5 text-amber-600" />
+              <span>Doctor On Leave</span>
+            </motion.button>
+          )}
+
           {onRegisterWalkin && (
             <motion.button
               whileHover={{ scale: 1.02, y: -1 }}
@@ -364,6 +402,15 @@ export function QueueList({
                                 <Clock className="w-3 h-3 text-slate-400" />
                                 <span>Slot: {p.time}</span>
                               </span>
+                              {p.doctorName && (
+                                <>
+                                  <span>•</span>
+                                  <span className="inline-flex items-center gap-1 text-blue-600 font-semibold truncate max-w-[150px]">
+                                    <Stethoscope className="w-3 h-3 text-blue-500 shrink-0" />
+                                    <span className="truncate">{p.doctorName}</span>
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -405,12 +452,24 @@ export function QueueList({
                       </div>
 
                       {isWaiting && (
-                        <div className="flex items-center space-x-2 flex-shrink-0">
+                        <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
+                          {onReassignDoctor && (
+                            <motion.button
+                              whileHover={{ scale: 1.04 }}
+                              whileTap={{ scale: 0.96 }}
+                              onClick={() => setSelectedPatientForReassign(p)}
+                              className="text-xs font-semibold px-2.5 sm:px-3 py-1.5 border border-indigo-200/80 text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100/70 rounded-xl transition cursor-pointer flex items-center gap-1"
+                              title="Reassign to another doctor (Doctor on leave)"
+                            >
+                              <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Reassign</span>
+                            </motion.button>
+                          )}
                           <motion.button
                             whileHover={{ scale: 1.04 }}
                             whileTap={{ scale: 0.96 }}
                             onClick={() => setSelectedPatientForCancel(p)}
-                            className="text-xs font-semibold px-3 py-1.5 border border-rose-200/80 text-rose-600 rounded-xl hover:bg-rose-50 transition cursor-pointer"
+                            className="text-xs font-semibold px-2.5 sm:px-3 py-1.5 border border-rose-200/80 text-rose-600 rounded-xl hover:bg-rose-50 transition cursor-pointer"
                           >
                             Cancel
                           </motion.button>
@@ -418,7 +477,7 @@ export function QueueList({
                             whileHover={{ scale: 1.04 }}
                             whileTap={{ scale: 0.96 }}
                             onClick={() => setSelectedPatientForReschedule(p)}
-                            className="text-xs font-semibold px-3 py-1.5 border border-blue-200/80 text-blue-600 rounded-xl hover:bg-blue-50 transition cursor-pointer"
+                            className="text-xs font-semibold px-2.5 sm:px-3 py-1.5 border border-blue-200/80 text-blue-600 rounded-xl hover:bg-blue-50 transition cursor-pointer"
                           >
                             Reschedule
                           </motion.button>
@@ -456,10 +515,35 @@ export function QueueList({
         isOpen={!!selectedPatientForReschedule}
         patient={selectedPatientForReschedule}
         queue={currentPatients.length > 0 ? currentPatients : queue}
+        doctors={doctors}
         onClose={() => setSelectedPatientForReschedule(null)}
         onReschedulePatient={async (params) => {
           await onReschedulePatient(params);
           loadData(true);
+        }}
+      />
+
+      <ReassignDoctorModal
+        isOpen={!!selectedPatientForReassign || isBulkReassignOpen}
+        patient={selectedPatientForReassign}
+        queue={currentPatients.length > 0 ? currentPatients : queue}
+        doctors={doctors || []}
+        isBulkMode={isBulkReassignOpen}
+        onClose={() => {
+          setSelectedPatientForReassign(null);
+          setIsBulkReassignOpen(false);
+        }}
+        onConfirmReassign={async (params) => {
+          if (onReassignDoctor) {
+            await onReassignDoctor(params);
+            loadData(true);
+          }
+        }}
+        onConfirmBulkReassign={async (params) => {
+          if (onBulkReassignDoctor) {
+            await onBulkReassignDoctor(params);
+            loadData(true);
+          }
         }}
       />
     </div>
