@@ -2083,8 +2083,10 @@ function DashboardContent() {
             onClose={() => setIsChatModalOpen(false)}
             availableDoctors={availableDoctors}
             currentDoctorName={effectiveDoctorProfile.name}
+            locationId={currentLocation?.id || undefined}
+            clinicId={(currentLocation?.clinic_id || currentClinicId) ?? undefined}
             onBookingSuccess={() => {
-              fetchQueueFromDb().then((dbQueue) => {
+              fetchQueueFromDb(undefined, undefined, currentLocation?.id).then((dbQueue) => {
                 if (dbQueue) {
                   setQueue(sortQueueWithCompletedAtEnd(dbQueue));
                 }

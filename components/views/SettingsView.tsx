@@ -779,7 +779,10 @@ function CustomDropdownInput({
               </motion.div>
           </AnimatePresence>
         </div>
-      ) : searchQuery.trim() !== '' ? (
+      ) : searchQuery.trim() !== '' &&
+        !['branch', 'location', 'campus', 'multi', 'prescription', 'template', 'rx', 'pad', 'letterhead', 'calibrator'].some(
+          (k) => searchQuery.toLowerCase().includes(k)
+        ) ? (
         <motion.div
           key="empty-params"
           initial={{ opacity: 0, scale: 0.96 }}

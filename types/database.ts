@@ -48,6 +48,9 @@ export interface DbClinicLocation {
   clinic_name?: string | null;
   branch_name: string;
   branch_code?: string | null;
+  branch_slug?: string | null;
+  booking_url?: string | null;
+  map_link?: string | null;
   gateway_pin?: string | null;
   address?: string | null;
   address_line1?: string | null;
