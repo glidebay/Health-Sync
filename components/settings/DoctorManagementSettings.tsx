@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Stethoscope,
-  Building2,
   CheckCircle2,
   Plus,
   Edit3,
@@ -12,7 +11,6 @@ import {
   X,
   MapPin,
   Users,
-  Award,
   AlertCircle,
   Search,
 } from 'lucide-react';
@@ -24,7 +22,6 @@ import {
 } from '@/lib/doctorService';
 import { fetchClinicLocations } from '@/lib/supabaseService';
 import { DbClinicLocation } from '@/types/database';
-import { AnimatedCounter } from '@/components/common/AnimatedCounter';
 
 export const CLINIC_OPTIONS = [
   {
@@ -262,110 +259,8 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
     });
   }, [doctors, searchQuery]);
 
-  const adminDoctorsCount = useMemo(() => {
-    return doctors.filter((d) => d.is_admin_doctor).length;
-  }, [doctors]);
-
-  const totalDailyCapacity = useMemo(() => {
-    return doctors.reduce((acc, d) => acc + (d.daily_quota || 30), 0);
-  }, [doctors]);
-
   return (
     <div className="space-y-5 sm:space-y-6 max-w-7xl mx-auto pb-4">
-      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <motion.div
-          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
-        >
-          <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
-              Total Physicians
-            </span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-800 tracking-tight">
-                <AnimatedCounter target={doctors.length} />
-              </span>
-              <span className="inline-flex items-center text-xs font-semibold text-emerald-500">
-                Active <span className="text-slate-400 font-normal text-[11px] ml-1">roster</span>
-              </span>
-            </div>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-blue-700 to-blue-500 shadow-md shadow-blue-500/25 flex items-center justify-center text-white flex-shrink-0">
-            <Stethoscope className="w-5 h-5 stroke-[2.2]" />
-          </div>
-        </motion.div>
-
-        <motion.div
-          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
-        >
-          <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
-              Admin Physicians
-            </span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-800 tracking-tight">
-                <AnimatedCounter target={adminDoctorsCount} />
-              </span>
-              <span className="inline-flex items-center text-xs font-semibold text-amber-600">
-                Full access <span className="text-slate-400 font-normal text-[11px] ml-1">rights</span>
-              </span>
-            </div>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-amber-500 to-orange-400 shadow-md shadow-amber-500/25 flex items-center justify-center text-white flex-shrink-0">
-            <Award className="w-5 h-5 stroke-[2.2]" />
-          </div>
-        </motion.div>
-
-        <motion.div
-          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
-        >
-          <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
-              Assigned Branches
-            </span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-800 tracking-tight">
-                <AnimatedCounter target={branches.length} />
-              </span>
-              <span className="inline-flex items-center text-xs font-semibold text-emerald-500">
-                Clinic <span className="text-slate-400 font-normal text-[11px] ml-1">locations</span>
-              </span>
-            </div>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-emerald-600 to-teal-400 shadow-md shadow-emerald-500/25 flex items-center justify-center text-white flex-shrink-0">
-            <Building2 className="w-5 h-5 stroke-[2.2]" />
-          </div>
-        </motion.div>
-
-        <motion.div
-          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
-        >
-          <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
-              Daily Capacity
-            </span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-800 tracking-tight">
-                <AnimatedCounter target={totalDailyCapacity} />
-              </span>
-              <span className="inline-flex items-center text-xs font-semibold text-blue-600">
-                Patients <span className="text-slate-400 font-normal text-[11px] ml-1">/ day</span>
-              </span>
-            </div>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-indigo-600 to-blue-500 shadow-md shadow-indigo-500/25 flex items-center justify-center text-white flex-shrink-0">
-            <Users className="w-5 h-5 stroke-[2.2]" />
-          </div>
-        </motion.div>
-      </section>
-
       <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] min-w-0">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
