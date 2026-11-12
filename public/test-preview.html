@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Straight MacBook Pro Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Montserrat:wght@800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #e93362;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #ffffff;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Fullscreen Stage */
+    .stage {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(135deg, #d92252 0%, #e93362 50%, #ea3464 100%);
+    }
+
+    /* Ambient Lighting Overlays */
+    .glow-1 {
+      position: absolute;
+      top: -120px;
+      left: -120px;
+      width: 650px;
+      height: 650px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.14);
+      filter: blur(60px);
+      pointer-events: none;
+    }
+    .glow-2 {
+      position: absolute;
+      bottom: -160px;
+      left: 18%;
+      width: 620px;
+      height: 620px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.24);
+      filter: blur(55px);
+      pointer-events: none;
+    }
+
+    /* Top Left Status Badge */
+    .top-badge {
+      position: absolute;
+      top: 26px;
+      left: 32px;
+      z-index: 50;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0, 0, 0, 0.2);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 7px 16px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 0 8px #ffffff;
+      animation: pulse 2s infinite ease-in-out;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* ============================================================== */
+    /* STRAIGHT MACBOOK PRO RIG (NO SKEW, LEVEL & PROPORTIONED)        */
+    /* ============================================================== */
+    .laptop-container {
+      position: relative;
+      width: 52%;
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-start;
+      padding-bottom: 2vh;
+      padding-left: 3vw;
+      perspective: 1500px;
+      perspective-origin: 50% 60%;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    .laptop-rig {
+      position: relative;
+      width: 100%;
+      max-width: 760px;
+      height: 78vh;
+      max-height: 640px;
+      transform-style: preserve-3d;
+      pointer-events: auto;
+    }
+
+    /* Upper Display Lid (Straight, facing camera with subtle natural tilt) */
+    .laptop-lid {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 72%;
+      background: linear-gradient(145deg, #1f2229 0%, #121418 50%, #0a0b0e 100%);
+      border-radius: 18px 18px 4px 4px;
+      padding: 10px 10px 16px 10px;
+      box-shadow:
+        0 -15px 40px rgba(0, 0, 0, 0.4),
+        0 20px 50px rgba(0, 0, 0, 0.55),
+        inset 0 0 0 1.5px rgba(255, 255, 255, 0.22);
+      transform: rotateX(8deg);
+      transform-origin: bottom center;
+      transform-style: preserve-3d;
+      z-index: 10;
+    }
+
+    /* Apple Camera Notch */
+    .webcam-housing {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 64px;
+      height: 10px;
+      background: #000000;
+      border-radius: 0 0 6px 6px;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .camera-lens {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: #08172e;
+      box-shadow: inset 0 0 1px #00f0ff;
+    }
+    .camera-indicator {
+      width: 2px;
+      height: 2px;
+      border-radius: 50%;
+      background: #00e676;
+      opacity: 0.8;
+    }
+
+    /* Screen Display Viewport */
+    .screen-display {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #000000;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.95);
+    }
+
+    .screen-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      cursor: pointer;
+    }
+
+    .screen-glare {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(120deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.02) 25%, transparent 50%);
+      z-index: 25;
+    }
+
+    /* Video Floating Glass Bar */
+    .video-control-bar {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      right: 12px;
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 14px;
+      background: rgba(10, 12, 16, 0.82);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-radius: 9px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      font-size: 11px;
+    }
+    .video-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #38bdf8;
+      font-weight: 700;
+      max-width: 250px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .video-pulse {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #38bdf8;
+      box-shadow: 0 0 6px #38bdf8;
+      flex-shrink: 0;
+      animation: pulse 1.5s infinite;
+    }
+    .video-buttons {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .v-btn {
+      padding: 5px 10px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.16);
+      border: none;
+      color: #ffffff;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .v-btn:hover {
+      background: rgba(255, 255, 255, 0.28);
+    }
+
+    /* Lower Base & Keyboard Deck (Straight, flat on table at 62° angle) */
+    .laptop-base {
+      position: absolute;
+      top: 71%;
+      left: -2%;
+      width: 104%;
+      height: 48%;
+      background: linear-gradient(to bottom, #cfd3dc 0%, #b0b5c0 40%, #9095a0 100%);
+      border-radius: 0 0 20px 20px;
+      transform: rotateX(62deg);
+      transform-origin: top center;
+      box-shadow:
+        0 25px 50px rgba(0, 0, 0, 0.55),
+        0 10px 20px rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      border-top: none;
+      padding: 10px 14px 14px 14px;
+      z-index: 5;
+    }
+
+    /* Hinge Notch */
+    .hinge-bar {
+      width: 80px;
+      height: 5px;
+      background: #2b2e35;
+      margin: 0 auto 6px auto;
+      border-radius: 0 0 3px 3px;
+    }
+
+    /* Recessed Keyboard Deck */
+    .keyboard-well {
+      width: 100%;
+      height: 60%;
+      background: #0c0e12;
+      border-radius: 7px;
+      padding: 5px 7px;
+      box-shadow:
+        inset 0 2px 6px rgba(0, 0, 0, 0.9),
+        0 1px 0 rgba(255, 255, 255, 0.18);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 2.5px;
+    }
+
+    .key-row {
+      display: flex;
+      gap: 2.5px;
+      width: 100%;
+      height: 18%;
+    }
+    .key-row-fn {
+      height: 12%;
+    }
+
+    .key {
+      background: linear-gradient(to bottom, #23262d 0%, #141619 100%);
+      border-radius: 2.5px;
+      box-shadow:
+        0 1px 1.5px rgba(0, 0, 0, 0.8),
+        inset 0 0.5px 0.5px rgba(255, 255, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 255, 255, 0.85);
+      font-size: 8px;
+      font-weight: 600;
+      flex: 1;
+      user-select: none;
+    }
+
+    /* Glass Trackpad */
+    .trackpad {
+      width: 240px;
+      height: 30%;
+      margin: 6px auto 0 auto;
+      background: linear-gradient(135deg, #c4c7d2 0%, #b2b6c2 50%, #9fa4b0 100%);
+      border-radius: 6px;
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+        inset 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Front Thumb Scoop */
+    .thumb-notch {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 80px;
+      height: 5px;
+      background: #737780;
+      border-radius: 3px 3px 0 0;
+    }
+
+    /* ============================================================== */
+    /* RIGHT SIDE: EXACT 5-LINE BOLD TYPOGRAPHY & SUITABLE CTAS       */
+    /* ============================================================== */
+    .hero-content {
+      position: relative;
+      width: 48%;
+      height: 100%;
+      margin-left: auto;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding-right: 6vw;
+      padding-left: 2vw;
+      z-index: 35;
+    }
+
+    .hero-title {
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 900;
+      font-size: clamp(38px, 5.2vw, 76px);
+      line-height: 0.94;
+      letter-spacing: -0.025em;
+      text-transform: uppercase;
+      color: #ffffff;
+      margin-bottom: 24px;
+      text-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
+    }
+    .hero-title span {
+      display: block;
+    }
+
+    .hero-desc {
+      font-size: clamp(13px, 1.1vw, 16px);
+      line-height: 1.55;
+      color: rgba(255, 255, 255, 0.92);
+      font-weight: 500;
+      max-width: 480px;
+      margin-bottom: 32px;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .btn-gateway {
+      background: #ffffff;
+      color: #dc2655;
+      font-family: 'Inter', sans-serif;
+      font-weight: 800;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 15px 28px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+      transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+      text-decoration: none;
+    }
+    .btn-gateway:hover {
+      transform: translateY(-2px);
+      background: #fafafa;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn-slot {
+      background: rgba(0, 0, 0, 0.24);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      color: #ffffff;
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 15px 24px;
+      border-radius: 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s, transform 0.2s;
+      text-decoration: none;
+    }
+    .btn-slot:hover {
+      background: rgba(0, 0, 0, 0.38);
+      transform: translateY(-2px);
+    }
+
+    /* Slanted Monogram "N" Logo */
+    .monogram-n {
+      position: absolute;
+      bottom: 32px;
+      right: 48px;
+      width: 64px;
+      height: 64px;
+      opacity: 0.95;
+      pointer-events: none;
+      filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.25));
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    
+    <!-- Ambient Lighting Overlays -->
+    <div class="glow-1"></div>
+    <div class="glow-2"></div>
+
+    <!-- Top Left Status Badge -->
+    <div class="top-badge">
+      <span class="status-dot"></span>
+      <span>HealthSync CLMS &bull; Enterprise Gateway</span>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MACBOOK PRO VECTOR SVG RIG: ANCHORED LEVEL IN BOTTOM-LEFT AREA -->
+    <!-- ============================================================== -->
+    <div style="position: relative; width: 52%; height: 100%; display: flex; align-items: flex-end; justify-content: flex-start; padding-left: 3vw; padding-bottom: 3vh; z-index: 20;">
+      <div style="position: relative; width: 100%; max-width: 740px; aspect-ratio: 650 / 400; filter: drop-shadow(-20px 35px 50px rgba(0,0,0,0.55)); user-select: none;">
+        
+        <!-- MacBook Pro SVG Chassis -->
+        <svg
+          width="100%"
+          height="100%"
+          viewBox="0 0 650 400"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          style="display: block; width: 100%; height: 100%;"
+        >
+          <path
+            fill="#a4a5a7"
+            d="M79.56,13.18h491.32c7.23,0,13.1,5.87,13.1,13.1v336.61H66.46V26.28c0-7.23,5.87-13.1,13.1-13.1Z"
+          />
+          <path
+            fill="#222"
+            d="M79.96,14.24h490.45c6.83,0,12.37,5.54,12.37,12.37v336.28H67.59V26.6c0-6.83,5.54-12.37,12.37-12.37Z"
+          />
+          <path
+            fill="#000"
+            d="M570.25,15.74H80.34c-6.12,0-11.08,4.96-11.08,11.08v336.07h512.08V26.82c0-6.12-4.96-11.08-11.08-11.08ZM575.74,345.17H74.52V27.31c0-3.31,2.68-5.99,5.99-5.99h489.24c3.31,0,5.99,2.68,5.99,5.99v317.86Z"
+          />
+          <rect
+            fill="#000000"
+            x="74.52"
+            y="21.32"
+            width="501.22"
+            rx="5"
+            ry="5"
+            height="323.85"
+          />
+          <rect fill="#1d1d1d" x="69.09" y="350.51" width="512.11" height="12.48" />
+          <path
+            fill="#000"
+            d="M298.14,21.02h54.07v6.5c0,1.56-1.27,2.82-2.82,2.82h-48.42c-1.56,0-2.82-1.27-2.82-2.82v-6.5h0Z"
+          />
+          <path
+            fill="#acadaf"
+            d="M19.04,362.77h611.92v10.39c0,5.95-4.83,10.79-10.79,10.79H29.83c-5.95,0-10.79-4.83-10.79-10.79v-10.39h0Z"
+          />
+          <path
+            fill="#080d4c"
+            d="M325.11,25.14c-1.99.03-1.99-3.09,0-3.06,1.99-.03,1.99,3.09,0,3.06Z"
+          />
+          <polygon
+            fill="#b9b9bb"
+            points="600.06 385.39 567.29 385.39 565.84 383.95 601.82 383.95 600.06 385.39"
+          />
+          <polygon
+            fill="#292929"
+            points="598.73 386.82 568.64 386.82 567.32 385.39 600.35 385.39 598.73 386.82"
+          />
+          <polygon
+            fill="#b9b9bb"
+            points="82.64 385.39 49.87 385.39 48.43 383.95 84.41 383.95 82.64 385.39"
+          />
+          <polygon
+            fill="#292929"
+            points="81.31 386.82 51.23 386.82 49.9 385.39 82.93 385.39 81.31 386.82"
+          />
+          <path
+            fill="#8f9091"
+            d="M278.11,362.6h94.05c0,3.63-2.95,6.58-6.58,6.58h-80.89c-3.63,0-6.58-2.95-6.58-6.58h0Z"
+          />
+        </svg>
+
+        <!-- Screen Inset Display -->
+        <div style="position: absolute; left: 11.4646%; top: 5.33%; width: 77.1107%; height: 80.9625%; overflow: hidden; border-radius: 4px; background: #000;">
+          
+          <!-- Camera Notch Overlay -->
+          <div style="position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 11%; height: 8px; background: #000; border-radius: 0 0 4px 4px; z-index: 30; display: flex; align-items: center; justify-content: center; gap: 4px; pointer-events: none;">
+            <div style="width: 4px; height: 4px; border-radius: 50%; background: #08172e; box-shadow: inset 0 0 1px #00f0ff;"></div>
+            <div style="width: 2px; height: 2px; border-radius: 50%; background: #00e676; opacity: 0.8;"></div>
+          </div>
+
+          <!-- Video Player -->
+          <video
+            id="macbookVideo"
+            style="width: 100%; height: 100%; object-fit: cover; display: block; cursor: pointer;"
+            autoplay
+            loop
+            muted
+            playsinline
+            src="https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev/aaaf/vell-lookbook.mp4"
+          ></video>
+
+          <!-- Floating Video Controls -->
+          <div class="video-control-bar" style="position: absolute; bottom: 8px; left: 8px; right: 8px; z-index: 30; display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; background: rgba(10, 12, 16, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: 7px; border: 1px solid rgba(255, 255, 255, 0.2); font-size: 11px;">
+            <div class="video-title">
+              <span class="video-pulse"></span>
+              <span id="videoTitleText">Vell Lookbook — Digital Experience</span>
+            </div>
+            <div class="video-buttons">
+              <button type="button" class="v-btn" id="playBtn">Pause ⏸</button>
+              <button type="button" class="v-btn" id="muteBtn">Unmute 🔊</button>
+              <button type="button" class="v-btn" id="nextBtn">Next Reel ⏭</button>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- RIGHT HALF: EXACT 5-LINE BOLD TYPOGRAPHY & SUITABLE CTAS       -->
+    <!-- ============================================================== -->
+    <div class="hero-content">
+      
+      <h1 class="hero-title">
+        <span>HOW TO</span>
+        <span>DESIGN</span>
+        <span>ONBOARDING</span>
+        <span>SCREENS</span>
+        <span>FOR WEB</span>
+      </h1>
+
+      <p class="hero-desc">
+        Welcome to HealthSync Enterprise CLMS. Access real-time patient queue logistics, multi-branch doctor chambers, and WhatsApp-driven booking flows.
+      </p>
+
+      <div class="hero-actions">
+        <a href="#consulting" class="btn-gateway" id="consultingBtn">
+          <span>Enter Clinic Gateway</span>
+          <span>&rarr;</span>
+        </a>
+        <a href="#book" class="btn-slot" id="bookSlotBtn">
+          <span>Book Patient Slot &#128197;</span>
+        </a>
+      </div>
+
+      <!-- Slanted Monogram "N" Logo -->
+      <div class="monogram-n">
+        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: 100%;">
+          <path d="M22 84L40 16H58L38 84H22Z" fill="#FFFFFF" />
+          <path d="M48 84L82 16H66L42 66L48 84Z" fill="#E2E8F0" fill-opacity="0.85" />
+          <path d="M60 84L78 16H88L70 84H60Z" fill="#FFFFFF" />
+        </svg>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    const video = document.getElementById('macbookVideo');
+    const playBtn = document.getElementById('playBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const titleText = document.getElementById('videoTitleText');
+
+    const playlist = [
+      {
+        title: 'Vell Lookbook — Digital Experience',
+        url: 'https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev/aaaf/vell-lookbook.mp4'
+      },
+      {
+        title: 'Vasari Archive — Motion Reel',
+        url: 'https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev/aaaf/vasari-vhs-hero.mp4'
+      },
+      {
+        title: 'Mina 3D — Interactive Motion',
+        url: 'https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev/aaaf/living-portrait-hero.mp4'
+      }
+    ];
+    let currentIdx = 0;
+
+    video.addEventListener('click', () => {
+      if (video.paused) {
+        video.play();
+        playBtn.textContent = 'Pause ⏸';
+      } else {
+        video.pause();
+        playBtn.textContent = 'Play ▶';
+      }
+    });
+
+    playBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (video.paused) {
+        video.play();
+        playBtn.textContent = 'Pause ⏸';
+      } else {
+        video.pause();
+        playBtn.textContent = 'Play ▶';
+      }
+    });
+
+    muteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      video.muted = !video.muted;
+      muteBtn.textContent = video.muted ? 'Unmute 🔊' : 'Mute 🔇';
+    });
+
+    nextBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentIdx = (currentIdx + 1) % playlist.length;
+      video.src = playlist[currentIdx].url;
+      titleText.textContent = playlist[currentIdx].title;
+      video.play();
+      playBtn.textContent = 'Pause ⏸';
+    });
+  </script>
+</body>
+</html>

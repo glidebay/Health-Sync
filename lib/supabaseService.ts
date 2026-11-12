@@ -1776,13 +1776,22 @@ export function subscribeToClinicUpdates(onUpdate: () => void) {
   };
 }
 
-export function subscribeToChatUpdates(onUpdate: () => void) {
+export function subscribeToChatUpdates(onUpdate: () => void, locationId?: string) {
   const channelName = `chat_realtime_${Math.random().toString(36).substring(2, 9)}`;
   const channel = supabase
     .channel(channelName)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_requests' }, () => {
-      onUpdate();
-    })
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'whatsapp_requests',
+        filter: locationId ? `location_id=eq.${locationId}` : undefined,
+      },
+      () => {
+        onUpdate();
+      }
+    )
     .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
       onUpdate();
     })
@@ -2895,12 +2904,18 @@ export async function getDynamicSlotTimetable(
   };
 }
 
-export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
+export async function fetchInboundChatThreads(locationId?: string): Promise<PatientChatThread[]> {
   try {
-    const { data: dbRequests } = await supabase
+    let query = supabase
       .from('whatsapp_requests')
       .select('*')
       .order('created_at', { ascending: false });
+
+    if (locationId) {
+      query = query.eq('location_id', locationId);
+    }
+
+    const { data: dbRequests } = await query;
 
     const defaultThreads: PatientChatThread[] = [
       {
