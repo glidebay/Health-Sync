@@ -264,11 +264,41 @@ interface DoctorChatModalProps {
   availableDoctors?: DbDoctor[];
   currentDoctorName?: string;
   onBookingSuccess?: () => void;
+  locationId?: string;
+  clinicId?: string;
+}
+
+function renderBookingStageBadge(stage?: string) {
+  if (!stage) return null;
+  const stageMap: Record<string, { label: string; bg: string; text: string; border: string }> = {
+    main_menu: { label: 'Main Menu', bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200' },
+    browsing_doctors: { label: 'Browsing Doctors', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+    browsing_doctors_slot: { label: 'Selecting Slot', bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+    awaiting_slot: { label: 'Awaiting Slot', bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200' },
+    awaiting_doctor_after_slot: { label: 'Doctor Choice', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+    awaiting_confirm: { label: 'Awaiting Confirm', bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
+    confirmed: { label: 'Confirmed', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+  };
+  const cfg = stageMap[stage] || {
+    label: stage.replace(/_/g, ' '),
+    bg: 'bg-slate-100',
+    text: 'text-slate-700',
+    border: 'border-slate-200',
+  };
+  return (
+    <span
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold border ${cfg.bg} ${cfg.text} ${cfg.border} shadow-2xs whitespace-nowrap`}
+    >
+      {cfg.label}
+    </span>
+  );
 }
 
 export function DoctorChatModal({
   isOpen,
   onClose,
+  locationId,
+  clinicId,
 }: DoctorChatModalProps) {
   const [threads, setThreads] = useState<PatientChatThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string>('');
@@ -288,7 +318,7 @@ export function DoctorChatModal({
   const loadThreads = useCallback(async (silent: boolean = false) => {
     if (!silent) setIsLoadingThreads(true);
     try {
-      const data = await fetchInboundChatThreads();
+      const data = await fetchInboundChatThreads(locationId);
       setThreads(data);
       if (data.length > 0) {
         setSelectedThreadId((prev) => prev || data[0].id);
@@ -298,13 +328,13 @@ export function DoctorChatModal({
     } finally {
       if (!silent) setIsLoadingThreads(false);
     }
-  }, []);
+  }, [locationId]);
 
   useEffect(() => {
     if (!isOpen) return;
 
     let isMounted = true;
-    fetchInboundChatThreads()
+    fetchInboundChatThreads(locationId)
       .then((data) => {
         if (!isMounted) return;
         setThreads(data);
@@ -318,7 +348,7 @@ export function DoctorChatModal({
 
     const unsubscribe = subscribeToChatUpdates(() => {
       loadThreads(true);
-    });
+    }, locationId);
 
     const interval = setInterval(() => {
       loadThreads(true);
@@ -329,7 +359,7 @@ export function DoctorChatModal({
       unsubscribe();
       clearInterval(interval);
     };
-  }, [isOpen, loadThreads]);
+  }, [isOpen, loadThreads, locationId]);
 
   const activeThread = useMemo(() => {
     return threads.find((t) => t.id === selectedThreadId) || threads[0] || null;
@@ -531,9 +561,12 @@ export function DoctorChatModal({
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-1 text-[11px] text-[#8A909D]">
-                            <Phone className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate">{thread.phoneNumber}</span>
+                          <div className="flex items-center justify-between gap-1 text-[11px] text-[#8A909D] mt-0.5">
+                            <div className="flex items-center gap-1 min-w-0">
+                              <Phone className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{thread.phoneNumber}</span>
+                            </div>
+                            {renderBookingStageBadge(thread.bookingStage)}
                           </div>
                         </div>
                       </div>
@@ -552,7 +585,7 @@ export function DoctorChatModal({
                         {activeThread.patientName.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-sm font-bold text-[#16191E] truncate">
                             {activeThread.patientName}
                           </span>
@@ -561,6 +594,7 @@ export function DoctorChatModal({
                               Urgent
                             </span>
                           )}
+                          {renderBookingStageBadge(activeThread.bookingStage)}
                         </div>
                         <span className="text-[11px] text-[#8A909D] flex items-center gap-1">
                           <Phone className="w-3 h-3" />

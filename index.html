@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How to Design Onboarding Screens for Web — HealthSync Enterprise</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Montserrat:wght@800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #e93362;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #ffffff;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Fullscreen Stage */
+    .stage {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(135deg, #d92252 0%, #e93362 50%, #ea3464 100%);
+    }
+
+    /* Ambient Lighting Overlays */
+    .glow-1 {
+      position: absolute;
+      top: -120px;
+      left: -120px;
+      width: 620px;
+      height: 620px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.13);
+      filter: blur(60px);
+      pointer-events: none;
+    }
+    .glow-2 {
+      position: absolute;
+      bottom: -140px;
+      left: 22%;
+      width: 580px;
+      height: 580px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.22);
+      filter: blur(50px);
+      pointer-events: none;
+    }
+
+    /* Top Left Status Badge */
+    .top-badge {
+      position: absolute;
+      top: 26px;
+      left: 32px;
+      z-index: 50;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0, 0, 0, 0.2);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 7px 16px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 0 8px #ffffff;
+      animation: pulse 2s infinite ease-in-out;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* ============================================================== */
+    /* 3D MACBOOK PRO RIG: FIXED POSITION, REALISTIC 3/4 PERSPECTIVE  */
+    /* ============================================================== */
+    .macbook-scene {
+      position: absolute;
+      left: -3vw;
+      bottom: -4vh;
+      width: 66vw;
+      max-width: 1050px;
+      height: 92vh;
+      perspective: 1600px;
+      perspective-origin: 38% 44%;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    /* Ground / Base Assembly */
+    .laptop-base {
+      position: absolute;
+      left: 4%;
+      bottom: 6%;
+      width: 780px;
+      height: 510px;
+      background: linear-gradient(135deg, #d4d7df 0%, #b8bcc6 35%, #8a8f9a 100%);
+      border-radius: 22px;
+      transform-style: preserve-3d;
+      transform: rotateX(54deg) rotateY(4deg) rotateZ(-22deg);
+      box-shadow:
+        -35px 50px 90px rgba(0, 0, 0, 0.58),
+        -15px 20px 40px rgba(0, 0, 0, 0.38);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      padding: 16px;
+      pointer-events: auto;
+    }
+
+    /* Hinge Bar */
+    .hinge-bar {
+      position: absolute;
+      top: 0;
+      left: 12%;
+      right: 12%;
+      height: 12px;
+      background: linear-gradient(to bottom, #101215, #2b2e35);
+      border-radius: 0 0 6px 6px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+      z-index: 10;
+    }
+
+    /* Speaker Grilles */
+    .speaker-grille-left, .speaker-grille-right {
+      position: absolute;
+      top: 28px;
+      width: 24px;
+      height: 278px;
+      opacity: 0.7;
+      pointer-events: none;
+      background-image: radial-gradient(circle, #2d3038 28%, transparent 29%);
+      background-size: 3px 3px;
+    }
+    .speaker-grille-left { left: 10px; }
+    .speaker-grille-right { right: 10px; }
+
+    /* Recessed Keyboard Well */
+    .keyboard-well {
+      position: absolute;
+      top: 24px;
+      left: 36px;
+      right: 36px;
+      height: 282px;
+      background: #0c0e12;
+      border-radius: 8px;
+      padding: 8px 10px;
+      box-shadow:
+        inset 0 3px 8px rgba(0, 0, 0, 0.9),
+        0 1px 0 rgba(255, 255, 255, 0.18);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 4px;
+    }
+
+    .key-row {
+      display: flex;
+      gap: 4px;
+      width: 100%;
+    }
+    .key-row-fn { height: 16px; }
+    .key-row-main { height: 36px; }
+
+    .key {
+      background: linear-gradient(to bottom, #24272f 0%, #14161a 100%);
+      border-radius: 3.5px;
+      box-shadow:
+        0 1.5px 2px rgba(0, 0, 0, 0.8),
+        inset 0 1px 0.5px rgba(255, 255, 255, 0.18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 255, 255, 0.85);
+      font-size: 10px;
+      font-weight: 600;
+      user-select: none;
+      flex: 1;
+      position: relative;
+    }
+
+    /* Force Touch Glass Trackpad */
+    .trackpad {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 288px;
+      height: 155px;
+      background: linear-gradient(135deg, #c6c9d1 0%, #b4b8c2 50%, #a0a5af 100%);
+      border-radius: 8px;
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.45),
+        inset 0 1px 2px rgba(0, 0, 0, 0.25),
+        0 1px 1px rgba(255, 255, 255, 0.5);
+    }
+
+    /* Front Thumb Scoop Notch */
+    .thumb-notch {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 96px;
+      height: 8px;
+      background: linear-gradient(to bottom, #787c85, #585b62);
+      border-radius: 4px 4px 0 0;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+    }
+
+    /* ============================================================== */
+    /* DISPLAY LID (ATTACHED TO HINGE, TILTED BACK IN 3D)             */
+    /* ============================================================== */
+    .laptop-lid {
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      width: 780px;
+      height: 520px;
+      transform-origin: bottom center;
+      transform: rotateX(-114deg);
+      transform-style: preserve-3d;
+      background: linear-gradient(145deg, #1c1f26 0%, #121418 50%, #0b0c0f 100%);
+      border-radius: 18px 18px 4px 4px;
+      padding: 10px 10px 16px 10px;
+      box-shadow:
+        0 -25px 65px rgba(0, 0, 0, 0.68),
+        inset 0 0 0 1.5px rgba(255, 255, 255, 0.22);
+    }
+
+    /* Apple Camera Notch */
+    .webcam-housing {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 64px;
+      height: 10px;
+      background: #000000;
+      border-radius: 0 0 6px 6px;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .camera-lens {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: #08172e;
+      box-shadow: inset 0 0 1px #00f0ff;
+    }
+    .camera-indicator {
+      width: 2px;
+      height: 2px;
+      border-radius: 50%;
+      background: #00e676;
+      opacity: 0.8;
+    }
+
+    /* Screen Display Viewport */
+    .screen-display {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #000000;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.9);
+    }
+
+    .screen-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      cursor: pointer;
+    }
+
+    .screen-glare {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(120deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.03) 25%, transparent 50%);
+      z-index: 25;
+    }
+
+    /* Video Floating Glass Bar */
+    .video-control-bar {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      right: 12px;
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: rgba(10, 12, 16, 0.8);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      font-size: 12px;
+    }
+    .video-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #38bdf8;
+      font-weight: 700;
+      max-width: 270px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .video-pulse {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #38bdf8;
+      box-shadow: 0 0 6px #38bdf8;
+      flex-shrink: 0;
+      animation: pulse 1.5s infinite;
+    }
+    .video-buttons {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .v-btn {
+      padding: 5px 10px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.16);
+      border: none;
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .v-btn:hover {
+      background: rgba(255, 255, 255, 0.28);
+    }
+
+    /* ============================================================== */
+    /* RIGHT SIDE: EXACT 5-LINE BOLD TYPOGRAPHY & SUITABLE CTAS       */
+    /* ============================================================== */
+    .hero-content {
+      position: relative;
+      width: 48%;
+      height: 100%;
+      margin-left: auto;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding-right: 6vw;
+      padding-left: 2vw;
+      z-index: 35;
+    }
+
+    .hero-title {
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 900;
+      font-size: clamp(38px, 5.2vw, 76px);
+      line-height: 0.94;
+      letter-spacing: -0.025em;
+      text-transform: uppercase;
+      color: #ffffff;
+      margin-bottom: 24px;
+      text-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
+    }
+    .hero-title span {
+      display: block;
+    }
+
+    .hero-desc {
+      font-size: clamp(13px, 1.1vw, 16px);
+      line-height: 1.55;
+      color: rgba(255, 255, 255, 0.92);
+      font-weight: 500;
+      max-width: 480px;
+      margin-bottom: 32px;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .btn-gateway {
+      background: #ffffff;
+      color: #dc2655;
+      font-family: 'Inter', sans-serif;
+      font-weight: 800;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 15px 28px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+      transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+      text-decoration: none;
+    }
+    .btn-gateway:hover {
+      transform: translateY(-2px);
+      background: #fafafa;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn-slot {
+      background: rgba(0, 0, 0, 0.24);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      color: #ffffff;
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 15px 24px;
+      border-radius: 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s, transform 0.2s;
+      text-decoration: none;
+    }
+    .btn-slot:hover {
+      background: rgba(0, 0, 0, 0.38);
+      transform: translateY(-2px);
+    }
+
+    /* Slanted Monogram "N" Logo */
+    .monogram-n {
+      position: absolute;
+      bottom: 32px;
+      right: 48px;
+      width: 64px;
+      height: 64px;
+      opacity: 0.95;
+      pointer-events: none;
+      filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.25));
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    
+    <!-- Ambient Lighting Overlays -->
+    <div class="glow-1"></div>
+    <div class="glow-2"></div>
+
+    <!-- Top Left Status Badge -->
+    <div class="top-badge">
+      <span class="status-dot"></span>
+      <span>HealthSync CLMS &bull; Enterprise Gateway</span>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- 3D MACBOOK PRO RIG: FIXED POSITION, REALISTIC 3/4 PERSPECTIVE  -->
+    <!-- ============================================================== -->
+    <div class="macbook-scene">
+      
+      <!-- Laptop Base Assembly -->
+      <div class="laptop-base">
+        
+        <!-- Hinge Bar -->
+        <div class="hinge-bar"></div>
+
+        <!-- Speaker Grilles -->
+        <div class="speaker-grille-left"></div>
+        <div class="speaker-grille-right"></div>
+
+        <!-- Recessed Keyboard Well with Full Apple Layout -->
+        <div class="keyboard-well">
+          
+          <!-- Row 1: Function Row -->
+          <div class="key-row key-row-fn">
+            <div class="key" style="flex: 1.2;">esc</div>
+            <div class="key" style="font-size: 8px; color: rgba(255,255,255,0.6);">F1</div>
+            <div class="key" style="font-size: 8px; color: rgba(255,255,255,0.6);">F2</div>
+            <div class="key" style="font-size: 8px; color: rgba(255,255,255,0.6);">F3</div>
+            <div class="key" style="font-size: 8px; color: rgba(255,255,255,0.6);">F4</div>
+            <div class="key" style="font-size: 8px; color: rgba(255,255,255,0.6);">F5</div>
+            <div class="key" style="font-size: 8px; color: rgba(255,255,255,0.6);">F6</div>
+            <div class="key" style="font-size: 8px; color: rgba(255,255,255,0.6);">F7</div>
+            <div class="key" style="font-size: 8px; color: rgba(255,255,255,0.6);">F8</div>
+            <div class="key" style="font-size: 8px; color: rgba(255,255,255,0.6);">F9</div>
+            <div class="key" style="font-size: 8px; color: rgba(255,255,255,0.6);">F10</div>
+            <div class="key" style="font-size: 8px; color: rgba(255,255,255,0.6);">F11</div>
+            <div class="key" style="font-size: 8px; color: rgba(255,255,255,0.6);">F12</div>
+            <div class="key" style="flex: 1.1; background: #0c0d10;">⏻</div>
+          </div>
+
+          <!-- Row 2: Numbers -->
+          <div class="key-row key-row-main">
+            <div class="key" style="flex: 1;">~ `</div>
+            <div class="key">1 !</div>
+            <div class="key">2 @</div>
+            <div class="key">3 #</div>
+            <div class="key">4 $</div>
+            <div class="key">5 %</div>
+            <div class="key">6 ^</div>
+            <div class="key">7 &</div>
+            <div class="key">8 *</div>
+            <div class="key">9 (</div>
+            <div class="key">0 )</div>
+            <div class="key">- _</div>
+            <div class="key">= +</div>
+            <div class="key" style="flex: 1.4;">delete</div>
+          </div>
+
+          <!-- Row 3: QWERTY -->
+          <div class="key-row key-row-main">
+            <div class="key" style="flex: 1.4;">tab</div>
+            <div class="key">Q</div>
+            <div class="key">W</div>
+            <div class="key">E</div>
+            <div class="key">R</div>
+            <div class="key">T</div>
+            <div class="key">Y</div>
+            <div class="key">U</div>
+            <div class="key">I</div>
+            <div class="key">O</div>
+            <div class="key">P</div>
+            <div class="key">[ {</div>
+            <div class="key">] }</div>
+            <div class="key" style="flex: 1;">\ |</div>
+          </div>
+
+          <!-- Row 4: ASDF -->
+          <div class="key-row key-row-main">
+            <div class="key" style="flex: 1.7;">caps lock</div>
+            <div class="key">A</div>
+            <div class="key">S</div>
+            <div class="key">D</div>
+            <div class="key">F</div>
+            <div class="key">G</div>
+            <div class="key">H</div>
+            <div class="key">J</div>
+            <div class="key">K</div>
+            <div class="key">L</div>
+            <div class="key">; :</div>
+            <div class="key">' "</div>
+            <div class="key" style="flex: 1.7;">return</div>
+          </div>
+
+          <!-- Row 5: ZXCV -->
+          <div class="key-row key-row-main">
+            <div class="key" style="flex: 2.1;">shift</div>
+            <div class="key">Z</div>
+            <div class="key">X</div>
+            <div class="key">C</div>
+            <div class="key">V</div>
+            <div class="key">B</div>
+            <div class="key">N</div>
+            <div class="key">M</div>
+            <div class="key">, &lt;</div>
+            <div class="key">. &gt;</div>
+            <div class="key">/ ?</div>
+            <div class="key" style="flex: 2.1;">shift</div>
+          </div>
+
+          <!-- Row 6: Modifiers & Spacebar -->
+          <div class="key-row key-row-main">
+            <div class="key" style="flex: 1.1;">fn</div>
+            <div class="key" style="flex: 1.1;">control</div>
+            <div class="key" style="flex: 1.1;">option</div>
+            <div class="key" style="flex: 1.3;">command ⌘</div>
+            <div class="key" style="flex: 5.6;"></div>
+            <div class="key" style="flex: 1.3;">command ⌘</div>
+            <div class="key" style="flex: 1.1;">option</div>
+            <div class="key" style="flex: 0.9;">◀</div>
+            <div class="key" style="flex: 0.9; flex-direction: column; font-size: 7px; line-height: 1;"><span>▲</span><span>▼</span></div>
+            <div class="key" style="flex: 0.9;">▶</div>
+          </div>
+
+        </div>
+
+        <!-- Force Touch Glass Trackpad -->
+        <div class="trackpad"></div>
+
+        <!-- Front Thumb Notch -->
+        <div class="thumb-notch"></div>
+
+        <!-- ============================================================== -->
+        <!-- DISPLAY LID (ATTACHED TO HINGE, TILTED BACK IN 3D)             -->
+        <!-- ============================================================== -->
+        <div class="laptop-lid">
+          
+          <!-- Apple Camera Notch -->
+          <div class="webcam-housing">
+            <div class="camera-lens"></div>
+            <div class="camera-indicator"></div>
+          </div>
+
+          <!-- Screen Display Viewport -->
+          <div class="screen-display">
+            
+            <!-- Glass Glare Reflection -->
+            <div class="screen-glare"></div>
+
+            <!-- Video Player (Edge-to-Edge) -->
+            <video
+              id="macbookVideo"
+              class="screen-video"
+              autoplay
+              loop
+              muted
+              playsinline
+              src="https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev/aaaf/vell-lookbook.mp4"
+            ></video>
+
+            <!-- Floating Video Controls -->
+            <div class="video-control-bar">
+              <div class="video-title">
+                <span class="video-pulse"></span>
+                <span id="videoTitleText">Vell Lookbook — Digital Experience</span>
+              </div>
+              <div class="video-buttons">
+                <button type="button" class="v-btn" id="playBtn">Pause ⏸</button>
+                <button type="button" class="v-btn" id="muteBtn">Unmute 🔊</button>
+                <button type="button" class="v-btn" id="nextBtn">Next Reel ⏭</button>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- RIGHT HALF: EXACT 5-LINE BOLD TYPOGRAPHY & SUITABLE CTAS       -->
+    <!-- ============================================================== -->
+    <div class="hero-content">
+      
+      <h1 class="hero-title">
+        <span>HOW TO</span>
+        <span>DESIGN</span>
+        <span>ONBOARDING</span>
+        <span>SCREENS</span>
+        <span>FOR WEB</span>
+      </h1>
+
+      <p class="hero-desc">
+        Welcome to HealthSync Enterprise CLMS. Access real-time patient queue logistics, multi-branch doctor chambers, and WhatsApp-driven booking flows.
+      </p>
+
+      <div class="hero-actions">
+        <a href="#consulting" class="btn-gateway" id="consultingBtn">
+          <span>Enter Clinic Gateway</span>
+          <span>&rarr;</span>
+        </a>
+        <a href="#book" class="btn-slot" id="bookSlotBtn">
+          <span>Book Patient Slot &#128197;</span>
+        </a>
+      </div>
+
+      <!-- Slanted Monogram "N" Logo -->
+      <div class="monogram-n">
+        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: 100%;">
+          <path d="M22 84L40 16H58L38 84H22Z" fill="#FFFFFF" />
+          <path d="M48 84L82 16H66L42 66L48 84Z" fill="#E2E8F0" fill-opacity="0.85" />
+          <path d="M60 84L78 16H88L70 84H60Z" fill="#FFFFFF" />
+        </svg>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    const video = document.getElementById('macbookVideo');
+    const playBtn = document.getElementById('playBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const titleText = document.getElementById('videoTitleText');
+
+    const playlist = [
+      {
+        title: 'Vell Lookbook — Digital Experience',
+        url: 'https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev/aaaf/vell-lookbook.mp4'
+      },
+      {
+        title: 'Vasari Archive — Motion Reel',
+        url: 'https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev/aaaf/vasari-vhs-hero.mp4'
+      },
+      {
+        title: 'Mina 3D — Interactive Motion',
+        url: 'https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev/aaaf/living-portrait-hero.mp4'
+      }
+    ];
+    let currentIdx = 0;
+
+    video.addEventListener('click', () => {
+      if (video.paused) {
+        video.play();
+        playBtn.textContent = 'Pause ⏸';
+      } else {
+        video.pause();
+        playBtn.textContent = 'Play ▶';
+      }
+    });
+
+    playBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (video.paused) {
+        video.play();
+        playBtn.textContent = 'Pause ⏸';
+      } else {
+        video.pause();
+        playBtn.textContent = 'Play ▶';
+      }
+    });
+
+    muteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      video.muted = !video.muted;
+      muteBtn.textContent = video.muted ? 'Unmute 🔊' : 'Mute 🔇';
+    });
+
+    nextBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentIdx = (currentIdx + 1) % playlist.length;
+      video.src = playlist[currentIdx].url;
+      titleText.textContent = playlist[currentIdx].title;
+      video.play();
+      playBtn.textContent = 'Pause ⏸';
+    });
+  </script>
+</body>
+</html>

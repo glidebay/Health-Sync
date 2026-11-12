@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import BookSlotPageClient from './BookSlotPageClient';
+import PatientSlotBookingPortal from '@/components/PatientSlotBookingPortal';
 
 export const metadata: Metadata = {
   title: 'Book a Consultation Slot | HealthSync',
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function BookPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-[#F8F9FB] flex items-center justify-center" />}>
-      <BookSlotPageClient />
+      <PatientSlotBookingPortal />
     </Suspense>
   );
 }

@@ -307,3 +307,377 @@ h1, h2, h3, h4, h5, h6, .font-display, .font-heading {
     print-color-adjust: exact !important;
   }
 }
+
+/* ============================================================== */
+/* FRAME SEQUENCE HERO (MacBook Neo Hero Component Styles)       */
+/* ============================================================== */
+
+@keyframes fsh-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+.fsh-root {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  background: #000000;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow-x: hidden;
+}
+
+.fsh-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #000000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.5s ease;
+}
+
+.fsh-loader-done {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.fsh-loader-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: #a1a1aa;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.fsh-loader-track {
+  width: 180px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.fsh-loader-fill {
+  display: block;
+  height: 100%;
+  background: #ffffff;
+  border-radius: 9999px;
+  transition: width 0.15s ease-out;
+}
+
+.fsh-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 36px;
+  transition: background 0.3s ease, backdrop-filter 0.3s ease, border-color 0.3s ease;
+  border-bottom: 1px solid transparent;
+}
+
+.fsh-nav-scrolled {
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.fsh-brand {
+  font-size: 19px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ffffff;
+}
+
+.fsh-brand-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff9f3a;
+  display: inline-block;
+  box-shadow: 0 0 8px #ff9f3a;
+}
+
+.fsh-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.fsh-nav-links a {
+  font-size: 13px;
+  color: #a1a1aa;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.fsh-nav-links a:hover {
+  color: #ffffff;
+}
+
+.fsh-cta {
+  padding: 7px 18px;
+  border-radius: 9999px;
+  background: #0071e3;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.fsh-cta:hover {
+  background: #0077ed;
+  transform: scale(1.02);
+}
+
+.fsh-stage {
+  position: sticky;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.fsh-canvas-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.fsh-canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.fsh-copy {
+  position: absolute;
+  top: 16vh;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: auto;
+  z-index: 10;
+  width: 90%;
+  max-width: 820px;
+}
+
+.fsh-title {
+  font-size: clamp(42px, 6.2vw, 88px);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+  text-transform: none;
+}
+
+.fsh-title-dark {
+  color: #ffffff;
+}
+
+.fsh-title-rainbow {
+  background: linear-gradient(135deg, #ff9f3a, #ff6f9c, #5e9bff, #a37bff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: fsh-shimmer 6s ease infinite;
+  background-size: 200% 100%;
+}
+
+.fsh-sub {
+  margin-top: 14px;
+  font-size: clamp(15px, 1.3vw, 18px);
+  color: #a1a1aa;
+  font-weight: 500;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.fsh-sub-hidden {
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+}
+
+.fsh-cards {
+  position: absolute;
+  right: 6vw;
+  bottom: 12vh;
+  z-index: 20;
+  width: 350px;
+  max-width: 88vw;
+  pointer-events: auto;
+}
+
+.fsh-card {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: translateY(24px) scale(0.96);
+  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+.fsh-card-active {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  position: relative;
+}
+
+.fsh-card-prev {
+  opacity: 0;
+  transform: translateY(-24px) scale(0.96);
+  pointer-events: none;
+}
+
+.fsh-card-inner {
+  position: relative;
+  background: rgba(22, 22, 26, 0.78);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.65);
+  overflow: hidden;
+}
+
+.fsh-card-glow {
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: var(--c, #ff9f3a);
+  opacity: 0.18;
+  filter: blur(35px);
+  pointer-events: none;
+}
+
+.fsh-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: #71717a;
+}
+
+.fsh-card-num {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+}
+
+.fsh-card-num strong {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.fsh-card-icon {
+  font-size: 16px;
+  color: var(--c, #ff9f3a);
+}
+
+.fsh-card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 8px;
+  line-height: 1.25;
+}
+
+.fsh-card-desc {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #a1a1aa;
+  margin-bottom: 20px;
+}
+
+.fsh-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.fsh-ticks {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.fsh-tick {
+  width: 24px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+  overflow: hidden;
+  display: block;
+}
+
+.fsh-tick span {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--c, #ff9f3a);
+  transform-origin: left;
+}
+
+.fsh-card-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c, #ff9f3a);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fsh-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  z-index: 30;
+}
+
+.fsh-progress-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ff9f3a, #ff6f9c, #5e9bff, #a37bff);
+  transition: width 0.1s linear;
+}
+
+.fsh-spacer {
+  pointer-events: none;
+  width: 100%;
+}
+

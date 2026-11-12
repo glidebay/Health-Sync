@@ -712,6 +712,54 @@ export async function fetchQueueFromDb(targetDate?: string, doctorId?: string, l
   try {
     const todayIST = targetDate || getTodayIST();
 
+    // 1. Primary: Try get_live_queue RPC with location_id
+    try {
+      const { data: liveData, error: liveError } = await supabase.rpc('get_live_queue', {
+        p_doctor_id: doctorId || null,
+        p_date: todayIST,
+        p_location_id: locationId || null,
+      });
+
+      if (!liveError && Array.isArray(liveData) && liveData.length > 0) {
+        const mapped: FormattedQueuePatient[] = liveData
+          .filter((item: any) => !locationId || item.location_id === locationId)
+          .map((item: any) => {
+            const qTokenNo = typeof item.queue_token_no === 'number' ? item.queue_token_no : 1;
+            const tokenDisplay = item.token_display || `P${String(qTokenNo).padStart(3, '0')}`;
+            const rawVisitType = item.visit_type || 'Walk-in';
+            const isOnline =
+              rawVisitType.toLowerCase().includes('whatsapp') ||
+              rawVisitType.toLowerCase().includes('online');
+
+            return {
+              id: item.appointment_id || item.id,
+              patientDbId: item.patient_id,
+              name: item.patient_name || item.full_name || (isOnline ? 'Online Patient' : 'Walk-in Patient'),
+              age: item.age || 30,
+              gender: (item.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
+              phone: item.phone_number || undefined,
+              status: (item.status as 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled') || 'Waiting',
+              time: item.slot_time || item.allocated_slot || '10:00 AM',
+              appointmentDate: item.appointment_date || todayIST,
+              tokenNumber: tokenDisplay,
+              queueTokenNo: qTokenNo,
+              patientNumber: qTokenNo,
+              displayId: tokenDisplay,
+              priority: item.priority === 'Urgent' ? 'Urgent' : 'Normal',
+              scheduledTime: item.scheduled_time,
+              visitType: isOnline ? 'Online' : 'Walk-in',
+              cancellationReason: item.cancellation_reason || undefined,
+              locationId: item.location_id || locationId,
+            };
+          });
+
+        return sortQueuePatients(mapped);
+      }
+    } catch (e) {
+      // Fallback if RPC has internal PL/pgSQL variable collision
+    }
+
+    // 2. Secondary: Try get_patient_appointments RPC
     const { data: rpcData, error: rpcError } = await supabase.rpc('get_patient_appointments', {
       p_date: todayIST,
       p_status: 'All',
@@ -720,39 +768,42 @@ export async function fetchQueueFromDb(targetDate?: string, doctorId?: string, l
     });
 
     if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
-      const mapped: FormattedQueuePatient[] = rpcData.map((item: any) => {
-        const qTokenNo = typeof item.queue_token_no === 'number' ? item.queue_token_no : 1;
-        const tokenDisplay = `P${String(qTokenNo).padStart(3, '0')}`;
-        const rawVisitType = item.visit_type || 'Walk-in';
-        const isOnline =
-          rawVisitType.toLowerCase().includes('whatsapp') ||
-          rawVisitType.toLowerCase().includes('online');
+      const filtered = locationId ? rpcData.filter((i: any) => i.location_id === locationId) : rpcData;
+      if (filtered.length > 0) {
+        const mapped: FormattedQueuePatient[] = filtered.map((item: any) => {
+          const qTokenNo = typeof item.queue_token_no === 'number' ? item.queue_token_no : 1;
+          const tokenDisplay = `P${String(qTokenNo).padStart(3, '0')}`;
+          const rawVisitType = item.visit_type || 'Walk-in';
+          const isOnline =
+            rawVisitType.toLowerCase().includes('whatsapp') ||
+            rawVisitType.toLowerCase().includes('online');
 
-        return {
-          id: item.appointment_id,
-          patientDbId: item.patient_id,
-          name: item.patient_name || (isOnline ? 'Online Patient' : 'Walk-in Patient'),
-          age: item.age || 30,
-          gender: (item.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
-          phone: item.phone_number || undefined,
-          status: (item.status as 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled') || 'Waiting',
-          time: item.slot_time || '10:00 AM',
-          appointmentDate: item.appointment_date || todayIST,
-          tokenNumber: tokenDisplay,
-          queueTokenNo: qTokenNo,
-          patientNumber: qTokenNo,
-          displayId: tokenDisplay,
-          priority: item.priority === 'Urgent' ? 'Urgent' : 'Normal',
-          scheduledTime: item.scheduled_time,
-          visitType: isOnline ? 'Online' : 'Walk-in',
-          cancellationReason: item.cancellation_reason || undefined,
-          locationId: item.location_id || undefined,
-          doctorId: item.doctor_id || undefined,
-          doctorName: item.doctor_name || undefined,
-        };
-      });
+          return {
+            id: item.appointment_id,
+            patientDbId: item.patient_id,
+            name: item.patient_name || (isOnline ? 'Online Patient' : 'Walk-in Patient'),
+            age: item.age || 30,
+            gender: (item.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
+            phone: item.phone_number || undefined,
+            status: (item.status as 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled') || 'Waiting',
+            time: item.slot_time || '10:00 AM',
+            appointmentDate: item.appointment_date || todayIST,
+            tokenNumber: tokenDisplay,
+            queueTokenNo: qTokenNo,
+            patientNumber: qTokenNo,
+            displayId: tokenDisplay,
+            priority: item.priority === 'Urgent' ? 'Urgent' : 'Normal',
+            scheduledTime: item.scheduled_time,
+            visitType: isOnline ? 'Online' : 'Walk-in',
+            cancellationReason: item.cancellation_reason || undefined,
+            locationId: item.location_id || undefined,
+            doctorId: item.doctor_id || undefined,
+            doctorName: item.doctor_name || undefined,
+          };
+        });
 
-      return sortQueuePatients(mapped);
+        return sortQueuePatients(mapped);
+      }
     }
 
     const startIso = `${todayIST}T00:00:00+05:30`;
@@ -1853,13 +1904,22 @@ export function subscribeToClinicUpdates(onUpdate: () => void) {
   };
 }
 
-export function subscribeToChatUpdates(onUpdate: () => void) {
+export function subscribeToChatUpdates(onUpdate: () => void, locationId?: string) {
   const channelName = `chat_realtime_${Math.random().toString(36).substring(2, 9)}`;
   const channel = supabase
     .channel(channelName)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_requests' }, () => {
-      onUpdate();
-    })
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'whatsapp_requests',
+        filter: locationId ? `location_id=eq.${locationId}` : undefined,
+      },
+      () => {
+        onUpdate();
+      }
+    )
     .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
       onUpdate();
     })
@@ -2972,12 +3032,18 @@ export async function getDynamicSlotTimetable(
   };
 }
 
-export async function fetchInboundChatThreads(): Promise<PatientChatThread[]> {
+export async function fetchInboundChatThreads(locationId?: string): Promise<PatientChatThread[]> {
   try {
-    const { data: dbRequests } = await supabase
+    let query = supabase
       .from('whatsapp_requests')
       .select('*')
       .order('created_at', { ascending: false });
+
+    if (locationId) {
+      query = query.eq('location_id', locationId);
+    }
+
+    const { data: dbRequests } = await query;
 
     const defaultThreads: PatientChatThread[] = [
       {

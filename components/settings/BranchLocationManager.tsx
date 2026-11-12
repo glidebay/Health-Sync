@@ -49,15 +49,30 @@ export function BranchLocationManager({
   const [formPin, setFormPin] = useState('1234');
   const [formAddress, setFormAddress] = useState('');
   const [formPhone, setFormPhone] = useState('');
+  const [formWaDisplayNumber, setFormWaDisplayNumber] = useState('');
   const [formWaPhoneId, setFormWaPhoneId] = useState('');
   const [formQuota, setFormQuota] = useState('40');
 
   const loadLocations = async () => {
     setIsLoading(true);
     try {
-      const activeClinic = clinicId || (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) || undefined;
-      const locs = await fetchClinicLocations(activeClinic);
+      // 1. Load via get_clinic_branding_master RPC
+      const { data: brandingData, error: rpcErr } = await supabase.rpc('get_clinic_branding_master');
+      let locs: DbClinicLocation[] = [];
+      if (!rpcErr && brandingData && Array.isArray(brandingData.locations)) {
+        locs = brandingData.locations;
+      } else {
+        const activeClinic = clinicId || (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) || undefined;
+        locs = await fetchClinicLocations(activeClinic);
+      }
+
+      // Strict clinic tenancy: only show branches for the authenticated clinic
+      if (clinicId) {
+        locs = locs.filter((l) => l.clinic_id === clinicId);
+      }
       setLocations(locs);
+    } catch (e) {
+      console.warn('Failed loading branches:', e);
     } finally {
       setIsLoading(false);
     }
@@ -74,6 +89,7 @@ export function BranchLocationManager({
     setFormPin('1234');
     setFormAddress('');
     setFormPhone('+91 ');
+    setFormWaDisplayNumber('');
     setFormWaPhoneId('');
     setFormQuota('40');
     setIsModalOpen(true);
@@ -86,16 +102,22 @@ export function BranchLocationManager({
     setFormPin(loc.gateway_pin || '1234');
     setFormAddress(loc.address || '');
     setFormPhone(loc.phone || '');
+    setFormWaDisplayNumber((loc as any).whatsapp_display_number || loc.phone || '');
     setFormWaPhoneId(loc.whatsapp_phone_number_id || '');
     setFormQuota(String(loc.daily_quota || 40));
     setIsModalOpen(true);
   };
 
-  const handleCopyUrl = (code: string) => {
+  const getFullBookingUrl = (loc: DbClinicLocation): string => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://healthsync.in';
-    const url = `${origin}/book?branch=${code}`;
-    navigator.clipboard.writeText(url);
-    setCopiedCode(code);
+    const path = loc.booking_url || (loc.branch_slug ? `/${loc.branch_slug}/booking` : `/booking?branch=${loc.branch_code || loc.id}`);
+    return `${origin}${path.startsWith('/') ? '' : '/'}${path}`;
+  };
+
+  const handleCopyUrl = (loc: DbClinicLocation) => {
+    const fullUrl = getFullBookingUrl(loc);
+    navigator.clipboard.writeText(fullUrl);
+    setCopiedCode(loc.id);
     setTimeout(() => setCopiedCode(null), 2500);
   };
 
@@ -111,6 +133,7 @@ export function BranchLocationManager({
         gateway_pin: formPin.trim() || '1234',
         address: formAddress.trim() || 'Kerala, India',
         phone: formPhone.trim() || undefined,
+        whatsapp_display_number: formWaDisplayNumber.trim() || formPhone.trim() || undefined,
         whatsapp_phone_number_id: formWaPhoneId.trim() || null,
         daily_quota: parseInt(formQuota, 10) || 40,
         is_active: true,
@@ -183,7 +206,8 @@ export function BranchLocationManager({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {locations.map((loc) => {
             const code = loc.branch_code || loc.id;
-            const isCopied = copiedCode === code;
+            const isCopied = copiedCode === loc.id;
+            const fullBookingUrl = getFullBookingUrl(loc);
 
             return (
               <div
@@ -196,11 +220,17 @@ export function BranchLocationManager({
                       <MapPin className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2 flex-wrap">
                         <span>{loc.branch_name}</span>
                         {code && (
                           <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
                             {code}
+                          </span>
+                        )}
+                        {currentLocationId === loc.id && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Active
                           </span>
                         )}
                       </h4>
@@ -242,46 +272,42 @@ export function BranchLocationManager({
                   </div>
                 </div>
 
+                {/* Booking URL with Copy Link & External Open */}
                 <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-100 flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-slate-500">
-                      Quota: <strong className="text-slate-800">{loc.daily_quota || 40}</strong> / day
-                    </span>
-                    {currentLocationId === loc.id ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Active Branch
-                      </span>
-                    ) : onSelectLocation ? (
-                      <button
-                        type="button"
-                        onClick={() => onSelectLocation(loc)}
-                        className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 transition cursor-pointer"
-                        title="Switch active dashboard worklist to this branch"
-                      >
-                        <Building2 className="w-3 h-3" />
-                        <span>Switch Here</span>
-                      </button>
-                    ) : null}
-                  </div>
+                  <span className="text-[11px] text-slate-500">
+                    Quota: <strong className="text-slate-800">{loc.daily_quota || 40}</strong> / day
+                  </span>
 
-                  <button
-                    type="button"
-                    onClick={() => handleCopyUrl(code)}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 transition cursor-pointer"
-                  >
-                    {isCopied ? (
-                      <>
-                        <Check className="w-3 h-3 text-emerald-600" />
-                        <span className="text-emerald-600">Link Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3 h-3" />
-                        <span>Copy Booking URL</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={fullBookingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-blue-600 transition"
+                      title="Open Portal in New Tab"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>Open</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopyUrl(loc)}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[#2563EB] hover:text-blue-800 transition cursor-pointer"
+                    >
+                      {isCopied ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          <span className="text-emerald-600">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>Copy Booking URL</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -388,20 +414,32 @@ export function BranchLocationManager({
                   </div>
                 </div>
 
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Meta WhatsApp Phone Number ID (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={formWaPhoneId}
-                    onChange={(e) => setFormWaPhoneId(e.target.value)}
-                    placeholder="e.g. 109823471029384 from Meta Developer Portal"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-[11px] outline-none focus:border-blue-500 focus:bg-white transition"
-                  />
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    Incoming WhatsApp messages to this phone number will route directly to this branch.
-                  </span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      WhatsApp Display Number
+                    </label>
+                    <input
+                      type="text"
+                      value={formWaDisplayNumber}
+                      onChange={(e) => setFormWaDisplayNumber(e.target.value)}
+                      placeholder="+91 98472 55667"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Meta Phone ID
+                    </label>
+                    <input
+                      type="text"
+                      value={formWaPhoneId}
+                      onChange={(e) => setFormWaPhoneId(e.target.value)}
+                      placeholder="e.g. 109823471029384"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-[11px] outline-none focus:border-blue-500 focus:bg-white transition"
+                    />
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">

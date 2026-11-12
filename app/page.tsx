@@ -80,7 +80,7 @@ import { DoctorChatModal } from '@/components/chat/DoctorChatModal';
 import { getReadThreadStates, countUnreadPersons } from '@/lib/chatStorage';
 import { validateMobileNumber } from '@/lib/phoneValidation';
 
-import { GatewayScreen } from '@/components/views/GatewayScreen';
+import { GatewayScreen, type GatewayPinSubmitPayload } from '@/components/views/GatewayScreen';
 import { SlotBookingView } from '@/components/views/SlotBookingView';
 import { DashboardView } from '@/components/views/DashboardView';
 import { TablesView } from '@/components/views/TablesView';
@@ -1472,20 +1472,162 @@ function DashboardContent() {
         {!isLoading && portalMode === 'gateway' && (
           <GatewayScreen
             key="portal-gateway"
-            onSelectBookSlot={() => {
-              setPortalMode('booking');
-              setActiveSection('booking');
-            }}
-            onSelectConsulting={() => {
-              if (config.require_doctor_pin) {
-                setIntendedSection('dashboard');
-                setPinInput('');
-                setPinError(false);
-                setShowPinModal(true);
-              } else {
+            onSubmitPin={async ({ pin, clinic, branch }: GatewayPinSubmitPayload) => {
+              const clean = pin.trim();
+              if (!clean) {
+                return { success: false, message: 'Please enter a PIN' };
+              }
+
+              // 1. Try Branch Gateway PIN
+              const branchRes = await verifyBranchGatewayLogin(clean);
+              if (branchRes.success && branchRes.branch_id) {
+                if (branchRes.clinic_id && branchRes.clinic_id !== clinic.id) {
+                  return {
+                    success: false,
+                    message: 'This gateway PIN belongs to a different clinic.',
+                  };
+                }
+                if (branch && branchRes.branch_id !== branch.id) {
+                  return {
+                    success: false,
+                    message: `This PIN is not assigned to ${branch.branch_name}.`,
+                  };
+                }
+
+                const locationId = branch?.id || branchRes.branch_id;
+                const branchName = branch?.branch_name || branchRes.branch_name || 'Branch';
+
+                saveClinicSessionLocal({
+                  role: 'assistant',
+                  name: `${branchName} Assistant`,
+                  expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+                  clinicId: clinic.id,
+                  clinicName: clinic.name,
+                  locationId,
+                  isAdmin: false,
+                });
+
+                clearDoctorSessionLocal();
+                setIsLoggedIn(false);
+                setIsDoctorAdmin(false);
+                setCurrentClinicId(clinic.id);
+
+                const freshLocs = await fetchClinicLocations(clinic.id);
+                setClinicLocations(freshLocs);
+                const matched = branch || freshLocs.find((l) => l.id === locationId) || freshLocs[0];
+                if (matched) {
+                  setCurrentLocation(matched);
+                  if (typeof window !== 'undefined') {
+                    localStorage.setItem('healthsync_active_location_id', matched.id);
+                    localStorage.setItem('healthsync_active_clinic_id', clinic.id);
+                  }
+                }
+
+                setDoctorProfile({
+                  name: `${branchName} Assistant`,
+                  title: 'Reception & Triage',
+                });
+
+                setPortalMode('dashboard');
+                setActiveSection('assistant');
+                showToast('success', 'Branch Gateway Connected', `Active Location: ${branchName}`);
+                syncQueueOnly();
+                return { success: true };
+              }
+
+              // 2. Try Doctor PIN (branch-scoped if branch selected, otherwise clinic-wide)
+              if (branch) {
+                const branchDocRes = await verifyBranchDoctorPin(clean, branch.id, clinic.id);
+                if (branchDocRes.success && branchDocRes.doctor) {
+                  const isAdmin = Boolean(branchDocRes.is_admin_doctor);
+                  saveDoctorSessionLocal({
+                    doctorId: branchDocRes.doctor.id,
+                    name: branchDocRes.doctor.full_name,
+                    title: branchDocRes.doctor.specialization || 'General Medicine',
+                    expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+                    clinicId: clinic.id,
+                    clinicName: clinic.name,
+                    isAdmin,
+                  });
+
+                  setIsLoggedIn(true);
+                  setIsDoctorAdmin(isAdmin);
+                  setCurrentClinicId(clinic.id);
+                  setCurrentLocation(branch);
+                  if (typeof window !== 'undefined') {
+                    localStorage.setItem('healthsync_active_location_id', branch.id);
+                    localStorage.setItem('healthsync_active_clinic_id', clinic.id);
+                  }
+
+                  const freshLocs = await fetchClinicLocations(clinic.id);
+                  setClinicLocations(freshLocs);
+
+                  setDoctorProfile({
+                    name: branchDocRes.doctor.full_name,
+                    title: branchDocRes.doctor.specialization || 'General Medicine',
+                  });
+
+                  setPortalMode('dashboard');
+                  setActiveSection('dashboard');
+                  showToast('success', 'Doctor Authenticated', `Welcome Dr. ${branchDocRes.doctor.full_name}`);
+                  syncQueueOnly();
+                  return { success: true };
+                }
+              }
+
+              const fallbackDoc = await verifyDoctorPin(clean);
+              if (fallbackDoc.success && fallbackDoc.doctor) {
+                if (fallbackDoc.doctor.clinic_id && fallbackDoc.doctor.clinic_id !== clinic.id) {
+                  return {
+                    success: false,
+                    message: `Dr. ${fallbackDoc.doctor.full_name} belongs to a different clinic.`,
+                  };
+                }
+
+                const isAdmin = Boolean(fallbackDoc.doctor.is_admin_doctor || fallbackDoc.doctor.is_admin);
+                saveDoctorSessionLocal({
+                  doctorId: fallbackDoc.doctor.id,
+                  name: fallbackDoc.doctor.full_name,
+                  title: fallbackDoc.doctor.specialization || 'General Medicine',
+                  expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+                  clinicId: clinic.id,
+                  clinicName: clinic.name,
+                  isAdmin,
+                });
+
+                setIsLoggedIn(true);
+                setIsDoctorAdmin(isAdmin);
+                setCurrentClinicId(clinic.id);
+
+                const freshLocs = await fetchClinicLocations(clinic.id);
+                setClinicLocations(freshLocs);
+                const targetLoc = branch || freshLocs[0] || null;
+                if (targetLoc) {
+                  setCurrentLocation(targetLoc);
+                  if (typeof window !== 'undefined') {
+                    localStorage.setItem('healthsync_active_location_id', targetLoc.id);
+                  }
+                }
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('healthsync_active_clinic_id', clinic.id);
+                }
+
+                setDoctorProfile({
+                  name: fallbackDoc.doctor.full_name,
+                  title: fallbackDoc.doctor.specialization || 'General Medicine',
+                });
+
                 setPortalMode('dashboard');
                 setActiveSection('dashboard');
+                showToast('success', 'Doctor Authenticated', `Welcome Dr. ${fallbackDoc.doctor.full_name}`);
+                syncQueueOnly();
+                return { success: true };
               }
+
+              return {
+                success: false,
+                message: branchRes.message || fallbackDoc.message || 'Invalid Clinic Gateway or Doctor PIN',
+              };
             }}
             waitingCount={waitingPatientsCount}
             doctorName={doctorProfile.name}
@@ -2101,8 +2243,10 @@ function DashboardContent() {
             onClose={() => setIsChatModalOpen(false)}
             availableDoctors={availableDoctors}
             currentDoctorName={effectiveDoctorProfile.name}
+            locationId={currentLocation?.id || undefined}
+            clinicId={(currentLocation?.clinic_id || currentClinicId) ?? undefined}
             onBookingSuccess={() => {
-              fetchQueueFromDb().then((dbQueue) => {
+              fetchQueueFromDb(undefined, undefined, currentLocation?.id).then((dbQueue) => {
                 if (dbQueue) {
                   setQueue(sortQueueWithCompletedAtEnd(dbQueue));
                 }

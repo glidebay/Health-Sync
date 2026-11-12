@@ -52,4 +52,15 @@ export interface PatientChatThread {
   unread: boolean;
   messages: ChatMessage[];
   tokenNumber?: string;
+  locationId?: string;
+  clinicId?: string;
+  bookingStage?:
+    | 'main_menu'
+    | 'browsing_doctors'
+    | 'browsing_doctors_slot'
+    | 'awaiting_slot'
+    | 'awaiting_doctor_after_slot'
+    | 'awaiting_confirm'
+    | 'confirmed'
+    | string;
 }

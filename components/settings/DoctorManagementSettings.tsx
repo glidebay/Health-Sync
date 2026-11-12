@@ -21,9 +21,20 @@ import {
   adminDeleteDoctor,
 } from '@/lib/doctorService';
 import { fetchClinicLocations } from '@/lib/supabaseService';
+import { supabase } from '@/lib/supabaseClient';
 import { DbClinicLocation } from '@/types/database';
 
 export const CLINIC_OPTIONS = [
+  {
+    id: '02acab28-14bf-44cf-9a89-ad13dc7a7e80',
+    name: 'Aster Prime Clinic',
+    badge: 'Central Organization',
+  },
+  {
+    id: '2478eaca-ea74-44f7-b4b2-d6c5924a33b5',
+    name: 'Apollo Health Clinic',
+    badge: 'Partner Network',
+  },
   {
     id: '9e8b98f5-e268-4b11-8ca1-ec1ce83292ea',
     name: 'HealthSync Medical Center',
@@ -53,20 +64,39 @@ interface DoctorManagementSettingsProps {
 }
 
 export function formatDoctorDisplayName(fullName: string): string {
-  const clean = (fullName || '').trim();
-  if (/^dr\.?\s+/i.test(clean)) return clean;
-  return `Dr. ${clean}`;
+  if (!fullName) return '';
+  const stripped = fullName
+    .replace(/^(?:dr\.?|doctor)\s+/gi, '')
+    .replace(/^(?:dr\.?|doctor)\s+/gi, '')
+    .trim();
+  return `Dr. ${stripped}`;
 }
 
 export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSettingsProps) {
+  const [clinicList, setClinicList] = useState<{ id: string; name: string; slug?: string }[]>([]);
+
+  useEffect(() => {
+    async function loadClinics() {
+      try {
+        const { data } = await supabase.from('clinics').select('id, name, slug');
+        if (data && data.length > 0) {
+          setClinicList(data);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch clinics:', e);
+      }
+    }
+    loadClinics();
+  }, []);
+
   const effectiveClinicId = useMemo(() => {
     if (currentClinicId) return currentClinicId;
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('healthsync_active_clinic_id');
       if (stored) return stored;
     }
-    return CLINIC_OPTIONS[0].id;
-  }, [currentClinicId]);
+    return clinicList[0]?.id || CLINIC_OPTIONS[0].id;
+  }, [currentClinicId, clinicList]);
 
   const [selectedClinicId, setSelectedClinicId] = useState<string>(effectiveClinicId);
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,6 +108,10 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
   }, [effectiveClinicId]);
 
   const activeClinicMeta = useMemo(() => {
+    const fromDb = clinicList.find((c) => c.id === selectedClinicId);
+    if (fromDb) {
+      return { id: fromDb.id, name: fromDb.name, badge: 'Active Clinic' };
+    }
     return (
       CLINIC_OPTIONS.find((c) => c.id === selectedClinicId) || {
         id: selectedClinicId,
@@ -85,7 +119,7 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
         badge: 'HQ',
       }
     );
-  }, [selectedClinicId]);
+  }, [selectedClinicId, clinicList]);
 
   const [doctors, setDoctors] = useState<DoctorWithBranches[]>([]);
   const [branches, setBranches] = useState<DbClinicLocation[]>([]);
@@ -173,8 +207,8 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
     e.preventDefault();
     setFormError('');
 
-    const cleanName = formName.trim();
-    if (!cleanName) {
+    const cleanName = formatDoctorDisplayName(formName.trim());
+    if (!cleanName.replace(/^dr\.?\s*/i, '').trim()) {
       setFormError('Doctor full name is required');
       return;
     }
