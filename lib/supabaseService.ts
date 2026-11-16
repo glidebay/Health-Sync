@@ -708,21 +708,36 @@ function sortQueuePatients(patients: FormattedQueuePatient[]): FormattedQueuePat
   });
 }
 
-export async function fetchQueueFromDb(targetDate?: string, doctorId?: string, locationId?: string): Promise<FormattedQueuePatient[]> {
+export async function fetchQueueFromDb(
+  targetDate?: string,
+  doctorId?: string,
+  locationId?: string,
+  clinicId?: string
+): Promise<FormattedQueuePatient[]> {
   try {
     const todayIST = targetDate || getTodayIST();
+    const effectiveLocationId =
+      locationId ||
+      (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') || undefined : undefined);
+    const effectiveClinicId =
+      clinicId ||
+      (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') || undefined : undefined);
 
     // 1. Primary: Try get_live_queue RPC with location_id
     try {
       const { data: liveData, error: liveError } = await supabase.rpc('get_live_queue', {
         p_doctor_id: doctorId || null,
         p_date: todayIST,
-        p_location_id: locationId || null,
+        p_location_id: effectiveLocationId || null,
       });
 
       if (!liveError && Array.isArray(liveData) && liveData.length > 0) {
         const mapped: FormattedQueuePatient[] = liveData
-          .filter((item: any) => !locationId || item.location_id === locationId)
+          .filter(
+            (item: any) =>
+              (!effectiveLocationId || !item.location_id || item.location_id === effectiveLocationId) &&
+              (!effectiveClinicId || !item.clinic_id || item.clinic_id === effectiveClinicId)
+          )
           .map((item: any) => {
             const qTokenNo = typeof item.queue_token_no === 'number' ? item.queue_token_no : 1;
             const tokenDisplay = item.token_display || `P${String(qTokenNo).padStart(3, '0')}`;
@@ -759,16 +774,22 @@ export async function fetchQueueFromDb(targetDate?: string, doctorId?: string, l
       // Fallback if RPC has internal PL/pgSQL variable collision
     }
 
-    // 2. Secondary: Try get_patient_appointments RPC
+    // 2. Secondary: Try get_patient_appointments RPC scoped by clinic & branch
     const { data: rpcData, error: rpcError } = await supabase.rpc('get_patient_appointments', {
       p_date: todayIST,
       p_status: 'All',
       p_search: null,
       p_doctor_id: doctorId || null,
+      p_location_id: effectiveLocationId || null,
+      p_clinic_id: effectiveClinicId || null,
     });
 
     if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
-      const filtered = locationId ? rpcData.filter((i: any) => i.location_id === locationId) : rpcData;
+      const filtered = rpcData.filter(
+        (i: any) =>
+          (!effectiveLocationId || !i.location_id || i.location_id === effectiveLocationId) &&
+          (!effectiveClinicId || !i.clinic_id || i.clinic_id === effectiveClinicId)
+      );
       if (filtered.length > 0) {
         const mapped: FormattedQueuePatient[] = filtered.map((item: any) => {
           const qTokenNo = typeof item.queue_token_no === 'number' ? item.queue_token_no : 1;
@@ -934,13 +955,24 @@ export async function fetchPatientAppointmentsFromDb(params?: {
   status?: string;
   search?: string;
   doctorId?: string;
+  locationId?: string;
+  clinicId?: string;
 }): Promise<Patient[]> {
   try {
+    const effectiveLocationId =
+      params?.locationId ||
+      (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') || undefined : undefined);
+    const effectiveClinicId =
+      params?.clinicId ||
+      (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') || undefined : undefined);
+
     const { data, error } = await supabase.rpc('get_patient_appointments', {
       p_date: params?.date || null,
       p_status: params?.status || 'All',
       p_search: params?.search?.trim() || null,
       p_doctor_id: params?.doctorId || null,
+      p_location_id: effectiveLocationId || null,
+      p_clinic_id: effectiveClinicId || null,
     });
 
     if (error) {
@@ -950,7 +982,13 @@ export async function fetchPatientAppointmentsFromDb(params?: {
 
     if (!data || !Array.isArray(data)) return [];
 
-    let mapped: Patient[] = data.map((item: any) => {
+    const scopedData = data.filter(
+      (item: any) =>
+        (!effectiveLocationId || !item.location_id || item.location_id === effectiveLocationId) &&
+        (!effectiveClinicId || !item.clinic_id || item.clinic_id === effectiveClinicId)
+    );
+
+    let mapped: Patient[] = scopedData.map((item: any) => {
       const qTokenNo = typeof item.queue_token_no === 'number' ? item.queue_token_no : 1;
       const tokenDisplay = `P${String(qTokenNo).padStart(3, '0')}`;
 
@@ -1591,8 +1629,45 @@ export async function completeConsultationDb(params: {
   }
 }
 
-export async function fetchInventoryFromDb(): Promise<FormattedInventoryItem[]> {
+export async function fetchInventoryFromDb(
+  clinicId?: string,
+  locationId?: string,
+  loggedDoctorId?: string
+): Promise<FormattedInventoryItem[]> {
   try {
+    const effectiveClinicId =
+      clinicId ||
+      (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') || undefined : undefined);
+    const effectiveLocationId =
+      locationId ||
+      (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') || undefined : undefined);
+    const effectiveDoctorId = loggedDoctorId || getDoctorSessionLocal()?.doctorId;
+
+    // Primary: Unified clinic & branch-scoped pharmacy stocks RPC
+    try {
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('get_branch_pharmacy_stocks', {
+        p_clinic_id: effectiveClinicId || null,
+        p_location_id: effectiveLocationId || null,
+        p_logged_doctor_id: effectiveDoctorId || null,
+        p_search: null,
+      });
+
+      if (!rpcErr && rpcRes?.success && Array.isArray(rpcRes.items)) {
+        return rpcRes.items.map((m: any) => ({
+          id: m.id,
+          brand: m.brand_name || 'Medicine',
+          generic: m.generic_name || '',
+          stock: Number(m.total_stock) || 0,
+          unit: m.unit || 'Units',
+          category: m.category || 'General',
+          unitPrice: Number(m.selling_price) || 0,
+          reorderThreshold: Number(m.minimum_stock_level) || 10,
+        }));
+      }
+    } catch {
+      // Fallback to direct table queries below
+    }
+
     const { data: medData, error: medErr } = await supabase
       .from('medicines')
       .select('*, batches:medicine_batches(available_quantity)')
@@ -3391,6 +3466,236 @@ export async function markThreadUrgentInDb(phoneNumber: string): Promise<boolean
     return !error;
   } catch (err) {
     console.warn('markThreadUrgentInDb error:', err);
+    return false;
+  }
+}
+
+// ============================================================================
+// UNIFIED CLINIC / BRANCH / DOCTOR DASHBOARD ENGINE RPC HELPERS
+// ============================================================================
+
+function getActiveScopeDefaults(clinicId?: string, locationId?: string, loggedDoctorId?: string) {
+  return {
+    clinicId:
+      clinicId ||
+      (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') || undefined : undefined),
+    locationId:
+      locationId ||
+      (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') || undefined : undefined),
+    loggedDoctorId: loggedDoctorId || getDoctorSessionLocal()?.doctorId,
+  };
+}
+
+export interface BranchVisitLogResult {
+  success: boolean;
+  scope?: {
+    is_admin: boolean;
+    scope_mode: string;
+    clinic_id?: string | null;
+    location_id?: string | null;
+    doctor_id?: string | null;
+  };
+  counts?: {
+    total: number;
+    waiting: number;
+    completed: number;
+    cancelled: number;
+    whatsapp: number;
+    walkin: number;
+  };
+  visits: Patient[];
+}
+
+export async function fetchBranchVisitLogDb(params?: {
+  clinicId?: string;
+  locationId?: string;
+  doctorId?: string;
+  loggedDoctorId?: string;
+  date?: string | null;
+  status?: string;
+  search?: string;
+  limit?: number;
+}): Promise<BranchVisitLogResult> {
+  const scope = getActiveScopeDefaults(params?.clinicId, params?.locationId, params?.loggedDoctorId);
+  try {
+    const { data, error } = await supabase.rpc('get_branch_visit_log', {
+      p_clinic_id: scope.clinicId || null,
+      p_location_id: scope.locationId || null,
+      p_doctor_id: params?.doctorId || null,
+      p_logged_doctor_id: scope.loggedDoctorId || null,
+      p_date: params?.date ?? null,
+      p_status: params?.status || 'All',
+      p_search: params?.search?.trim() || null,
+      p_limit: params?.limit || 100,
+    });
+
+    if (error || !data?.success) {
+      return { success: false, visits: [] };
+    }
+
+    const mapped: Patient[] = Array.isArray(data.visits)
+      ? data.visits.map((item: any) => {
+          const qTokenNo = typeof item.queue_token_no === 'number' ? item.queue_token_no : 1;
+          const tokenDisplay = item.token_display && item.token_display !== '--'
+            ? item.token_display
+            : `P${String(qTokenNo).padStart(3, '0')}`;
+
+          return {
+            id: item.id,
+            patientDbId: item.patient_id,
+            name: item.patient_name || 'Patient',
+            age: item.patient_age || 30,
+            gender: (item.patient_gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
+            phone: item.patient_phone || undefined,
+            status: (item.status === 'Reallocated' ? 'Cancelled' : item.status || 'Waiting') as PatientStatus,
+            time: item.formatted_time || '10:00 AM',
+            appointmentDate: item.scheduled_time
+              ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(item.scheduled_time))
+              : undefined,
+            tokenNumber: tokenDisplay,
+            queueTokenNo: qTokenNo,
+            patientNumber: qTokenNo,
+            displayId: tokenDisplay,
+            priority: (item.priority === 'Urgent' ? 'Urgent' : 'Normal') as 'Normal' | 'Urgent',
+            scheduledTime: item.scheduled_time,
+            visitType: item.visit_type || 'Walk-in',
+            cancellationReason: item.reschedule_reason || undefined,
+            locationId: item.location_id || scope.locationId,
+          };
+        })
+      : [];
+
+    return {
+      success: true,
+      scope: data.scope,
+      counts: data.counts,
+      visits: mapped,
+    };
+  } catch (err) {
+    console.warn('fetchBranchVisitLogDb exception:', err);
+    return { success: false, visits: [] };
+  }
+}
+
+export async function fetchBranchPharmacyStocksDb(params?: {
+  clinicId?: string;
+  locationId?: string;
+  loggedDoctorId?: string;
+  search?: string;
+}) {
+  const scope = getActiveScopeDefaults(params?.clinicId, params?.locationId, params?.loggedDoctorId);
+  try {
+    const { data, error } = await supabase.rpc('get_branch_pharmacy_stocks', {
+      p_clinic_id: scope.clinicId || null,
+      p_location_id: scope.locationId || null,
+      p_logged_doctor_id: scope.loggedDoctorId || null,
+      p_search: params?.search?.trim() || null,
+    });
+    if (error || !data?.success) return null;
+    return data as {
+      success: boolean;
+      scope_mode: string;
+      clinic_id?: string | null;
+      location_id?: string | null;
+      summary: {
+        total_units: number;
+        total_skus: number;
+        low_stock_count: number;
+        out_of_stock_count: number;
+        near_expiry_count: number;
+      };
+      items: any[];
+    };
+  } catch (err) {
+    console.warn('fetchBranchPharmacyStocksDb exception:', err);
+    return null;
+  }
+}
+
+export async function fetchPavilionDashboardSummaryDb(params?: {
+  doctorId?: string;
+  clinicId?: string;
+  locationId?: string;
+  loggedDoctorId?: string;
+}) {
+  const scope = getActiveScopeDefaults(params?.clinicId, params?.locationId, params?.loggedDoctorId);
+  try {
+    const { data, error } = await supabase.rpc('get_pavilion_dashboard_summary', {
+      p_doctor_id: params?.doctorId || null,
+      p_clinic_id: scope.clinicId || null,
+      p_location_id: scope.locationId || null,
+      p_logged_doctor_id: scope.loggedDoctorId || null,
+    });
+    if (error || !data?.success) return null;
+    return data;
+  } catch (err) {
+    console.warn('fetchPavilionDashboardSummaryDb exception:', err);
+    return null;
+  }
+}
+
+export async function fetchFullAnalyticsDashboardDb(params?: {
+  doctorId?: string;
+  clinicId?: string;
+  locationId?: string;
+  loggedDoctorId?: string;
+}) {
+  const scope = getActiveScopeDefaults(params?.clinicId, params?.locationId, params?.loggedDoctorId);
+  try {
+    const { data, error } = await supabase.rpc('get_full_analytics_dashboard', {
+      p_doctor_id: params?.doctorId || null,
+      p_clinic_id: scope.clinicId || null,
+      p_location_id: scope.locationId || null,
+      p_logged_doctor_id: scope.loggedDoctorId || null,
+    });
+    if (error || !data?.success) return null;
+    return data;
+  } catch (err) {
+    console.warn('fetchFullAnalyticsDashboardDb exception:', err);
+    return null;
+  }
+}
+
+export async function fetchBranchDashboardSettingsDb(params?: {
+  clinicId?: string;
+  locationId?: string;
+  loggedDoctorId?: string;
+}) {
+  const scope = getActiveScopeDefaults(params?.clinicId, params?.locationId, params?.loggedDoctorId);
+  try {
+    const { data, error } = await supabase.rpc('get_branch_dashboard_settings', {
+      p_clinic_id: scope.clinicId || null,
+      p_location_id: scope.locationId || null,
+      p_logged_doctor_id: scope.loggedDoctorId || null,
+    });
+    if (error || !data?.success) return null;
+    return data;
+  } catch (err) {
+    console.warn('fetchBranchDashboardSettingsDb exception:', err);
+    return null;
+  }
+}
+
+export async function saveBranchDashboardSettingsDb(params: {
+  locationId: string;
+  dailyQuota?: number;
+  slotDurationMins?: number;
+  welcomeMessage?: string;
+  phone?: string;
+  address?: string;
+}): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.rpc('save_branch_dashboard_settings', {
+      p_location_id: params.locationId,
+      p_daily_quota: params.dailyQuota ?? null,
+      p_slot_duration_mins: params.slotDurationMins ?? null,
+      p_welcome_message: params.welcomeMessage ?? null,
+      p_phone: params.phone ?? null,
+      p_address: params.address ?? null,
+    });
+    return !error && Boolean(data?.success);
+  } catch (err) {
+    console.warn('saveBranchDashboardSettingsDb exception:', err);
     return false;
   }
 }

@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { Patient } from '@/types';
 import { formatPatientToken } from '@/lib/utils';
-import { fetchPatientAppointmentsFromDb } from '@/lib/supabaseService';
+import { fetchPatientAppointmentsFromDb, fetchBranchVisitLogDb } from '@/lib/supabaseService';
 import { supabase } from '@/lib/supabaseClient';
 import { NumberedPagination } from '@/components/ui/pagination';
 import { EcgActionLoader } from '@/components/loading/EcgActionLoader';
@@ -75,12 +75,16 @@ interface TablesViewProps {
   initialQueue?: Patient[];
   onOpenConsultation?: (patientId: string) => void;
   onPrintRecord?: (patient: Patient) => void;
+  locationId?: string;
+  clinicId?: string;
 }
 
 export function TablesView({
   initialQueue = [],
   onOpenConsultation,
   onPrintRecord,
+  locationId,
+  clinicId,
 }: TablesViewProps) {
   const todayIST = useMemo(() => getTodayIST(), []);
   const [selectedDate, setSelectedDate] = useState<string>(todayIST);
@@ -105,11 +109,24 @@ export function TablesView({
       if (!silent) setIsLoading(true);
       else setIsRefreshing(true);
       try {
-        const fetched = await fetchPatientAppointmentsFromDb({
+        const visitLogRes = await fetchBranchVisitLogDb({
           date: selectedDate,
           status: 'All',
+          locationId,
+          clinicId,
+          limit: 250,
         });
-        setDbPatients(fetched);
+        if (visitLogRes.success) {
+          setDbPatients(visitLogRes.visits);
+        } else {
+          const fetched = await fetchPatientAppointmentsFromDb({
+            date: selectedDate,
+            status: 'All',
+            locationId,
+            clinicId,
+          });
+          setDbPatients(fetched);
+        }
       } catch (err) {
         console.warn('TablesView fetch error:', err);
       } finally {
@@ -117,7 +134,7 @@ export function TablesView({
         else setIsRefreshing(false);
       }
     },
-    [selectedDate]
+    [selectedDate, locationId, clinicId]
   );
 
   useEffect(() => {

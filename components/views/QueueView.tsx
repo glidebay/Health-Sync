@@ -25,6 +25,8 @@ interface QueueViewProps {
   onStartConsultation: (id: string, patient?: Patient) => void;
   onRefresh?: () => Promise<void> | void;
   itemsPerPage?: number;
+  locationId?: string;
+  clinicId?: string;
 }
 
 function getTodayIST(): string {
@@ -97,6 +99,8 @@ export function QueueView({
   onStartConsultation,
   onRefresh,
   itemsPerPage = 5,
+  locationId,
+  clinicId,
 }: QueueViewProps) {
   const todayIST = useMemo(() => getTodayIST(), []);
   const [selectedDate, setSelectedDate] = useState<string>(todayIST);
@@ -115,6 +119,8 @@ export function QueueView({
         const fetchedPatients = await fetchPatientAppointmentsFromDb({
           date: selectedDate,
           status: 'All',
+          locationId,
+          clinicId,
         });
         setDbPatients(fetchedPatients);
       } catch (err) {
@@ -123,7 +129,7 @@ export function QueueView({
         if (!silent) setIsLoading(false);
       }
     },
-    [selectedDate]
+    [selectedDate, locationId, clinicId]
   );
 
   useEffect(() => {
@@ -297,11 +303,10 @@ export function QueueView({
                     whileHover={!isCompleted ? { y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' } : {}}
                     transition={{ type: 'spring', damping: 25, stiffness: 400 }}
                     onClick={() => !isCompleted && onStartConsultation(p.id, p)}
-                    className={`bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-                      isCompleted
-                        ? 'opacity-65 cursor-default'
-                        : 'cursor-pointer hover:border-slate-200'
-                    }`}
+                    className={`bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${isCompleted
+                      ? 'opacity-65 cursor-default'
+                      : 'cursor-pointer hover:border-slate-200'
+                      }`}
                   >
                     <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
                       <div className="relative flex-shrink-0">
@@ -351,24 +356,22 @@ export function QueueView({
 
                         <div className="flex items-center gap-2 mt-2">
                           <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex-shrink-0 ${
-                              isCompleted
-                                ? 'bg-slate-100 text-slate-600 border-slate-200/60'
-                                : isInProgress
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex-shrink-0 ${isCompleted
+                              ? 'bg-slate-100 text-slate-600 border-slate-200/60'
+                              : isInProgress
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
                                 : 'bg-blue-50 text-blue-700 border-blue-200/60'
-                            }`}
+                              }`}
                           >
                             {p.status}
                           </span>
 
                           {p.visitType && (
                             <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex-shrink-0 ${
-                                isOnline
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
-                                  : 'bg-indigo-50 text-indigo-700 border-indigo-200/60'
-                              }`}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex-shrink-0 ${isOnline
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
+                                : 'bg-indigo-50 text-indigo-700 border-indigo-200/60'
+                                }`}
                             >
                               {isOnline ? 'Online' : 'Walk-in'}
                             </span>

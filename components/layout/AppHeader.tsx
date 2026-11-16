@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { PanelLeft, HeartPulse, Search, LogIn, Lock, ChevronDown, Building2, Check } from 'lucide-react';
+import { PanelLeft, HeartPulse, Search, LogIn, Lock, ChevronDown, Check } from 'lucide-react';
 import { NavSection, Patient, InventoryItem } from '@/types';
 import { DbClinicLocation } from '@/types/database';
 import { GlobalPatientSearch } from '@/components/common/GlobalPatientSearch';
@@ -58,9 +58,25 @@ export function AppHeader({
   isAdmin = false,
 }: AppHeaderProps) {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
+  const branchMenuRef = useRef<HTMLDivElement>(null);
   const isPharmacyStock = activeSection === 'inventory';
   const isSettings = activeSection === 'settings';
   const isAnalytics = activeSection === 'analytics';
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (branchMenuRef.current && !branchMenuRef.current.contains(e.target as Node)) {
+        setIsBranchMenuOpen(false);
+      }
+    };
+    if (isBranchMenuOpen) {
+      document.addEventListener('mousedown', handleOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+    };
+  }, [isBranchMenuOpen]);
 
   const cleanDocName = (doctorProfile?.name || '')
     .replace(/^(?:dr\.?|doctor)\s+/gi, '')
@@ -166,14 +182,88 @@ export function AppHeader({
                   CLMS Worklist
                 </span>
                 {branchName && (
-                  <div
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50/90 text-[#2563EB] border border-blue-200/80 shadow-2xs select-none"
-                    title={`Authenticated Branch: ${branchName}`}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] animate-pulse flex-shrink-0" />
-                    <span className="truncate max-w-[180px] sm:max-w-[260px]">
-                      {branchName} {branchCode ? `(${branchCode})` : ''}
-                    </span>
+                  <div className="relative" ref={branchMenuRef}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (clinicLocations.length > 1 || isAdmin) {
+                          setIsBranchMenuOpen((prev) => !prev);
+                        }
+                      }}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50/90 text-[#2563EB] border border-blue-200/80 shadow-2xs select-none transition ${
+                        clinicLocations.length > 1 || isAdmin
+                          ? 'hover:bg-blue-100/90 hover:border-blue-300 cursor-pointer'
+                          : 'cursor-default'
+                      }`}
+                      title={
+                        clinicLocations.length > 1 || isAdmin
+                          ? `Switch branch (Active: ${branchName})`
+                          : `Authenticated Branch: ${branchName}`
+                      }
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] animate-pulse flex-shrink-0" />
+                      <span className="truncate max-w-[150px] sm:max-w-[210px]">
+                        {branchName} {branchCode ? `(${branchCode})` : ''}
+                      </span>
+                      {(clinicLocations.length > 1 || isAdmin) && (
+                        <ChevronDown
+                          className={`w-3 h-3 text-[#2563EB] transition-transform duration-200 flex-shrink-0 ${
+                            isBranchMenuOpen ? 'rotate-180' : ''
+                          }`}
+                        />
+                      )}
+                    </button>
+
+                    {isBranchMenuOpen && (
+                      <div className="absolute left-0 mt-2 w-64 sm:w-72 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                        <div className="px-3 py-1.5 border-b border-slate-100 flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            Clinic Branches
+                          </span>
+                          {isAdmin && (
+                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100">
+                              Admin Doctor
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="max-h-60 overflow-y-auto py-1 divide-y divide-slate-50">
+                          {clinicLocations.map((loc) => {
+                            const isCurrent =
+                              currentLocation?.id === loc.id || loc.branch_name === branchName;
+                            return (
+                              <button
+                                key={loc.id}
+                                type="button"
+                                onClick={() => {
+                                  onSelectLocation?.(loc);
+                                  setIsBranchMenuOpen(false);
+                                }}
+                                className={`w-full text-left px-3.5 py-2.5 flex items-center justify-between text-xs transition cursor-pointer ${
+                                  isCurrent
+                                    ? 'bg-blue-50/80 text-blue-700 font-bold'
+                                    : 'text-slate-700 hover:bg-slate-50 font-medium'
+                                }`}
+                              >
+                                <div className="flex flex-col min-w-0 pr-2">
+                                  <span className="truncate font-semibold text-slate-800">
+                                    {loc.branch_name}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 truncate">
+                                    {loc.branch_code
+                                      ? `Code: ${loc.branch_code}`
+                                      : loc.address_line1 || loc.address || 'Branch location'}
+                                  </span>
+                                </div>
+                                {isCurrent && (
+                                  <Check className="w-4 h-4 text-blue-600 stroke-[2.5] flex-shrink-0" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

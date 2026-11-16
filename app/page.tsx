@@ -327,22 +327,31 @@ function DashboardContent() {
   const syncQueueOnly = useCallback(async () => {
     try {
       const locId = currentLocation?.id;
-      const dbQueue = await fetchQueueFromDb(undefined, undefined, locId);
+      const activeClinic =
+        currentClinicId ||
+        currentLocation?.clinic_id ||
+        (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) ||
+        undefined;
+      const dbQueue = await fetchQueueFromDb(undefined, undefined, locId, activeClinic);
       if (dbQueue && Array.isArray(dbQueue)) {
         setQueue(sortQueueWithCompletedAtEnd(dbQueue));
       }
     } catch (err) {
       console.warn('Queue live sync error:', err);
     }
-  }, [currentLocation]);
+  }, [currentLocation, currentClinicId]);
 
   const syncClinicData = useCallback(async (silent: boolean = true) => {
     try {
-      const activeClinic = currentClinicId || (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) || undefined;
+      const activeClinic =
+        currentClinicId ||
+        currentLocation?.clinic_id ||
+        (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) ||
+        undefined;
       const locId = currentLocation?.id;
       const [dbQueue, dbInventory, dbDoctors, locs] = await Promise.all([
-        fetchQueueFromDb(undefined, undefined, locId),
-        fetchInventoryFromDb(),
+        fetchQueueFromDb(undefined, undefined, locId, activeClinic),
+        fetchInventoryFromDb(activeClinic, locId),
         getDoctors(activeClinic),
         fetchClinicLocations(activeClinic),
       ]);
@@ -380,15 +389,23 @@ function DashboardContent() {
 
   const handleSelectLocation = useCallback((loc: DbClinicLocation) => {
     setCurrentLocation(loc);
+    const activeClinic =
+      loc.clinic_id ||
+      currentClinicId ||
+      (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) ||
+      undefined;
     if (typeof window !== 'undefined') {
       localStorage.setItem('healthsync_active_location_id', loc.id);
+      if (activeClinic) {
+        localStorage.setItem('healthsync_active_clinic_id', activeClinic);
+      }
     }
-    fetchQueueFromDb(undefined, undefined, loc.id).then((fresh) => {
+    fetchQueueFromDb(undefined, undefined, loc.id, activeClinic).then((fresh) => {
       if (fresh && Array.isArray(fresh)) {
         setQueue(sortQueueWithCompletedAtEnd(fresh));
       }
     });
-  }, []);
+  }, [currentClinicId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -398,8 +415,8 @@ function DashboardContent() {
         const storedLoc = typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') : null;
         const storedClinic = typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null;
         const [dbQueue, dbInventory, dbDoctors, locs] = await Promise.all([
-          fetchQueueFromDb(undefined, undefined, storedLoc || undefined),
-          fetchInventoryFromDb(),
+          fetchQueueFromDb(undefined, undefined, storedLoc || undefined, storedClinic || undefined),
+          fetchInventoryFromDb(storedClinic || undefined, storedLoc || undefined),
           getDoctors(storedClinic || undefined),
           fetchClinicLocations(storedClinic || undefined),
         ]);
@@ -650,8 +667,8 @@ function DashboardContent() {
         setPinErrorMessage('');
         setPinInput('');
         setPortalMode('dashboard');
-        // When assistant opens with their branch PIN, route directly to Assistant Desk
-        setActiveSection(intendedSection || 'assistant');
+        // When assistant opens with their branch PIN, route directly to Dashboard menu
+        setActiveSection(intendedSection || 'dashboard');
         setIntendedSection(null);
         showToast('success', 'Branch Gateway Connected', `Active Location: ${branchRes.branch_name} (${branchRes.branch_code || 'HS'})`);
         syncQueueOnly();
@@ -794,7 +811,7 @@ function DashboardContent() {
       logoutDoctor();
     } catch { }
     if (['queue', 'consult', 'inventory', 'analytics', 'settings', 'tables', 'admin_doctors'].includes(activeSection)) {
-      setActiveSection('assistant');
+      setActiveSection('dashboard');
     }
     if (savedDoc?.doctorId) {
       await logoutDoctorSessionDb(savedDoc.doctorId);
@@ -891,8 +908,8 @@ function DashboardContent() {
           actionLabel: canSwitchUrgent ? 'Switch to Urgent' : undefined,
           onAction: canSwitchUrgent
             ? () => {
-                setWalkinPriority('Urgent');
-              }
+              setWalkinPriority('Urgent');
+            }
             : undefined,
         });
       }
@@ -1507,7 +1524,7 @@ function DashboardContent() {
                 });
 
                 setPortalMode('dashboard');
-                setActiveSection('assistant');
+                setActiveSection('dashboard');
                 showToast('success', 'Branch Gateway Connected', `Active Location: ${branchName}`);
                 syncQueueOnly();
                 return { success: true };
@@ -1730,9 +1747,8 @@ function DashboardContent() {
                     <motion.div
                       whileHover={{ scale: 1.05 }}
                       transition={{ type: 'spring', damping: 15 }}
-                      className={`rounded-full overflow-hidden bg-blue-50 border-2 border-white shadow-sm flex-shrink-0 cursor-pointer ${
-                        isMobile ? 'w-11 h-11' : 'w-14 h-14'
-                      }`}
+                      className={`rounded-full overflow-hidden bg-blue-50 border-2 border-white shadow-sm flex-shrink-0 cursor-pointer ${isMobile ? 'w-11 h-11' : 'w-14 h-14'
+                        }`}
                     >
                       <Image
                         src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAlmuC30xuMIZpBDfxi6DcXHu_Ks41P52MELsRuS7q4xgQhHJsRyIAU26SoUhZQ_v01dlHDlWrAAkh3wSZl04MBQqPlT6ErIF8M2Z-BxbP_LDZJwq1ggudaa_bfRN8YDWwtyWd28KCfQfIF40q_rF1P8xus-qeymY-ar5CmL4wz4tzlH8FI1FP7WZ-0sJDAW-0YLEq8Icg9Yn18bC_VJLV-Tv4XaPLEQViv7w4vOCY"
@@ -1862,6 +1878,8 @@ function DashboardContent() {
                     filteredQueue={filteredQueue}
                     queue={queue.filter((p) => p.status !== 'Cancelled')}
                     isLoggedIn={isDoctorUnlocked}
+                    locationId={currentLocation?.id}
+                    clinicId={currentClinicId || currentLocation?.clinic_id || undefined}
                     onRegisterWalkin={() => setShowWalkinModal(true)}
                     onViewAllQueue={() => setActiveSection('assistant')}
                     onReallocate={handleReallocate}
@@ -1918,6 +1936,8 @@ function DashboardContent() {
                   ) : (
                     <TablesView
                       initialQueue={queue}
+                      locationId={currentLocation?.id}
+                      clinicId={currentClinicId || currentLocation?.clinic_id || undefined}
                       onOpenConsultation={(patientId) => {
                         startConsultation(patientId);
                         setActiveSection('consult');
@@ -1943,6 +1963,8 @@ function DashboardContent() {
                 {activeSection === 'assistant' && (
                   <AssistantView
                     queue={queue}
+                    locationId={currentLocation?.id}
+                    clinicId={currentClinicId || currentLocation?.clinic_id || undefined}
                     onRegisterWalkin={() => setShowWalkinModal(true)}
                     onReallocate={handleReallocate}
                     onCancelAppointment={handleCancelAppointment}
@@ -1958,6 +1980,8 @@ function DashboardContent() {
                         p.status !== 'Cancelled' &&
                         (!p.appointmentDate || p.appointmentDate === getTodayIST())
                     )}
+                    locationId={currentLocation?.id}
+                    clinicId={currentClinicId || currentLocation?.clinic_id || undefined}
                     onStartConsultation={startConsultation}
                     onRefresh={handleRefreshDoctorQueue}
                   />
@@ -2010,6 +2034,8 @@ function DashboardContent() {
                     cancelledAppointments={queue.filter((p) => p.status === 'Cancelled')}
                     searchQuery={searchQuery}
                     onSearchChange={setSearchQuery}
+                    locationId={currentLocation?.id}
+                    clinicId={currentClinicId || currentLocation?.clinic_id || undefined}
                   />
                 )}
 

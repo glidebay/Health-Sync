@@ -39,6 +39,8 @@ interface QueueListProps {
   }) => Promise<void> | void;
   onStartConsultation?: (patientId: string) => void;
   itemsPerPage?: number;
+  locationId?: string;
+  clinicId?: string;
 }
 
 function getTodayIST(): string {
@@ -113,6 +115,8 @@ export function QueueList({
   onReschedulePatient,
   onStartConsultation,
   itemsPerPage = 10,
+  locationId,
+  clinicId,
 }: QueueListProps) {
   const todayIST = useMemo(() => getTodayIST(), []);
   const [selectedDate, setSelectedDate] = useState<string>(todayIST);
@@ -134,6 +138,8 @@ export function QueueList({
         const fetchedPatients = await fetchPatientAppointmentsFromDb({
           date: selectedDate,
           status: 'All',
+          locationId,
+          clinicId,
         });
         setDbPatients(fetchedPatients);
       } catch (err) {
@@ -142,7 +148,7 @@ export function QueueList({
         if (!silent) setIsLoading(false);
       }
     },
-    [selectedDate]
+    [selectedDate, locationId, clinicId]
   );
 
   useEffect(() => {
