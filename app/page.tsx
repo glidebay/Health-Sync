@@ -471,17 +471,15 @@ function DashboardContent() {
 
     initialLoad();
 
+    // Supabase Realtime WebSocket listener (instant updates, zero continuous polling)
     const unsubscribe = subscribeToClinicUpdates(() => {
       syncQueueOnly();
     });
 
-    const queueInterval = setInterval(() => {
-      syncQueueOnly();
-    }, 2500);
-
-    const fullInterval = setInterval(() => {
+    // Optional ultra-low-frequency background sync (every 60s) for quiet sanity check
+    const slowSyncInterval = setInterval(() => {
       syncClinicData(true);
-    }, 20000);
+    }, 60000);
 
     const handleVisibilityOrFocus = () => {
       syncQueueOnly();
@@ -492,8 +490,7 @@ function DashboardContent() {
     return () => {
       isMounted = false;
       unsubscribe();
-      clearInterval(queueInterval);
-      clearInterval(fullInterval);
+      clearInterval(slowSyncInterval);
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       window.removeEventListener('focus', handleVisibilityOrFocus);
     };

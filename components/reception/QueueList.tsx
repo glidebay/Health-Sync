@@ -154,10 +154,6 @@ export function QueueList({
   useEffect(() => {
     loadData();
 
-    const interval = setInterval(() => {
-      loadData(true);
-    }, 2500);
-
     const handleSync = () => {
       loadData(true);
     };
@@ -165,26 +161,30 @@ export function QueueList({
     document.addEventListener('visibilitychange', handleSync);
     window.addEventListener('focus', handleSync);
 
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleSync);
-      window.removeEventListener('focus', handleSync);
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedLoad = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        loadData(true);
+      }, 300);
     };
-  }, [loadData]);
 
-  useEffect(() => {
+    // Supabase Realtime WebSocket subscription (instant updates on queue list)
     const channel = supabase
       .channel('realtime-queue-list-date')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'appointments' },
         () => {
-          loadData(true);
+          debouncedLoad();
         }
       )
       .subscribe();
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      document.removeEventListener('visibilitychange', handleSync);
+      window.removeEventListener('focus', handleSync);
       supabase.removeChannel(channel);
     };
   }, [loadData]);

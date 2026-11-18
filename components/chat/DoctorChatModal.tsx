@@ -350,14 +350,9 @@ export function DoctorChatModal({
       loadThreads(true);
     }, locationId);
 
-    const interval = setInterval(() => {
-      loadThreads(true);
-    }, 3000);
-
     return () => {
       isMounted = false;
       unsubscribe();
-      clearInterval(interval);
     };
   }, [isOpen, loadThreads, locationId]);
 

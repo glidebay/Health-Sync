@@ -6,6 +6,7 @@ import {
   PavilionDashboardData,
   DashboardScope,
 } from '@/lib/enterpriseCLMSService';
+import { subscribeToClinicUpdates } from '@/lib/supabaseService';
 
 export interface UsePavilionDashboardParams {
   locationId?: string | null;
@@ -20,7 +21,7 @@ export function usePavilionDashboard({
   clinicId,
   doctorId,
   loggedDoctorId,
-  pollInterval = 3000,
+  pollInterval = 0,
 }: UsePavilionDashboardParams = {}) {
   const [data, setData] = useState<PavilionDashboardData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -77,18 +78,22 @@ export function usePavilionDashboard({
 
     void runFetch();
 
+    // Event-driven Realtime subscription: updates automatically on DB mutations
+    const unsubscribe = subscribeToClinicUpdates(() => {
+      void runFetch();
+    });
+
+    let timer: ReturnType<typeof setInterval> | null = null;
     if (pollInterval > 0) {
-      const timer = setInterval(() => {
+      timer = setInterval(() => {
         void runFetch();
       }, pollInterval);
-      return () => {
-        isMounted = false;
-        clearInterval(timer);
-      };
     }
 
     return () => {
       isMounted = false;
+      unsubscribe();
+      if (timer) clearInterval(timer);
     };
   }, [locationId, clinicId, doctorId, loggedDoctorId, pollInterval]);
 

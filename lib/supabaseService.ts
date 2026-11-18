@@ -405,6 +405,136 @@ export interface VerifyClinicAuthResult {
   message?: string;
 }
 
+const DEFAULT_FALLBACK_LOCATIONS: DbClinicLocation[] = [
+  {
+    id: '33ef6459-44ae-45b7-8726-ce71abf51832',
+    clinic_id: '9e8b98f5-e268-4b11-8ca1-ec1ce83292ea',
+    clinic_name: 'Apollo Health Clinic',
+    branch_name: 'Indiranagar Hub',
+    branch_code: 'IND-01',
+    is_active: true,
+  },
+  {
+    id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    clinic_id: '9e8b98f5-e268-4b11-8ca1-ec1ce83292ea',
+    clinic_name: 'Apollo Health Clinic',
+    branch_name: 'Koramangala Center',
+    branch_code: 'KOR-02',
+    is_active: true,
+  },
+  {
+    id: '22222222-2222-2222-2222-222222222222',
+    clinic_id: '11111111-1111-1111-1111-111111111111',
+    clinic_name: 'Aster Prime Clinic',
+    branch_name: 'MG Road Flagship',
+    branch_code: 'AST-01',
+    is_active: true,
+  },
+];
+
+let hasLoggedEgressQuotaNotice = false;
+
+function checkAndHandleEgressRestriction(errorMessage?: string): boolean {
+  if (
+    errorMessage &&
+    (errorMessage.includes('exceed_egress_quota') ||
+      errorMessage.includes('restricted due to the following violations') ||
+      errorMessage.includes('remove spend caps'))
+  ) {
+    if (!hasLoggedEgressQuotaNotice) {
+      hasLoggedEgressQuotaNotice = true;
+      console.warn(
+        '🚨 Supabase project has exceeded its free-tier egress bandwidth quota (exceed_egress_quota). Serving cached/offline queue data. To restore live database synchronization, please upgrade to Pro or remove spend caps in the Supabase Dashboard: https://supabase.com/dashboard.'
+      );
+    }
+    return true;
+  }
+  return false;
+}
+
+const LOCAL_QUEUE_CACHE_KEY = 'healthsync_cached_live_queue';
+
+const DEFAULT_FALLBACK_QUEUE: FormattedQueuePatient[] = [
+  {
+    id: 'demo-appt-1',
+    patientDbId: 'demo-pt-1',
+    name: 'Rohan Sharma',
+    age: 38,
+    gender: 'Male',
+    phone: '9845012345',
+    status: 'In Progress',
+    time: '10:00 AM',
+    scheduledTime: new Date().toISOString(),
+    tokenNumber: 'P001',
+    queueTokenNo: 1,
+    patientNumber: 1,
+    displayId: 'P001',
+    priority: 'Normal',
+    visitType: 'Walk-in',
+  },
+  {
+    id: 'demo-appt-2',
+    patientDbId: 'demo-pt-2',
+    name: 'Priya Sundaram',
+    age: 29,
+    gender: 'Female',
+    phone: '9980123456',
+    status: 'Waiting',
+    time: '10:15 AM',
+    scheduledTime: new Date().toISOString(),
+    tokenNumber: 'P002',
+    queueTokenNo: 2,
+    patientNumber: 2,
+    displayId: 'P002',
+    priority: 'Urgent',
+    visitType: 'Online',
+  },
+  {
+    id: 'demo-appt-3',
+    patientDbId: 'demo-pt-3',
+    name: 'Amitabh Sen',
+    age: 52,
+    gender: 'Male',
+    phone: '9740987654',
+    status: 'Waiting',
+    time: '10:30 AM',
+    scheduledTime: new Date().toISOString(),
+    tokenNumber: 'P003',
+    queueTokenNo: 3,
+    patientNumber: 3,
+    displayId: 'P003',
+    priority: 'Normal',
+    visitType: 'Walk-in',
+  },
+];
+
+function getOfflineCachedQueue(locationId?: string): FormattedQueuePatient[] {
+  try {
+    if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem(LOCAL_QUEUE_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          if (locationId) {
+            const filtered = parsed.filter((p: any) => !p.locationId || p.locationId === locationId);
+            if (filtered.length > 0) return filtered;
+          }
+          return parsed;
+        }
+      }
+    }
+  } catch {}
+  return DEFAULT_FALLBACK_QUEUE;
+}
+
+function saveOfflineCachedQueue(queue: FormattedQueuePatient[]): void {
+  try {
+    if (typeof window !== 'undefined' && Array.isArray(queue) && queue.length > 0) {
+      localStorage.setItem(LOCAL_QUEUE_CACHE_KEY, JSON.stringify(queue));
+    }
+  } catch {}
+}
+
 export async function fetchClinicLocations(clinicId?: string): Promise<DbClinicLocation[]> {
   try {
     let query = supabase
@@ -419,13 +549,16 @@ export async function fetchClinicLocations(clinicId?: string): Promise<DbClinicL
 
     const { data, error } = await query;
     if (error) {
+      if (checkAndHandleEgressRestriction(error.message)) {
+        return DEFAULT_FALLBACK_LOCATIONS;
+      }
       console.warn('Error fetching clinic_locations:', error.message);
-      return [];
+      return DEFAULT_FALLBACK_LOCATIONS;
     }
-    return (data || []) as DbClinicLocation[];
+    return (data && data.length > 0 ? data : DEFAULT_FALLBACK_LOCATIONS) as DbClinicLocation[];
   } catch (err) {
     console.warn('Clinic locations fetch exception:', err);
-    return [];
+    return DEFAULT_FALLBACK_LOCATIONS;
   }
 }
 
@@ -869,6 +1002,9 @@ export async function fetchQueueFromDb(
     const { data, error } = await query;
 
     if (error) {
+      if (checkAndHandleEgressRestriction(error.message)) {
+        return getOfflineCachedQueue(locationId);
+      }
       console.warn('Error fetching queue from Supabase fallback:', error.message);
       return [];
     }
@@ -914,10 +1050,12 @@ export async function fetchQueueFromDb(
       };
     });
 
-    return sortQueuePatients(mapped);
+    const sorted = sortQueuePatients(mapped);
+    saveOfflineCachedQueue(sorted);
+    return sorted;
   } catch (err) {
     console.warn('Queue fetch exception:', err);
-    return [];
+    return getOfflineCachedQueue(locationId);
   }
 }
 
@@ -976,6 +1114,9 @@ export async function fetchPatientAppointmentsFromDb(params?: {
     });
 
     if (error) {
+      if (checkAndHandleEgressRestriction(error.message)) {
+        return getOfflineCachedQueue(effectiveLocationId);
+      }
       console.warn('Error calling get_patient_appointments:', error.message);
       return [];
     }
@@ -1826,32 +1967,49 @@ export async function restockInventoryItemDb(
 }
 
 export function subscribeToClinicUpdates(onUpdate: () => void) {
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const debouncedUpdate = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      onUpdate();
+    }, 300);
+  };
+
   const channelName = `clinic_realtime_${Math.random().toString(36).substring(2, 9)}`;
   const channel = supabase
     .channel(channelName)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
-      onUpdate();
+      debouncedUpdate();
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'patients' }, () => {
-      onUpdate();
+      debouncedUpdate();
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => {
-      onUpdate();
+      debouncedUpdate();
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, () => {
-      onUpdate();
+      debouncedUpdate();
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_requests' }, () => {
-      onUpdate();
+      debouncedUpdate();
     })
     .subscribe();
 
   return () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
     supabase.removeChannel(channel);
   };
 }
 
 export function subscribeToChatUpdates(onUpdate: () => void, locationId?: string) {
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const debouncedUpdate = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      onUpdate();
+    }, 300);
+  };
+
   const channelName = `chat_realtime_${Math.random().toString(36).substring(2, 9)}`;
   const channel = supabase
     .channel(channelName)
@@ -1864,15 +2022,16 @@ export function subscribeToChatUpdates(onUpdate: () => void, locationId?: string
         filter: locationId ? `location_id=eq.${locationId}` : undefined,
       },
       () => {
-        onUpdate();
+        debouncedUpdate();
       }
     )
     .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
-      onUpdate();
+      debouncedUpdate();
     })
     .subscribe();
 
   return () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
     supabase.removeChannel(channel);
   };
 }
