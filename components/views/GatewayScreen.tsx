@@ -2,18 +2,16 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Volume2,
-  VolumeX,
-  ChevronDown,
   Check,
-  ArrowRight,
+  ChevronDown,
   ArrowLeft,
-  Building2,
-  MapPin,
+  ArrowRight,
   Lock,
   Loader2,
+  Volume2,
+  VolumeX,
+  HeartPulse,
 } from 'lucide-react';
-import { MacbookPro } from '@/components/ui/macbook-pro';
 import { supabase } from '@/lib/supabaseClient';
 import { fetchClinicLocations } from '@/lib/supabaseService';
 import { DbClinicLocation } from '@/types/database';
@@ -43,31 +41,64 @@ export interface GatewayScreenProps {
 
 type GatewayStep = 'clinic' | 'branch' | 'pin';
 
-export function GatewayScreen({ onSubmitPin }: GatewayScreenProps) {
-  const [isMuted, setIsMuted] = useState(true);
-  const videoRef = useRef<HTMLVideoElement>(null);
+const TESTIMONIALS = [
+  {
+    quote:
+      '“We cut patient lobby wait times in half within days—every doctor chamber and WhatsApp booking stays effortlessly in sync across our clinics.”',
+    name: 'Dr. Sofia Hernández',
+    role: 'Medical Director, Portland, OR',
+  },
+  {
+    quote:
+      '“Switching between branches and tracking real-time prescriptions takes seconds. Our front desk and physicians never miss a patient update.”',
+    name: 'Dr. Arjun Menon',
+    role: 'Chief Consultant, Kochi, KL',
+  },
+];
 
-  // Step state: clinic -> (optional) branch -> pin
+const TILE_POSITIONS: Array<[number, number]> = [
+  [2, 0],
+  [3, 1],
+  [0, 2],
+  [2, 2],
+  [1, 3],
+  [3, 3],
+];
+
+export function GatewayScreen({
+  onSubmitPin,
+}: GatewayScreenProps) {
   const [step, setStep] = useState<GatewayStep>('clinic');
+  const [testimonialIdx, setTestimonialIdx] = useState(0);
+  const [isMuted, setIsMuted] = useState(true);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Clinics from Supabase
   const [clinics, setClinics] = useState<ClinicOption[]>([]);
   const [isLoadingClinics, setIsLoadingClinics] = useState(true);
   const [selectedClinic, setSelectedClinic] = useState<ClinicOption | null>(null);
-  const [isClinicDropdownOpen, setIsClinicDropdownOpen] = useState(false);
-  const clinicDropdownRef = useRef<HTMLDivElement>(null);
+  const [isClinicOpen, setIsClinicOpen] = useState(false);
 
-  // Branches for selected clinic
   const [branches, setBranches] = useState<DbClinicLocation[]>([]);
   const [isLoadingBranches, setIsLoadingBranches] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<DbClinicLocation | null>(null);
-  const [isBranchDropdownOpen, setIsBranchDropdownOpen] = useState(false);
-  const branchDropdownRef = useRef<HTMLDivElement>(null);
+  const [isBranchOpen, setIsBranchOpen] = useState(false);
 
-  // PIN verification state
+  const clinicDropRef = useRef<HTMLDivElement | null>(null);
+  const branchDropRef = useRef<HTMLDivElement | null>(null);
+
   const [pin, setPin] = useState('');
   const [isVerifyingPin, setIsVerifyingPin] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  const quoteRef = useRef<HTMLParagraphElement | null>(null);
+  const quoteFootRef = useRef<HTMLDivElement | null>(null);
+  const brandRef = useRef<HTMLDivElement | null>(null);
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const sublineRef = useRef<HTMLParagraphElement | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const actionBtnRef = useRef<HTMLButtonElement | null>(null);
+  const footerLineRef = useRef<HTMLParagraphElement | null>(null);
+  const entrancePlayedRef = useRef(false);
 
   // Load clinics from Supabase on mount
   useEffect(() => {
@@ -82,13 +113,14 @@ export function GatewayScreen({ onSubmitPin }: GatewayScreenProps) {
 
         let list: ClinicOption[] = [];
         if (!error && clinicRows && clinicRows.length > 0) {
-          list = clinicRows.map((c: { id: string; name: string; slug?: string | null }) => ({
-            id: c.id,
-            name: c.name,
-            slug: c.slug,
-          }));
+          list = clinicRows.map(
+            (c: { id: string; name: string; slug?: string | null }) => ({
+              id: c.id,
+              name: c.name,
+              slug: c.slug,
+            })
+          );
         } else {
-          // Fallback: derive unique clinics from active clinic_locations
           const locs = await fetchClinicLocations();
           const map = new Map<string, ClinicOption>();
           locs.forEach((l) => {
@@ -104,6 +136,9 @@ export function GatewayScreen({ onSubmitPin }: GatewayScreenProps) {
 
         if (active) {
           setClinics(list);
+          if (list.length > 0) {
+            setSelectedClinic(list[0]);
+          }
         }
       } catch {
         if (active) setClinics([]);
@@ -119,30 +154,109 @@ export function GatewayScreen({ onSubmitPin }: GatewayScreenProps) {
 
   // Close dropdowns on outside click
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        clinicDropdownRef.current &&
-        !clinicDropdownRef.current.contains(e.target as Node)
-      ) {
-        setIsClinicDropdownOpen(false);
+    const onOutside = (e: MouseEvent) => {
+      if (clinicDropRef.current && !clinicDropRef.current.contains(e.target as Node)) {
+        setIsClinicOpen(false);
       }
-      if (
-        branchDropdownRef.current &&
-        !branchDropdownRef.current.contains(e.target as Node)
-      ) {
-        setIsBranchDropdownOpen(false);
+      if (branchDropRef.current && !branchDropRef.current.contains(e.target as Node)) {
+        setIsBranchOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
   }, []);
 
-  const toggleMute = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!videoRef.current) return;
-    videoRef.current.muted = !videoRef.current.muted;
-    setIsMuted(videoRef.current.muted);
-  };
+  // Coordinated ~2s WAAPI entrance timeline when fonts are ready
+  useEffect(() => {
+    if (entrancePlayedRef.current) return;
+    entrancePlayedRef.current = true;
+
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced || typeof Element.prototype.animate !== 'function') return;
+
+    const runEntrance = () => {
+      const ease = 'cubic-bezier(0.16, 1, 0.3, 1)';
+      const animateEl = (
+        el: Element | null,
+        from: Keyframe,
+        to: Keyframe,
+        delay: number,
+        duration: number
+      ) => {
+        if (!el) return;
+        el.animate([from, to], { delay, duration, easing: ease, fill: 'both' });
+      };
+
+      animateEl(
+        quoteRef.current,
+        { opacity: 0, clipPath: 'inset(100% 0 0 0)', transform: 'translateY(14px)' },
+        { opacity: 1, clipPath: 'inset(0 0 0 0)', transform: 'none' },
+        80,
+        780
+      );
+      animateEl(
+        quoteFootRef.current,
+        { opacity: 0, transform: 'translateY(10px)' },
+        { opacity: 1, transform: 'none' },
+        320,
+        620
+      );
+      animateEl(
+        brandRef.current,
+        { opacity: 0, transform: 'translateY(10px)' },
+        { opacity: 1, transform: 'none' },
+        240,
+        560
+      );
+      animateEl(
+        headingRef.current,
+        { opacity: 0, clipPath: 'inset(100% 0 0 0)', transform: 'translateY(12px)' },
+        { opacity: 1, clipPath: 'inset(0 0 0 0)', transform: 'none' },
+        420,
+        680
+      );
+      animateEl(
+        sublineRef.current,
+        { opacity: 0, transform: 'translateY(8px)' },
+        { opacity: 1, transform: 'none' },
+        560,
+        540
+      );
+
+      const cards = gridRef.current?.querySelectorAll('[data-gw-card]');
+      cards?.forEach((card, idx) => {
+        const row = Math.floor(idx / 2);
+        const col = idx % 2;
+        animateEl(
+          card,
+          { opacity: 0, transform: 'translateY(12px)' },
+          { opacity: 1, transform: 'none' },
+          680 + row * 155 + col * 55,
+          540
+        );
+      });
+
+      animateEl(
+        actionBtnRef.current,
+        { opacity: 0, transform: 'translateY(10px)' },
+        { opacity: 1, transform: 'none' },
+        1280,
+        540
+      );
+      animateEl(
+        footerLineRef.current,
+        { opacity: 0, transform: 'translateY(8px)' },
+        { opacity: 1, transform: 'none' },
+        1420,
+        500
+      );
+    };
+
+    const fontReady = document.fonts?.ready ?? Promise.resolve();
+    Promise.race([fontReady, new Promise((r) => setTimeout(r, 600))]).then(() => {
+      requestAnimationFrame(() => requestAnimationFrame(runEntrance));
+    });
+  }, []);
 
   const handleClinicNext = async () => {
     if (!selectedClinic) return;
@@ -173,8 +287,8 @@ export function GatewayScreen({ onSubmitPin }: GatewayScreenProps) {
     setStep('pin');
   };
 
-  const handlePinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePinVerify = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!selectedClinic) return;
     const cleanPin = pin.trim();
     if (!cleanPin) {
@@ -202,103 +316,610 @@ export function GatewayScreen({ onSubmitPin }: GatewayScreenProps) {
     }
   };
 
+  const activeTestimonial = TESTIMONIALS[testimonialIdx % TESTIMONIALS.length];
+
   return (
-    <div className="relative w-screen h-screen bg-[#F8F9FB] text-[#0F172A] overflow-hidden select-none font-['Inter',sans-serif]">
-      {/* Background Gradient & Crisp Overlapping Circle Shapes (Project Unified Palette) */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden bg-gradient-to-br from-[#F8F9FB] via-[#EFF6FF] to-[#DBEAFE]">
-        <div className="absolute -top-[42vw] -left-[8vw] w-[75vw] h-[75vw] rounded-full bg-[#38BDF8]/[0.14]" />
-        <div className="absolute -bottom-[16vw] -right-[10vw] w-[42vw] h-[42vw] rounded-full bg-[#2563EB]/[0.09]" />
-        <div className="absolute -bottom-[10vw] -left-[12vw] w-[28vw] h-[28vw] rounded-full bg-[#60A5FA]/[0.12]" />
-      </div>
+    <>
+      <style>{`
+        .gw-shell {
+          --u: clamp(0.7px, min(100vw / 1447, 100vh / 1087), 2.4px);
+          position: fixed;
+          inset: 0;
+          width: 100vw;
+          height: 100vh;
+          background: #F8F9FB;
+          color: #0F172A;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) max(calc(508.7 * var(--u)), 45%);
+          padding: calc(11.5 * var(--u)) 0 calc(15.7 * var(--u)) calc(15.6 * var(--u));
+          overflow: hidden;
+          user-select: none;
+        }
 
-      {/* DOT GRID — top-left decorative */}
-      <div className="absolute top-20 left-6 z-10 grid grid-cols-4 gap-[7px] opacity-30 pointer-events-none">
-        {Array.from({ length: 16 }).map((_, i) => (
-          <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
-        ))}
-      </div>
+        /* LEFT VIDEO CARD */
+        .gw-photo-card {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          border-radius: 0 calc(24 * var(--u)) calc(24 * var(--u)) calc(24 * var(--u));
+          overflow: hidden;
+          background: #F8F9FB;
+        }
+        .gw-media {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          object-position: center center;
+          transform: scale(1.03);
+          display: block;
+        }
+        .gw-mute-btn {
+          position: absolute;
+          top: calc(18 * var(--u));
+          right: calc(18 * var(--u));
+          z-index: 10;
+          width: calc(40 * var(--u));
+          height: calc(40 * var(--u));
+          border-radius: 999px;
+          background: rgba(15, 23, 42, 0.55);
+          backdrop-filter: blur(8px);
+          border: 1px solid rgba(255, 255, 255, 0.28);
+          color: #FFFFFF;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: background 0.18s ease;
+        }
+        .gw-mute-btn:hover {
+          background: rgba(37, 99, 235, 0.85);
+        }
 
-      {/* ============================================================== */}
-      {/* LEFT: MacBook Pro — completely contained with comfortable margins */}
-      {/* ============================================================== */}
-      <div
-        className="absolute z-20 flex items-center justify-center"
-        style={{
-          left: '1%',
-          top: '11%',
-          bottom: '6%',
-          width: '48%',
-        }}
-      >
-        <MacbookPro
-          style={{
-            width: 'min(43vw, 84vh)',
-            maxWidth: '740px',
-          }}
-        >
-          <div className="relative w-full h-full bg-black">
-            <div className="absolute inset-0 pointer-events-none z-[25] bg-gradient-to-tr from-transparent via-white/[0.03] to-white/[0.10]" />
-            <video
-              ref={videoRef}
-              autoPlay
-              loop
-              muted={isMuted}
-              playsInline
-              src="/gateway-video.mp4"
-              className="w-full h-full object-cover block"
-            />
-            <button
-              type="button"
-              onClick={toggleMute}
-              aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
-              className="absolute bottom-3 right-3 z-30 w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/30 text-white shadow-lg flex items-center justify-center transition cursor-pointer"
+        /* 4x4 TOP-LEFT CUTOUT & FROSTED TILE PATTERN (61u grid) */
+        .gw-tiles {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: calc(244 * var(--u));
+          height: calc(244 * var(--u));
+          pointer-events: none;
+          z-index: 4;
+        }
+        .gw-tile-cutout-svg {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: calc(76 * var(--u));
+          height: calc(76 * var(--u));
+          display: block;
+        }
+        .gw-tile-frost {
+          position: absolute;
+          width: calc(61 * var(--u));
+          height: calc(61 * var(--u));
+          border-radius: calc(15 * var(--u));
+          background: rgba(255, 255, 255, 0.5);
+          backdrop-filter: blur(calc(8 * var(--u)));
+          -webkit-backdrop-filter: blur(calc(8 * var(--u)));
+        }
+
+        /* BOTTOM FROSTED GLASS TESTIMONIAL BAND */
+        .gw-bottom-glass {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          height: calc(240 * var(--u));
+          z-index: 5;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-end;
+          padding: 0 calc(40 * var(--u)) calc(32 * var(--u));
+        }
+        .gw-bottom-glass::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          backdrop-filter: blur(calc(22 * var(--u)));
+          -webkit-backdrop-filter: blur(calc(22 * var(--u)));
+          background: linear-gradient(
+            180deg,
+            rgba(15, 23, 42, 0) 0%,
+            rgba(15, 23, 42, 0.28) 54%,
+            rgba(15, 23, 42, 0.20) 100%
+          );
+          mask-image: linear-gradient(to bottom, transparent 0%, black 38%);
+          -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 38%);
+          pointer-events: none;
+          z-index: 0;
+        }
+        .gw-bottom-glass > * {
+          position: relative;
+          z-index: 1;
+        }
+        .gw-quote {
+          color: #FFFFFF;
+          font-weight: 500;
+          font-size: calc(21 * var(--u));
+          line-height: calc(30 * var(--u));
+          max-width: calc(680 * var(--u));
+          margin: 0 0 calc(18 * var(--u)) 0;
+        }
+        .gw-quote-foot {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: calc(16 * var(--u));
+        }
+        .gw-author-name {
+          color: #FFFFFF;
+          font-weight: 600;
+          font-size: calc(20.5 * var(--u));
+          line-height: 1.25;
+        }
+        .gw-author-role {
+          color: rgba(255, 255, 255, 0.86);
+          font-weight: 500;
+          font-size: calc(16.25 * var(--u));
+          margin-top: calc(3 * var(--u));
+        }
+        .gw-arrows {
+          display: flex;
+          align-items: center;
+          gap: calc(31 * var(--u));
+          flex-shrink: 0;
+        }
+        .gw-arrow-btn {
+          width: calc(59 * var(--u));
+          height: calc(59 * var(--u));
+          border-radius: 999px;
+          border: calc(1.5 * var(--u)) solid rgba(255, 255, 255, 0.9);
+          background: transparent;
+          color: #FFFFFF;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: background 0.18s ease, transform 0.18s ease;
+        }
+        .gw-arrow-btn:hover {
+          background: rgba(255, 255, 255, 0.14);
+        }
+        .gw-arrow-btn:active {
+          transform: scale(0.96);
+        }
+
+        /* RIGHT FORM COLUMN (Medium-Small Balanced Scale) */
+        .gw-form-pane {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0 clamp(24px, 3.5vw, 56px);
+        }
+        .gw-form-col {
+          width: min(100%, 380px);
+          display: flex;
+          flex-direction: column;
+        }
+        .gw-brand {
+          display: inline-flex;
+          align-items: center;
+          gap: 9px;
+          color: #2563EB;
+          font-weight: 700;
+          font-size: 21px;
+          letter-spacing: -0.02em;
+        }
+        .gw-brand-heart {
+          width: calc(24 * var(--u));
+          height: calc(24 * var(--u));
+          min-width: 22px;
+          min-height: 22px;
+          stroke-width: 2.3;
+          color: #2563EB;
+          flex-shrink: 0;
+        }
+        .gw-heading {
+          margin: 26px 0 0 0;
+          color: #0F172A;
+          font-weight: 700;
+          font-size: 24px;
+          line-height: 1.2;
+          letter-spacing: -0.025em;
+        }
+        .gw-subline {
+          margin: 7px 0 0 0;
+          color: #64748B;
+          font-weight: 400;
+          font-size: 14.5px;
+          line-height: 1.45;
+        }
+
+        /* DROPDOWN SELECTOR */
+        .gw-dropdown-wrap {
+          position: relative;
+          margin-top: 22px;
+        }
+        .gw-dropdown-btn {
+          width: 100%;
+          height: 50px;
+          border-radius: 12px;
+          border: 1.5px solid #E2E8F0;
+          background: #FFFFFF;
+          padding: 0 16px;
+          font-size: 14.5px;
+          font-weight: 500;
+          color: #0F172A;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          cursor: pointer;
+          transition: border-color 0.16s ease, background 0.16s ease;
+        }
+        .gw-dropdown-btn:hover:not(:disabled) {
+          border-color: #CBD5E1;
+          background: #F8FAFC;
+        }
+        .gw-dropdown-btn[aria-expanded="true"] {
+          border-color: #2563EB;
+          background: #EFF6FF;
+        }
+        .gw-dropdown-menu {
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 56px;
+          max-height: 220px;
+          overflow-y: auto;
+          border-radius: 12px;
+          border: 1px solid #E2E8F0;
+          background: #FFFFFF;
+          box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+          padding: 6px;
+          z-index: 50;
+        }
+        .gw-dropdown-item {
+          width: 100%;
+          padding: 10px 12px;
+          border-radius: 8px;
+          border: 0;
+          background: transparent;
+          color: #0F172A;
+          font-size: 14px;
+          font-weight: 500;
+          text-align: left;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          cursor: pointer;
+          transition: background 0.14s ease;
+        }
+        .gw-dropdown-item:hover {
+          background: #F1F5F9;
+        }
+        .gw-dropdown-item.gw-dropdown-item-active {
+          background: #EFF6FF;
+          color: #2563EB;
+          font-weight: 600;
+        }
+
+        /* PIN INPUT (STEP 3) */
+        .gw-pin-box {
+          margin-top: 22px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .gw-pin-wrap {
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+        .gw-pin-icon {
+          position: absolute;
+          left: 16px;
+          color: #2563EB;
+          pointer-events: none;
+        }
+        .gw-pin-input {
+          width: 100%;
+          height: 50px;
+          border-radius: 12px;
+          border: 1.5px solid #E2E8F0;
+          background: #FFFFFF;
+          padding: 0 16px 0 42px;
+          font-size: 15px;
+          font-weight: 600;
+          letter-spacing: 0.18em;
+          color: #0F172A;
+          outline: none;
+          transition: border-color 0.16s ease, background 0.16s ease;
+        }
+        .gw-pin-input:focus {
+          border-color: #2563EB;
+          background: #EFF6FF;
+        }
+        .gw-error {
+          font-size: 13px;
+          font-weight: 500;
+          color: #B91C1C;
+          background: #FEF2F2;
+          border: 1px solid #FECACA;
+          border-radius: 10px;
+          padding: 9px 12px;
+        }
+
+        /* PRIMARY DASHBOARD BLUE PILL BUTTON */
+        .gw-btn-primary {
+          margin-top: 20px;
+          width: 100%;
+          height: 48px;
+          border-radius: 999px;
+          border: 0;
+          background: #2563EB;
+          color: #FFFFFF;
+          font-weight: 600;
+          font-size: 14.5px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          cursor: pointer;
+          transition: background 0.16s ease, transform 0.14s ease;
+        }
+        .gw-btn-primary:hover:not(:disabled) {
+          background: #1D4ED8;
+        }
+        .gw-btn-primary:active:not(:disabled) {
+          transform: scale(0.99);
+        }
+        .gw-btn-primary:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        .gw-btn-secondary {
+          margin-top: 10px;
+          width: 100%;
+          height: 48px;
+          border-radius: 999px;
+          border: 1.5px solid #CBD5E1;
+          background: #FFFFFF;
+          color: #0F172A;
+          font-weight: 600;
+          font-size: 14.5px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          cursor: pointer;
+          transition: background 0.16s ease, border-color 0.16s ease, transform 0.14s ease;
+        }
+        .gw-btn-secondary:hover {
+          background: #F8FAFC;
+          border-color: #94A3B8;
+        }
+        .gw-btn-secondary:active {
+          transform: scale(0.99);
+        }
+
+        /* TABLET PORTRAIT */
+        @media (max-width: 1024px) and (orientation: portrait) {
+          .gw-shell {
+            grid-template-columns: 1fr;
+            grid-template-rows: 40vh 1fr;
+            padding: 12px;
+            gap: 16px;
+          }
+          .gw-photo-card {
+            border-radius: 18px;
+          }
+          .gw-tiles { display: none; }
+          .gw-bottom-glass { height: 180px; padding: 16px 24px; }
+          .gw-quote { font-size: 18px; line-height: 1.35; margin-bottom: 10px; }
+          .gw-form-col { width: min(640px, 100%); }
+          .gw-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+          .gw-card { height: 108px; padding: 12px; }
+          .gw-heading { margin-top: 20px; font-size: 24px; }
+          .gw-btn-primary { margin-top: 20px; height: 48px; }
+        }
+
+        /* PHONE (<700px) — fits one screen cleanly */
+        @media (max-width: 699px) {
+          .gw-shell {
+            grid-template-columns: 1fr;
+            grid-template-rows: 26vh 1fr;
+            padding: 10px;
+            gap: 12px;
+          }
+          .gw-photo-card { border-radius: 16px; }
+          .gw-tiles { display: none; }
+          .gw-bottom-glass { height: 150px; padding: 12px 16px; }
+          .gw-quote {
+            font-size: 13px;
+            line-height: 1.35;
+            margin-bottom: 8px;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+          }
+          .gw-author-name { font-size: 12px; }
+          .gw-author-role { font-size: 10.5px; }
+          .gw-arrows { gap: 8px; }
+          .gw-arrow-btn { width: 32px; height: 32px; border-width: 1px; }
+          .gw-form-pane { padding: 0 8px; align-items: flex-start; }
+          .gw-form-col { width: 100%; }
+          .gw-brand { font-size: 18px; }
+          .gw-heading { margin-top: 12px; font-size: 20px; }
+          .gw-subline { font-size: 13px; margin-top: 4px; }
+          .gw-grid {
+            margin-top: 14px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+          }
+          .gw-card {
+            height: 64px;
+            padding: 10px 12px;
+            flex-direction: row;
+            align-items: center;
+            gap: 10px;
+          }
+          .gw-card-top { width: auto; }
+          .gw-checkbox { display: none; }
+          .gw-icon-tile { width: 32px; height: 32px; border-radius: 8px; }
+          .gw-card-name { font-size: 13px; }
+          .gw-card-domain { display: none; }
+          .gw-pin-input { height: 48px; font-size: 16px; }
+          .gw-btn-primary { margin-top: 14px; height: 46px; font-size: 14px; }
+          .gw-btn-secondary { margin-top: 10px; height: 46px; font-size: 14px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          * { transition: none !important; animation: none !important; }
+        }
+      `}</style>
+
+      <div className="gw-shell">
+        {/* ============================================================== */}
+        {/* LEFT: USER VIDEO + TILE CUTOUT + TESTIMONIAL CARD              */}
+        {/* ============================================================== */}
+        <section className="gw-photo-card">
+          <video
+            ref={videoRef}
+            className="gw-media"
+            autoPlay
+            muted={isMuted}
+            loop
+            playsInline
+            preload="auto"
+          >
+            <source src="/gateway-video.mp4" type="video/mp4" />
+          </video>
+
+          <button
+            type="button"
+            aria-label={isMuted ? 'Unmute video' : 'Mute video'}
+            className="gw-mute-btn"
+            onClick={() => {
+              const next = !isMuted;
+              if (videoRef.current) videoRef.current.muted = next;
+              setIsMuted(next);
+            }}
+          >
+            {isMuted ? (
+              <VolumeX className="w-4 h-4" />
+            ) : (
+              <Volume2 className="w-4 h-4" />
+            )}
+          </button>
+
+          {/* 4x4 Top-Left Cutout & Frosted Tile Pattern */}
+          <div className="gw-tiles" aria-hidden="true">
+            <svg
+              viewBox="0 0 76 76"
+              fill="none"
+              className="gw-tile-cutout-svg"
             >
-              {isMuted ? (
-                <VolumeX className="w-4 h-4" />
-              ) : (
-                <Volume2 className="w-4 h-4" />
-              )}
-            </button>
+              <path
+                d="M0 0H76A15 15 0 0 0 61 15V46A15 15 0 0 1 46 61H15A15 15 0 0 0 0 76Z"
+                fill="#F8F9FB"
+              />
+            </svg>
+            {TILE_POSITIONS.map(([col, row], i) => (
+              <div
+                key={i}
+                className="gw-tile-frost"
+                style={{
+                  left: `calc(${col * 61} * var(--u))`,
+                  top: `calc(${row * 61} * var(--u))`,
+                }}
+              />
+            ))}
           </div>
-        </MacbookPro>
-      </div>
 
-      {/* ============================================================== */}
-      {/* RIGHT: Multi-step Clinic -> (Branch) -> PIN Gateway Flow       */}
-      {/* ============================================================== */}
-      <div
-        className="absolute flex flex-col justify-center px-8 lg:px-14 z-30"
-        style={{
-          right: '1%',
-          top: '11%',
-          bottom: '6%',
-          width: '48%',
-        }}
-      >
-        {/* STEP 1: CHOOSE CLINIC */}
-        {step === 'clinic' && (
-          <div className="max-w-lg w-full">
-            <h1 className="font-['Montserrat',sans-serif] font-black text-4xl sm:text-5xl xl:text-[3.5rem] leading-[0.98] tracking-tight uppercase text-[#0F172A] mb-5">
-              <span className="block whitespace-nowrap">CHOOSE YOUR</span>
-              <span className="block whitespace-nowrap text-[#2563EB]">CLINIC</span>
+          {/* Bottom Forest-Tinted Frosted Glass Testimonial Band */}
+          <div className="gw-bottom-glass">
+            <p ref={quoteRef} className="gw-quote">
+              {activeTestimonial.quote}
+            </p>
+            <div ref={quoteFootRef} className="gw-quote-foot">
+              <div className="gw-arrows">
+                <button
+                  type="button"
+                  aria-label="Previous testimonial"
+                  className="gw-arrow-btn"
+                  onClick={() =>
+                    setTestimonialIdx((i) =>
+                      (i - 1 + TESTIMONIALS.length) % TESTIMONIALS.length
+                    )
+                  }
+                >
+                  <ArrowLeft className="w-[40%] h-[40%]" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next testimonial"
+                  className="gw-arrow-btn"
+                  onClick={() =>
+                    setTestimonialIdx((i) => (i + 1) % TESTIMONIALS.length)
+                  }
+                >
+                  <ArrowRight className="w-[40%] h-[40%]" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ============================================================== */}
+        {/* RIGHT: HEALTHSYNC CLINIC -> (BRANCH) -> PIN FLOW               */}
+        {/* ============================================================== */}
+        <section className="gw-form-pane">
+          <div className="gw-form-col">
+            {/* HealthSync Blue Wordmark with Heart Icon */}
+            <div ref={brandRef} className="gw-brand">
+              <HeartPulse
+                className="gw-brand-heart"
+                aria-hidden="true"
+              />
+              <span>HealthSync</span>
+            </div>
+
+            {/* Heading & Subline */}
+            <h1 ref={headingRef} className="gw-heading">
+              {step === 'clinic'
+                ? 'Which clinic are you entering?'
+                : step === 'branch'
+                  ? 'Select your branch'
+                  : 'Enter security PIN'}
             </h1>
-
-            <p className="text-sm sm:text-base text-slate-600 font-medium mb-7 leading-relaxed">
-              Selecting your clinic routes live patient queues, doctor chambers,
-              and appointment slots to the right medical facility before
-              entering your security PIN.
+            <p ref={sublineRef} className="gw-subline">
+              {step === 'clinic'
+                ? 'We’ll connect you with your live queues & chambers.'
+                : step === 'branch'
+                  ? `Choose a branch under ${selectedClinic?.name || 'your clinic'}.`
+                  : `Verify access for ${
+                      selectedBranch
+                        ? `${selectedClinic?.name} · ${selectedBranch.branch_name}`
+                        : selectedClinic?.name
+                    }.`}
             </p>
 
-            {/* Glass-effect Clinic Dropdown */}
-            <div ref={clinicDropdownRef} className="relative mb-5">
-              <button
-                type="button"
-                onClick={() => setIsClinicDropdownOpen((prev) => !prev)}
-                disabled={isLoadingClinics}
-                className="w-full px-5 py-4 rounded-2xl bg-white/80 hover:bg-white backdrop-blur-xl border border-blue-200/80 text-[#0F172A] font-semibold text-sm shadow-lg shadow-blue-500/5 flex items-center justify-between gap-3 transition cursor-pointer"
-              >
-                <span className="flex items-center gap-3 truncate">
-                  <Building2 className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
+            {/* STEP 1: CLINIC DROPDOWN */}
+            {step === 'clinic' && (
+              <div ref={clinicDropRef} className="gw-dropdown-wrap">
+                <button
+                  type="button"
+                  aria-expanded={isClinicOpen}
+                  disabled={isLoadingClinics}
+                  onClick={() => setIsClinicOpen((p) => !p)}
+                  className="gw-dropdown-btn"
+                >
                   <span className="truncate">
                     {isLoadingClinics
                       ? 'Loading clinics...'
@@ -306,255 +927,182 @@ export function GatewayScreen({ onSubmitPin }: GatewayScreenProps) {
                         ? selectedClinic.name
                         : 'Select a clinic'}
                   </span>
-                </span>
-                <ChevronDown
-                  className={`w-4 h-4 text-slate-500 flex-shrink-0 transition-transform duration-200 ${
-                    isClinicDropdownOpen ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
+                  <ChevronDown
+                    className={`w-4 h-4 text-[#64748B] flex-shrink-0 transition-transform ${
+                      isClinicOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
 
-              {isClinicDropdownOpen && (
-                <div className="absolute left-0 right-0 mt-2 max-h-60 overflow-y-auto rounded-2xl bg-white/95 backdrop-blur-xl border border-blue-100 shadow-2xl shadow-blue-900/10 z-50 p-1.5">
-                  {clinics.length === 0 ? (
-                    <div className="px-4 py-3 text-xs text-slate-500">
-                      No active clinics found.
-                    </div>
-                  ) : (
-                    clinics.map((clinic) => {
-                      const isSelected = selectedClinic?.id === clinic.id;
+                {isClinicOpen && (
+                  <div className="gw-dropdown-menu">
+                    {clinics.length === 0 ? (
+                      <div className="px-3 py-2.5 text-xs text-[#64748B]">
+                        No active clinics found.
+                      </div>
+                    ) : (
+                      clinics.map((clinic) => {
+                        const isSelected = selectedClinic?.id === clinic.id;
+                        return (
+                          <button
+                            key={clinic.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedClinic(clinic);
+                              setIsClinicOpen(false);
+                              setErrorMsg('');
+                            }}
+                            className={`gw-dropdown-item ${
+                              isSelected ? 'gw-dropdown-item-active' : ''
+                            }`}
+                          >
+                            <span className="truncate">{clinic.name}</span>
+                            {isSelected && <Check className="w-4 h-4 flex-shrink-0" />}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* STEP 2: BRANCH DROPDOWN (IF CLINIC HAS BRANCHES) */}
+            {step === 'branch' && (
+              <div ref={branchDropRef} className="gw-dropdown-wrap">
+                <button
+                  type="button"
+                  aria-expanded={isBranchOpen}
+                  onClick={() => setIsBranchOpen((p) => !p)}
+                  className="gw-dropdown-btn"
+                >
+                  <span className="truncate">
+                    {selectedBranch ? selectedBranch.branch_name : 'Select a branch'}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-[#64748B] flex-shrink-0 transition-transform ${
+                      isBranchOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {isBranchOpen && (
+                  <div className="gw-dropdown-menu">
+                    {branches.map((branch) => {
+                      const isSelected = selectedBranch?.id === branch.id;
                       return (
                         <button
-                          key={clinic.id}
+                          key={branch.id}
                           type="button"
                           onClick={() => {
-                            setSelectedClinic(clinic);
-                            setIsClinicDropdownOpen(false);
+                            setSelectedBranch(branch);
+                            setIsBranchOpen(false);
                             setErrorMsg('');
                           }}
-                          className={`w-full px-4 py-3 rounded-xl text-left text-sm font-medium flex items-center justify-between transition cursor-pointer ${
-                            isSelected
-                              ? 'bg-blue-50 text-[#2563EB] font-bold'
-                              : 'text-slate-700 hover:bg-slate-50'
+                          className={`gw-dropdown-item ${
+                            isSelected ? 'gw-dropdown-item-active' : ''
                           }`}
                         >
-                          <span className="truncate">{clinic.name}</span>
-                          {isSelected && (
-                            <Check className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
-                          )}
+                          <span className="truncate">
+                            {branch.branch_name}
+                            {branch.branch_code ? ` (${branch.branch_code})` : ''}
+                          </span>
+                          {isSelected && <Check className="w-4 h-4 flex-shrink-0" />}
                         </button>
                       );
-                    })
-                  )}
-                </div>
-              )}
-            </div>
-
-            {errorMsg && (
-              <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2 mb-4">
-                {errorMsg}
-              </p>
-            )}
-
-            <button
-              type="button"
-              onClick={handleClinicNext}
-              disabled={!selectedClinic || isLoadingBranches}
-              className="px-8 py-4 rounded-xl bg-[#2563EB] hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-sm uppercase tracking-wider shadow-xl shadow-blue-600/25 hover:-translate-y-0.5 transition cursor-pointer inline-flex items-center gap-2.5 group"
-            >
-              {isLoadingBranches ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Checking Branches...</span>
-                </>
-              ) : (
-                <>
-                  <span>Next</span>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </>
-              )}
-            </button>
-          </div>
-        )}
-
-        {/* STEP 2: CHOOSE BRANCH (only if clinic has branches) */}
-        {step === 'branch' && selectedClinic && (
-          <div className="max-w-lg w-full">
-            <h1 className="font-['Montserrat',sans-serif] font-black text-4xl sm:text-5xl xl:text-[3.5rem] leading-[0.98] tracking-tight uppercase text-[#0F172A] mb-5">
-              <span className="block whitespace-nowrap">SELECT</span>
-              <span className="block whitespace-nowrap text-[#2563EB]">BRANCH</span>
-            </h1>
-
-            <p className="text-sm sm:text-base text-slate-600 font-medium mb-7 leading-relaxed">
-              <span className="font-bold text-[#0F172A]">{selectedClinic.name}</span>{' '}
-              operates multiple branches. Choose your branch location so the
-              queue desk and doctor chambers sync accurately.
-            </p>
-
-            {/* Glass-effect Branch Dropdown */}
-            <div ref={branchDropdownRef} className="relative mb-6">
-              <button
-                type="button"
-                onClick={() => setIsBranchDropdownOpen((prev) => !prev)}
-                className="w-full px-5 py-4 rounded-2xl bg-white/80 hover:bg-white backdrop-blur-xl border border-blue-200/80 text-[#0F172A] font-semibold text-sm shadow-lg shadow-blue-500/5 flex items-center justify-between gap-3 transition cursor-pointer"
-              >
-                <span className="flex items-center gap-3 truncate">
-                  <MapPin className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
-                  <span className="truncate">
-                    {selectedBranch
-                      ? selectedBranch.branch_name
-                      : 'Select a branch'}
-                  </span>
-                </span>
-                <ChevronDown
-                  className={`w-4 h-4 text-slate-500 flex-shrink-0 transition-transform duration-200 ${
-                    isBranchDropdownOpen ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
-
-              {isBranchDropdownOpen && (
-                <div className="absolute left-0 right-0 mt-2 max-h-60 overflow-y-auto rounded-2xl bg-white/95 backdrop-blur-xl border border-blue-100 shadow-2xl shadow-blue-900/10 z-50 p-1.5">
-                  {branches.map((branch) => {
-                    const isSelected = selectedBranch?.id === branch.id;
-                    return (
-                      <button
-                        key={branch.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedBranch(branch);
-                          setIsBranchDropdownOpen(false);
-                          setErrorMsg('');
-                        }}
-                        className={`w-full px-4 py-3 rounded-xl text-left text-sm font-medium flex items-center justify-between transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-blue-50 text-[#2563EB] font-bold'
-                            : 'text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span className="truncate">
-                          {branch.branch_name}
-                          {branch.branch_code ? ` (${branch.branch_code})` : ''}
-                        </span>
-                        {isSelected && (
-                          <Check className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setErrorMsg('');
-                  setStep('clinic');
-                }}
-                className="px-5 py-4 rounded-xl bg-white/80 hover:bg-white backdrop-blur-md border border-slate-200 text-slate-700 font-bold text-sm transition cursor-pointer inline-flex items-center gap-2 shadow-sm"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Back</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleBranchNext}
-                disabled={!selectedBranch}
-                className="px-8 py-4 rounded-xl bg-[#2563EB] hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-sm uppercase tracking-wider shadow-xl shadow-blue-600/25 hover:-translate-y-0.5 transition cursor-pointer inline-flex items-center gap-2.5 group"
-              >
-                <span>Next</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 3: ENTER CLINIC / DOCTOR PIN */}
-        {step === 'pin' && selectedClinic && (
-          <form onSubmit={handlePinSubmit} className="max-w-lg w-full">
-            <h1 className="font-['Montserrat',sans-serif] font-black text-4xl sm:text-5xl xl:text-[3.5rem] leading-[0.98] tracking-tight uppercase text-[#0F172A] mb-5">
-              <span className="block whitespace-nowrap">ENTER</span>
-              <span className="block whitespace-nowrap text-[#2563EB]">CLINIC PIN</span>
-            </h1>
-
-            <p className="text-sm sm:text-base text-slate-600 font-medium mb-7 leading-relaxed">
-              Verify access for{' '}
-              <span className="font-bold text-[#0F172A]">
-                {selectedBranch
-                  ? `${selectedClinic.name} • ${selectedBranch.branch_name}`
-                  : selectedClinic.name}
-              </span>{' '}
-              using your branch gateway PIN or doctor chamber PIN.
-            </p>
-
-            {/* Glass-effect PIN Input */}
-            <div className="relative mb-5">
-              <Lock className="w-4 h-4 text-[#2563EB] absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="password"
-                value={pin}
-                onChange={(e) => {
-                  setPin(e.target.value);
-                  if (errorMsg) setErrorMsg('');
-                }}
-                placeholder="Enter security PIN"
-                autoFocus
-                className="w-full pl-11 pr-5 py-4 rounded-2xl bg-white/80 focus:bg-white backdrop-blur-xl border border-blue-200/80 focus:border-[#2563EB] text-[#0F172A] placeholder:text-slate-400 font-semibold text-sm tracking-widest outline-none shadow-lg shadow-blue-500/5 transition"
-              />
-            </div>
-
-            {errorMsg && (
-              <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2 mb-4">
-                {errorMsg}
-              </p>
-            )}
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setErrorMsg('');
-                  setPin('');
-                  setStep(branches.length > 0 ? 'branch' : 'clinic');
-                }}
-                className="px-5 py-4 rounded-xl bg-white/80 hover:bg-white backdrop-blur-md border border-slate-200 text-slate-700 font-bold text-sm transition cursor-pointer inline-flex items-center gap-2 shadow-sm"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Back</span>
-              </button>
-
-              <button
-                type="submit"
-                disabled={isVerifyingPin || !pin.trim()}
-                className="px-8 py-4 rounded-xl bg-[#2563EB] hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-sm uppercase tracking-wider shadow-xl shadow-blue-600/25 hover:-translate-y-0.5 transition cursor-pointer inline-flex items-center gap-2.5 group"
-              >
-                {isVerifyingPin ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Verifying...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Unlock Clinic</span>
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  </>
+                    })}
+                  </div>
                 )}
-              </button>
-            </div>
-          </form>
-        )}
+              </div>
+            )}
 
-        {/* DOT GRID — bottom-right decorative */}
-        <div className="absolute bottom-10 right-6 grid grid-cols-4 gap-[7px] opacity-25 pointer-events-none">
-          {Array.from({ length: 16 }).map((_, i) => (
-            <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
-          ))}
-        </div>
+            {/* STEP 3: SECURITY PIN ENTRY */}
+            {step === 'pin' && (
+              <form onSubmit={handlePinVerify} className="gw-pin-box">
+                <div className="gw-pin-wrap">
+                  <Lock className="gw-pin-icon w-4 h-4" />
+                  <input
+                    type="password"
+                    value={pin}
+                    onChange={(e) => {
+                      setPin(e.target.value);
+                      if (errorMsg) setErrorMsg('');
+                    }}
+                    placeholder="Enter clinic or doctor PIN"
+                    autoFocus
+                    className="gw-pin-input"
+                  />
+                </div>
+                {errorMsg && <div className="gw-error">{errorMsg}</div>}
+              </form>
+            )}
+
+            {step !== 'pin' && errorMsg && (
+              <div className="gw-error mt-3">{errorMsg}</div>
+            )}
+
+            {/* Primary Forest Pill Action Button */}
+            <button
+              ref={actionBtnRef}
+              type="button"
+              className="gw-btn-primary"
+              disabled={
+                (step === 'clinic' && (!selectedClinic || isLoadingBranches)) ||
+                (step === 'branch' && !selectedBranch) ||
+                (step === 'pin' && (isVerifyingPin || !pin.trim()))
+              }
+              onClick={() => {
+                if (step === 'clinic') handleClinicNext();
+                else if (step === 'branch') handleBranchNext();
+                else handlePinVerify();
+              }}
+            >
+              {(isLoadingBranches || isVerifyingPin) && (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              )}
+              <span>
+                {step === 'clinic'
+                  ? isLoadingBranches
+                    ? 'Checking branches...'
+                    : 'Continue'
+                  : step === 'branch'
+                    ? 'Continue'
+                    : isVerifyingPin
+                      ? 'Verifying PIN...'
+                      : 'Unlock Clinic'}
+              </span>
+            </button>
+
+            {/* Same-length Back Pill Button on Branch & PIN steps */}
+            {step !== 'clinic' && (
+              <button
+                ref={footerLineRef as unknown as React.RefObject<HTMLButtonElement>}
+                type="button"
+                className="gw-btn-secondary"
+                onClick={() => {
+                  setErrorMsg('');
+                  if (step === 'branch') {
+                    setStep('clinic');
+                  } else {
+                    setPin('');
+                    setStep(branches.length > 0 ? 'branch' : 'clinic');
+                  }
+                }}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>
+                  {step === 'branch'
+                    ? 'Back to Clinics'
+                    : branches.length > 0
+                      ? 'Back to Branches'
+                      : 'Back to Clinics'}
+                </span>
+              </button>
+            )}
+          </div>
+        </section>
       </div>
-    </div>
+    </>
   );
 }
 

@@ -112,7 +112,6 @@ export function MedicineCsvImportModal({
   const handleLoadedFileContent = (text: string) => {
     rawFileTextRef.current = text;
 
-    // Fast quote-aware true row count
     const clean = normalizeRawCsvText(text);
     const lineCount = countTrueCsvRows(clean);
     setTotalDetectedRows(lineCount);

@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { Patient } from '@/types';
 import { formatPatientToken } from '@/lib/utils';
-import { fetchPatientAppointmentsFromDb } from '@/lib/supabaseService';
+import { fetchPatientAppointmentsFromDb, fetchBranchVisitLogDb } from '@/lib/supabaseService';
 import { supabase } from '@/lib/supabaseClient';
 import { NumberedPagination } from '@/components/ui/pagination';
 import { EcgActionLoader } from '@/components/loading/EcgActionLoader';
@@ -75,12 +75,16 @@ interface TablesViewProps {
   initialQueue?: Patient[];
   onOpenConsultation?: (patientId: string) => void;
   onPrintRecord?: (patient: Patient) => void;
+  locationId?: string;
+  clinicId?: string;
 }
 
 export function TablesView({
   initialQueue = [],
   onOpenConsultation,
   onPrintRecord,
+  locationId,
+  clinicId,
 }: TablesViewProps) {
   const todayIST = useMemo(() => getTodayIST(), []);
   const [selectedDate, setSelectedDate] = useState<string>(todayIST);
@@ -105,11 +109,24 @@ export function TablesView({
       if (!silent) setIsLoading(true);
       else setIsRefreshing(true);
       try {
-        const fetched = await fetchPatientAppointmentsFromDb({
+        const visitLogRes = await fetchBranchVisitLogDb({
           date: selectedDate,
           status: 'All',
+          locationId,
+          clinicId,
+          limit: 250,
         });
-        setDbPatients(fetched);
+        if (visitLogRes.success) {
+          setDbPatients(visitLogRes.visits);
+        } else {
+          const fetched = await fetchPatientAppointmentsFromDb({
+            date: selectedDate,
+            status: 'All',
+            locationId,
+            clinicId,
+          });
+          setDbPatients(fetched);
+        }
       } catch (err) {
         console.warn('TablesView fetch error:', err);
       } finally {
@@ -117,17 +134,13 @@ export function TablesView({
         else setIsRefreshing(false);
       }
     },
-    [selectedDate]
+    [selectedDate, locationId, clinicId]
   );
 
   useEffect(() => {
     setCompletedPage(1);
     setCancelledPage(1);
     loadData();
-
-    const interval = setInterval(() => {
-      loadData(true);
-    }, 3000);
 
     const handleSync = () => {
       loadData(true);
@@ -136,26 +149,30 @@ export function TablesView({
     document.addEventListener('visibilitychange', handleSync);
     window.addEventListener('focus', handleSync);
 
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleSync);
-      window.removeEventListener('focus', handleSync);
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedLoad = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        loadData(true);
+      }, 300);
     };
-  }, [loadData]);
 
-  useEffect(() => {
+    // Supabase Realtime WebSocket subscription (instant updates on appointment logs)
     const channel = supabase
       .channel('realtime-tables-view')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'appointments' },
         () => {
-          loadData(true);
+          debouncedLoad();
         }
       )
       .subscribe();
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      document.removeEventListener('visibilitychange', handleSync);
+      window.removeEventListener('focus', handleSync);
       supabase.removeChannel(channel);
     };
   }, [loadData]);

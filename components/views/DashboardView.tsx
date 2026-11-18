@@ -29,7 +29,7 @@ import { RescheduleModal, ReallocateStrategy } from '@/components/reception/Resc
 import { CancelModal } from '@/components/reception/CancelModal';
 import { NumberedPagination } from '@/components/ui/pagination';
 import { formatPatientToken, getTodayIST } from '@/lib/utils';
-import { fetchPatientAppointmentsFromDb } from '@/lib/supabaseService';
+import { fetchPatientAppointmentsFromDb, fetchPavilionDashboardSummaryDb } from '@/lib/supabaseService';
 import { supabase } from '@/lib/supabaseClient';
 
 interface DashboardViewProps {
@@ -60,6 +60,8 @@ interface DashboardViewProps {
   onRequireLogin: () => void;
   onQueueUpdated?: (patients: Patient[]) => void;
   onRefresh?: () => Promise<void> | void;
+  locationId?: string;
+  clinicId?: string;
 }
 
 export function DashboardView({
@@ -81,11 +83,14 @@ export function DashboardView({
   onRequireLogin,
   onQueueUpdated,
   onRefresh,
+  locationId,
+  clinicId,
 }: DashboardViewProps) {
   const [selectedPatientForReschedule, setSelectedPatientForReschedule] = useState<Patient | null>(null);
   const [selectedPatientForCancel, setSelectedPatientForCancel] = useState<Patient | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [dbPatients, setDbPatients] = useState<Patient[] | null>(null);
+  const [pavilionSummary, setPavilionSummary] = useState<any>(null);
   const [activeTooltipIndex, setActiveTooltipIndex] = useState<number>(4);
 
   const itemsPerPage = 6;
@@ -93,29 +98,36 @@ export function DashboardView({
   const loadData = useCallback(
     async (silent: boolean = true) => {
       try {
-        const fetched = await fetchPatientAppointmentsFromDb({
-          date: getTodayIST(),
-          status: 'All',
-        });
+        const [fetched, summary] = await Promise.all([
+          fetchPatientAppointmentsFromDb({
+            date: getTodayIST(),
+            status: 'All',
+            locationId,
+            clinicId,
+          }),
+          fetchPavilionDashboardSummaryDb({
+            clinicId,
+            locationId,
+          }),
+        ]);
         if (Array.isArray(fetched)) {
           setDbPatients(fetched);
           if (onQueueUpdated) {
             onQueueUpdated(fetched);
           }
         }
+        if (summary) {
+          setPavilionSummary(summary);
+        }
       } catch (err) {
         console.warn('Dashboard live queue fetch error:', err);
       }
     },
-    [onQueueUpdated]
+    [onQueueUpdated, locationId, clinicId]
   );
 
   useEffect(() => {
     loadData(true);
-
-    const interval = setInterval(() => {
-      loadData(true);
-    }, 2500);
 
     const handleSync = () => {
       loadData(true);
@@ -124,18 +136,27 @@ export function DashboardView({
     document.addEventListener('visibilitychange', handleSync);
     window.addEventListener('focus', handleSync);
 
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedLoad = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        loadData(true);
+      }, 300);
+    };
+
+    // Supabase Realtime WebSocket subscription (instant updates on appointment/patient changes)
     const channel = supabase
       .channel(`realtime-dashboard-${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
-        loadData(true);
+        debouncedLoad();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'patients' }, () => {
-        loadData(true);
+        debouncedLoad();
       })
       .subscribe();
 
     return () => {
-      clearInterval(interval);
+      if (debounceTimer) clearTimeout(debounceTimer);
       document.removeEventListener('visibilitychange', handleSync);
       window.removeEventListener('focus', handleSync);
       supabase.removeChannel(channel);
@@ -154,11 +175,29 @@ export function DashboardView({
     return (dbPatients !== null ? dbPatients : queue).filter((p) => p.status !== 'Cancelled');
   }, [dbPatients, queue]);
 
-  const effectiveTotalCount = dbPatients !== null ? activePatientsList.length : totalPatientsCount;
-  const effectiveWaitingCount = dbPatients !== null ? activePatientsList.filter((p) => p.status === 'Waiting').length : waitingPatientsCount;
-  const effectiveCompletedCount = dbPatients !== null ? activePatientsList.filter((p) => p.status === 'Completed').length : completedPatientsCount;
-  const effectiveInChamber = dbPatients !== null ? activePatientsList.find((p) => p.status === 'In Progress') : inChamberPatient;
-  const effectiveNextWaiting = dbPatients !== null ? activePatientsList.find((p) => p.status === 'Waiting') : nextWaitingPatient;
+  const effectiveTotalCount =
+    pavilionSummary?.kpi?.today_patients ??
+    (dbPatients !== null ? activePatientsList.length : totalPatientsCount);
+  const effectiveWaitingCount =
+    pavilionSummary?.kpi?.waiting_queue ??
+    (dbPatients !== null
+      ? activePatientsList.filter((p) => p.status === 'Waiting').length
+      : waitingPatientsCount);
+  const effectiveCompletedCount =
+    pavilionSummary?.kpi?.completed_consults ??
+    (dbPatients !== null
+      ? activePatientsList.filter((p) => p.status === 'Completed').length
+      : completedPatientsCount);
+  const effectiveInChamber =
+    dbPatients !== null
+      ? activePatientsList.find((p) => p.status === 'In Progress')
+      : inChamberPatient;
+  const effectiveNextWaiting =
+    dbPatients !== null
+      ? activePatientsList.find((p) => p.status === 'Waiting')
+      : nextWaitingPatient;
+  const effectiveStockUnits =
+    pavilionSummary?.pharmacy_summary?.total_units ?? totalStockUnits;
 
   const onlineAppointmentsCount = useMemo(() => {
     return activePatientsList.filter((p) => {
@@ -388,7 +427,7 @@ export function DashboardView({
             </span>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold text-slate-800 tracking-tight">
-                <AnimatedCounter target={totalStockUnits} />
+                <AnimatedCounter target={effectiveStockUnits} />
               </span>
               <span className="inline-flex items-center text-xs font-semibold text-emerald-500">
                 <ShieldCheck className="w-3 h-3 mr-0.5" />
@@ -463,10 +502,20 @@ export function DashboardView({
                 CHAMBER TELEMETRY
               </span>
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-white/20 border border-white/30 text-white font-bold text-xs sm:text-sm tracking-wide shadow-xs backdrop-blur-xs">
-                {effectiveInChamber ? `Token ${formatPatientToken(effectiveInChamber)}` : effectiveNextWaiting ? `Token ${formatPatientToken(effectiveNextWaiting)}` : 'Token --'}
+                {pavilionSummary?.telemetry?.active_token
+                  ? `Token ${pavilionSummary.telemetry.active_token}`
+                  : effectiveInChamber
+                    ? `Token ${formatPatientToken(effectiveInChamber)}`
+                    : effectiveNextWaiting
+                      ? `Token ${formatPatientToken(effectiveNextWaiting)}`
+                      : 'Token --'}
               </span>
               <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight truncate max-w-[260px] drop-shadow-xs">
-                {effectiveInChamber ? effectiveInChamber.name : effectiveNextWaiting ? effectiveNextWaiting.name : 'Waiting Lounge Clear'}
+                {effectiveInChamber
+                  ? effectiveInChamber.name
+                  : effectiveNextWaiting
+                    ? effectiveNextWaiting.name
+                    : pavilionSummary?.telemetry?.lounge_status || 'Waiting Lounge Clear'}
               </h3>
             </div>
           </div>
@@ -773,13 +822,12 @@ export function DashboardView({
                         <td className="py-3 pl-4 sm:pl-0">
                           <div className="flex items-center gap-2.5">
                             <div
-                              className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${
-                                isInProgress
-                                  ? 'bg-gradient-to-tl from-emerald-600 to-teal-400'
-                                  : isCompleted
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${isInProgress
+                                ? 'bg-gradient-to-tl from-emerald-600 to-teal-400'
+                                : isCompleted
                                   ? 'bg-slate-400'
                                   : 'bg-gradient-to-tl from-blue-700 to-blue-500'
-                              }`}
+                                }`}
                             >
                               {tokenDisplay}
                             </div>
@@ -797,11 +845,10 @@ export function DashboardView({
                         <td className="py-3 px-3">
                           <div className="flex items-center gap-1">
                             <span
-                              className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                                isOnline
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : 'bg-slate-100 text-slate-600'
-                              }`}
+                              className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${isOnline
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : 'bg-slate-100 text-slate-600'
+                                }`}
                             >
                               {isOnline ? 'Online WA' : 'Walk-in'}
                             </span>
@@ -823,22 +870,20 @@ export function DashboardView({
 
                         <td className="py-3 px-3">
                           <span
-                            className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
-                              isInProgress
-                                ? 'text-emerald-600'
-                                : isCompleted
+                            className={`inline-flex items-center gap-1 text-[11px] font-semibold ${isInProgress
+                              ? 'text-emerald-600'
+                              : isCompleted
                                 ? 'text-slate-400'
                                 : 'text-blue-600'
-                            }`}
+                              }`}
                           >
                             <span
-                              className={`w-1.5 h-1.5 rounded-full ${
-                                isInProgress
-                                  ? 'bg-emerald-500 animate-pulse'
-                                  : isCompleted
+                              className={`w-1.5 h-1.5 rounded-full ${isInProgress
+                                ? 'bg-emerald-500 animate-pulse'
+                                : isCompleted
                                   ? 'bg-slate-300'
                                   : 'bg-blue-500'
-                              }`}
+                                }`}
                             />
                             {p.status}
                           </span>
@@ -963,7 +1008,7 @@ export function DashboardView({
         isOpen={!!selectedPatientForCancel}
         patient={selectedPatientForCancel}
         onClose={() => setSelectedPatientForCancel(null)}
-        onConfirmCancel={onCancelAppointment || (async () => {})}
+        onConfirmCancel={onCancelAppointment || (async () => { })}
       />
 
       <RescheduleModal
@@ -971,7 +1016,7 @@ export function DashboardView({
         patient={selectedPatientForReschedule}
         queue={queue}
         onClose={() => setSelectedPatientForReschedule(null)}
-        onReschedulePatient={onReschedulePatient || (async () => {})}
+        onReschedulePatient={onReschedulePatient || (async () => { })}
       />
     </motion.div>
   );

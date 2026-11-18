@@ -27,6 +27,7 @@ import {
   enterpriseCLMSService,
   CasemixAndValuationReport,
 } from '@/lib/enterpriseCLMSService';
+import { fetchFullAnalyticsDashboardDb } from '@/lib/supabaseService';
 
 interface AnalyticsViewProps {
   totalPatientsCount: number;
@@ -34,6 +35,8 @@ interface AnalyticsViewProps {
   cancelledAppointments?: Patient[];
   searchQuery?: string;
   onSearchChange?: (q: string) => void;
+  locationId?: string;
+  clinicId?: string;
 }
 
 type PeriodType = 'today' | 'week' | 'month' | 'year';
@@ -59,17 +62,28 @@ export function AnalyticsView({
   queue,
   cancelledAppointments,
   searchQuery = '',
+  locationId,
+  clinicId,
 }: AnalyticsViewProps) {
   const cleanQuery = searchQuery.trim().toLowerCase();
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('month');
   const [cancelledPage, setCancelledPage] = useState(1);
   const [report, setReport] = useState<CasemixAndValuationReport | null>(null);
+  const [scopedAnalytics, setScopedAnalytics] = useState<any>(null);
 
   useEffect(() => {
     enterpriseCLMSService.getCasemixAndPharmacyValuation().then((data) => {
       if (data) setReport(data);
     }).catch((err) => console.warn('Casemix report load notice:', err));
   }, []);
+
+  useEffect(() => {
+    fetchFullAnalyticsDashboardDb({ clinicId, locationId })
+      .then((data) => {
+        if (data) setScopedAnalytics(data);
+      })
+      .catch((err) => console.warn('Scoped analytics load notice:', err));
+  }, [clinicId, locationId]);
   const cancelledList = useMemo(() => {
     if (cancelledAppointments !== undefined) {
       return cancelledAppointments;

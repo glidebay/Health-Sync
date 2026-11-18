@@ -31,6 +31,8 @@ interface AssistantViewProps {
     reason: string;
   }) => Promise<void> | void;
   onStartConsultation?: (patientId: string) => void;
+  locationId?: string;
+  clinicId?: string;
 }
 
 export function AssistantView({
@@ -42,6 +44,8 @@ export function AssistantView({
   onReschedulePatient,
   onBulkReassignDoctor,
   onStartConsultation,
+  locationId,
+  clinicId,
 }: AssistantViewProps) {
   return (
     <motion.section
@@ -60,6 +64,8 @@ export function AssistantView({
         onReschedulePatient={onReschedulePatient}
         onBulkReassignDoctor={onBulkReassignDoctor}
         onStartConsultation={onStartConsultation}
+        locationId={locationId}
+        clinicId={clinicId}
       />
     </motion.section>
   );

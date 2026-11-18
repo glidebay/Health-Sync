@@ -107,3 +107,12 @@ export interface BranchLocation {
 }
 
 export type { DbClinicLocation, DbDoctorLocation } from './database';
+export type {
+  DashboardScope,
+  PavilionDashboardData,
+  VisitLogItem,
+  BranchVisitLogParams,
+  BranchPharmacyStockParams,
+  PavilionSummaryParams,
+  AnalyticsDashboardParams,
+} from '@/lib/enterpriseCLMSService';

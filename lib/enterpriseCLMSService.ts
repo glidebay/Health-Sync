@@ -1,6 +1,12 @@
 import { supabase } from './supabaseClient';
 import { getTodayIST } from './utils';
 import { DbDoctor } from '@/types/database';
+import {
+  fetchPavilionDashboardSummaryDb,
+  fetchBranchVisitLogDb,
+  fetchFullAnalyticsDashboardDb,
+  fetchBranchPharmacyStocksDb,
+} from './supabaseService';
 
 export interface DoctorSlotItem {
   time_str: string;
@@ -124,6 +130,148 @@ export interface GenericMolecule {
   therapeutic_category: string;
   description?: string;
   is_active: boolean;
+}
+
+export interface DashboardScope {
+  is_admin: boolean;
+  scope_mode: 'admin_overall' | 'admin_branch' | 'doctor_branch' | 'clinic_overall' | 'branch_gateway';
+  clinic_id: string | null;
+  location_id: string | null;
+  doctor_id: string | null;
+}
+
+export interface VisitLogItem {
+  id: string;
+  token_display?: string;
+  queue_token_no?: number;
+  patient_name?: string;
+  patient_phone?: string;
+  patient_age?: number;
+  patient_gender?: string;
+  scheduled_time: string;
+  formatted_time?: string;
+  visit_type?: string;
+  priority?: string;
+  status: string;
+  reschedule_reason?: string;
+  doctor_name?: string;
+  branch_name?: string;
+  location_id?: string;
+}
+
+export interface PavilionDashboardData {
+  success: boolean;
+  doctor_name: string;
+  timestamp: string;
+  scope: DashboardScope;
+  accessible_branches: Array<{
+    id: string;
+    branch_name: string;
+    branch_code?: string;
+    is_primary?: boolean;
+  }>;
+  accessible_doctors: Array<{
+    id: string;
+    full_name: string;
+    specialization?: string;
+    is_admin_doctor?: boolean;
+  }>;
+  kpi: {
+    today_patients: number;
+    today_patients_trend: string;
+    completed_consults: number;
+    cancelled_consults?: number;
+    completion_rate: string;
+    waiting_queue: number;
+    pharmacy_stock: number;
+  };
+  telemetry: {
+    active_token: string | null;
+    lounge_status: string | null;
+    waiting_count: number;
+    doctor_name: string;
+  };
+  clinical_activity: {
+    yearly_patients_formatted: string;
+    whatsapp_rate_pct: number;
+    avg_consult_time: string;
+    pharmacy_stock: number;
+    bars: Array<{ hour: string; count: number; height: number }>;
+  };
+  intake_overview: {
+    growth_label: string;
+    series: Array<{
+      month: string;
+      month_index: number;
+      walk_in: number;
+      whatsapp: number;
+      total: number;
+    }>;
+  };
+  projects_queue: Array<{
+    id: string;
+    token: string;
+    patient_name: string;
+    age: number;
+    gender: 'Female' | 'Male' | 'Other';
+    phone?: string;
+    type: 'Walk-in' | 'Online WA';
+    priority: 'Normal' | 'Urgent';
+    slot_time: string;
+    status: 'Completed' | 'Waiting' | 'In Progress' | 'Cancelled';
+    doctor_name?: string;
+    branch_name?: string;
+    location_id?: string;
+  }>;
+  orders_overview: Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+    time: string;
+    type: 'completed' | 'pharmacy' | 'whatsapp';
+  }>;
+  pharmacy_summary: {
+    total_units: number;
+    total_skus: number;
+    low_stock_count: number;
+    out_of_stock_count: number;
+    near_expiry_count: number;
+  };
+  visit_log: VisitLogItem[];
+  completed_patients: VisitLogItem[];
+  cancelled_patients: VisitLogItem[];
+}
+
+export interface BranchVisitLogParams {
+  locationId?: string;
+  clinicId?: string;
+  doctorId?: string;
+  loggedDoctorId?: string;
+  date?: string | null;
+  status?: string;
+  search?: string;
+  limit?: number;
+}
+
+export interface BranchPharmacyStockParams {
+  locationId?: string;
+  clinicId?: string;
+  loggedDoctorId?: string;
+  search?: string;
+}
+
+export interface PavilionSummaryParams {
+  locationId?: string;
+  clinicId?: string;
+  doctorId?: string;
+  loggedDoctorId?: string;
+}
+
+export interface AnalyticsDashboardParams {
+  locationId?: string;
+  clinicId?: string;
+  doctorId?: string;
+  loggedDoctorId?: string;
 }
 
 class EnterpriseCLMSService {
@@ -546,6 +694,22 @@ class EnterpriseCLMSService {
       return [];
     }
     return data || [];
+  }
+
+  async fetchPavilionDashboardSummary(params?: PavilionSummaryParams): Promise<PavilionDashboardData | null> {
+    return fetchPavilionDashboardSummaryDb(params);
+  }
+
+  async fetchBranchVisitLog(params?: BranchVisitLogParams) {
+    return fetchBranchVisitLogDb(params);
+  }
+
+  async fetchFullAnalyticsDashboard(params?: AnalyticsDashboardParams) {
+    return fetchFullAnalyticsDashboardDb(params);
+  }
+
+  async fetchBranchPharmacyStocks(params?: BranchPharmacyStockParams) {
+    return fetchBranchPharmacyStocksDb(params);
   }
 }
 
