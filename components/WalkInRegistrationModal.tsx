@@ -58,6 +58,15 @@ export function WalkInRegistrationModal({ doctorId, onClose, onSuccess }: WalkIn
 
     if (data?.appointment_id) {
       try {
+        const storedLoc = typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') : null;
+        const storedClinic = typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null;
+        if (storedClinic || storedLoc) {
+          await supabase.from('appointments').update({
+            ...(storedClinic ? { clinic_id: storedClinic } : {}),
+            ...(storedLoc ? { location_id: storedLoc } : {}),
+          }).eq('id', data.appointment_id);
+        }
+
         const { data: realAppt } = await supabase
           .from('appointments')
           .select('queue_token_no, scheduled_time')

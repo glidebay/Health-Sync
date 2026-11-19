@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users,
@@ -95,6 +95,11 @@ export function DashboardView({
 
   const itemsPerPage = 6;
 
+  const onQueueUpdatedRef = useRef(onQueueUpdated);
+  useEffect(() => {
+    onQueueUpdatedRef.current = onQueueUpdated;
+  }, [onQueueUpdated]);
+
   const loadData = useCallback(
     async (silent: boolean = true) => {
       try {
@@ -112,8 +117,8 @@ export function DashboardView({
         ]);
         if (Array.isArray(fetched)) {
           setDbPatients(fetched);
-          if (onQueueUpdated) {
-            onQueueUpdated(fetched);
+          if (onQueueUpdatedRef.current) {
+            onQueueUpdatedRef.current(fetched);
           }
         }
         if (summary) {
@@ -123,7 +128,7 @@ export function DashboardView({
         console.warn('Dashboard live queue fetch error:', err);
       }
     },
-    [onQueueUpdated, locationId, clinicId]
+    [locationId, clinicId]
   );
 
   useEffect(() => {
@@ -145,8 +150,9 @@ export function DashboardView({
     };
 
     // Supabase Realtime WebSocket subscription (instant updates on appointment/patient changes)
+    const channelName = `realtime-dashboard-${clinicId || 'global'}-${locationId || 'global'}`;
     const channel = supabase
-      .channel(`realtime-dashboard-${Date.now()}`)
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
         debouncedLoad();
       })
@@ -161,7 +167,7 @@ export function DashboardView({
       window.removeEventListener('focus', handleSync);
       supabase.removeChannel(channel);
     };
-  }, [loadData]);
+  }, [loadData, clinicId, locationId]);
 
   const effectiveQueue = useMemo(() => {
     const list = dbPatients !== null ? dbPatients : filteredQueue;

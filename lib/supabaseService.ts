@@ -856,65 +856,14 @@ export async function fetchQueueFromDb(
       clinicId ||
       (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') || undefined : undefined);
 
-    // 1. Primary: Try get_live_queue RPC with location_id
-    try {
-      const { data: liveData, error: liveError } = await supabase.rpc('get_live_queue', {
-        p_doctor_id: doctorId || null,
-        p_date: todayIST,
-        p_location_id: effectiveLocationId || null,
-      });
-
-      if (!liveError && Array.isArray(liveData) && liveData.length > 0) {
-        const mapped: FormattedQueuePatient[] = liveData
-          .filter(
-            (item: any) =>
-              (!effectiveLocationId || !item.location_id || item.location_id === effectiveLocationId) &&
-              (!effectiveClinicId || !item.clinic_id || item.clinic_id === effectiveClinicId)
-          )
-          .map((item: any) => {
-            const qTokenNo = typeof item.queue_token_no === 'number' ? item.queue_token_no : 1;
-            const tokenDisplay = item.token_display || `P${String(qTokenNo).padStart(3, '0')}`;
-            const rawVisitType = item.visit_type || 'Walk-in';
-            const isOnline =
-              rawVisitType.toLowerCase().includes('whatsapp') ||
-              rawVisitType.toLowerCase().includes('online');
-
-            return {
-              id: item.appointment_id || item.id,
-              patientDbId: item.patient_id,
-              name: item.patient_name || item.full_name || (isOnline ? 'Online Patient' : 'Walk-in Patient'),
-              age: item.age || 30,
-              gender: (item.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
-              phone: item.phone_number || undefined,
-              status: (item.status as 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled') || 'Waiting',
-              time: item.slot_time || item.allocated_slot || '10:00 AM',
-              appointmentDate: item.appointment_date || todayIST,
-              tokenNumber: tokenDisplay,
-              queueTokenNo: qTokenNo,
-              patientNumber: qTokenNo,
-              displayId: tokenDisplay,
-              priority: item.priority === 'Urgent' ? 'Urgent' : 'Normal',
-              scheduledTime: item.scheduled_time,
-              visitType: isOnline ? 'Online' : 'Walk-in',
-              cancellationReason: item.cancellation_reason || undefined,
-              locationId: item.location_id || locationId,
-            };
-          });
-
-        return sortQueuePatients(mapped);
-      }
-    } catch (e) {
-      // Fallback if RPC has internal PL/pgSQL variable collision
-    }
-
-    // 2. Secondary: Try get_patient_appointments RPC scoped by clinic & branch
+    // 1. Primary: Try get_patient_appointments RPC scoped by clinic & branch
     const { data: rpcData, error: rpcError } = await supabase.rpc('get_patient_appointments', {
       p_date: todayIST,
       p_status: 'All',
       p_search: null,
       p_doctor_id: doctorId || null,
       p_location_id: effectiveLocationId || null,
-      p_clinic_id: effectiveClinicId || null,
+      p_clinic_id: null,
     });
 
     if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
@@ -947,10 +896,10 @@ export async function fetchQueueFromDb(
             patientNumber: qTokenNo,
             displayId: tokenDisplay,
             priority: item.priority === 'Urgent' ? 'Urgent' : 'Normal',
-            scheduledTime: item.scheduled_time,
+            scheduledTime: item.slot_time || '10:00 AM',
             visitType: isOnline ? 'Online' : 'Walk-in',
             cancellationReason: item.cancellation_reason || undefined,
-            locationId: item.location_id || undefined,
+            locationId: item.location_id || locationId || undefined,
             doctorId: item.doctor_id || undefined,
             doctorName: item.doctor_name || undefined,
           };
@@ -1119,7 +1068,7 @@ export async function fetchPatientAppointmentsFromDb(params?: {
       p_search: params?.search?.trim() || null,
       p_doctor_id: params?.doctorId || null,
       p_location_id: effectiveLocationId || null,
-      p_clinic_id: effectiveClinicId || null,
+      p_clinic_id: null,
     });
 
     if (error) {

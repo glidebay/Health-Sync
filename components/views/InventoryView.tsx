@@ -179,7 +179,7 @@ export function InventoryView({
     loadData();
 
     const channel = supabase
-      .channel(`realtime-inventory-view-${Date.now()}`)
+      .channel('realtime-inventory-view')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'medicines' }, () => {
         loadData(true);
       })
