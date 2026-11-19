@@ -856,8 +856,7 @@ export async function fetchQueueFromDb(
       clinicId ||
       (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') || undefined : undefined);
 
-    // 1. Primary: Try get_patient_appointments RPC scoped by clinic & branch
-    const { data: rpcData, error: rpcError } = await supabase.rpc('get_patient_appointments', {
+     const { data: rpcData, error: rpcError } = await supabase.rpc('get_patient_appointments', {
       p_date: todayIST,
       p_status: 'All',
       p_search: null,
