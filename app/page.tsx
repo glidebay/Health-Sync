@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -220,6 +220,10 @@ function DashboardContent() {
   const [pinErrorMessage, setPinErrorMessage] = useState('');
   const [clinicLocations, setClinicLocations] = useState<DbClinicLocation[]>([]);
   const [currentLocation, setCurrentLocation] = useState<DbClinicLocation | null>(null);
+  const currentLocationRef = useRef<DbClinicLocation | null>(null);
+  useEffect(() => {
+    currentLocationRef.current = currentLocation;
+  }, [currentLocation]);
 
   const [currentClinicId, setCurrentClinicId] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
@@ -324,12 +328,25 @@ function DashboardContent() {
     return { ...doctorProfile, regNo: 'KMC-45892' };
   }, [isLoggedIn, config.require_doctor_pin, availableDoctors, doctorProfile]);
 
+  const handleQueueUpdated = useCallback((updatedPatients: Patient[]) => {
+    setQueue((prevQueue) => {
+      if (
+        prevQueue.length === updatedPatients.length &&
+        prevQueue.every((p, i) => p.id === updatedPatients[i]?.id && p.status === updatedPatients[i]?.status)
+      ) {
+        return prevQueue;
+      }
+      return sortQueueWithCompletedAtEnd(updatedPatients);
+    });
+  }, []);
+
   const syncQueueOnly = useCallback(async () => {
     try {
-      const locId = currentLocation?.id;
+      const loc = currentLocationRef.current;
+      const locId = loc?.id;
       const activeClinic =
         currentClinicId ||
-        currentLocation?.clinic_id ||
+        loc?.clinic_id ||
         (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) ||
         undefined;
       const dbQueue = await fetchQueueFromDb(undefined, undefined, locId, activeClinic);
@@ -339,16 +356,17 @@ function DashboardContent() {
     } catch (err) {
       console.warn('Queue live sync error:', err);
     }
-  }, [currentLocation, currentClinicId]);
+  }, [currentClinicId]);
 
   const syncClinicData = useCallback(async (silent: boolean = true) => {
     try {
+      const loc = currentLocationRef.current;
       const activeClinic =
         currentClinicId ||
-        currentLocation?.clinic_id ||
+        loc?.clinic_id ||
         (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) ||
         undefined;
-      const locId = currentLocation?.id;
+      const locId = loc?.id;
       const [dbQueue, dbInventory, dbDoctors, locs] = await Promise.all([
         fetchQueueFromDb(undefined, undefined, locId, activeClinic),
         fetchInventoryFromDb(activeClinic, locId),
@@ -358,10 +376,11 @@ function DashboardContent() {
 
       if (locs && locs.length > 0) {
         setClinicLocations(locs);
-        if (!currentLocation || !locs.find((l) => l.id === currentLocation.id)) {
+        if (!currentLocationRef.current || !locs.find((l) => l.id === currentLocationRef.current?.id)) {
           const stored = typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') : null;
           const matched = locs.find((l) => l.id === stored) || locs[0];
           setCurrentLocation(matched);
+          currentLocationRef.current = matched;
           if (typeof window !== 'undefined' && matched) {
             localStorage.setItem('healthsync_active_location_id', matched.id);
           }
@@ -385,7 +404,7 @@ function DashboardContent() {
     } catch (err) {
       if (!silent) console.warn('Failed to sync Supabase data:', err);
     }
-  }, [currentLocation, currentClinicId]);
+  }, [currentClinicId]);
 
   const handleSelectLocation = useCallback((loc: DbClinicLocation) => {
     setCurrentLocation(loc);
@@ -476,11 +495,6 @@ function DashboardContent() {
       syncQueueOnly();
     });
 
-    // Optional ultra-low-frequency background sync (every 60s) for quiet sanity check
-    const slowSyncInterval = setInterval(() => {
-      syncClinicData(true);
-    }, 60000);
-
     const handleVisibilityOrFocus = () => {
       syncQueueOnly();
     };
@@ -490,15 +504,10 @@ function DashboardContent() {
     return () => {
       isMounted = false;
       unsubscribe();
-      clearInterval(slowSyncInterval);
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       window.removeEventListener('focus', handleVisibilityOrFocus);
     };
-  }, [syncClinicData, syncQueueOnly]);
-
-  useEffect(() => {
-    syncClinicData(true);
-  }, [activeSection, syncClinicData]);
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -1891,9 +1900,7 @@ function DashboardContent() {
                         setActiveSection('queue');
                       }
                     }}
-                    onQueueUpdated={(updatedPatients) => {
-                      setQueue(sortQueueWithCompletedAtEnd(updatedPatients));
-                    }}
+                    onQueueUpdated={handleQueueUpdated}
                     onRefresh={syncClinicData}
                   />
                 )}
