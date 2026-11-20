@@ -93,7 +93,7 @@ import { dispenseFefo, fetchMedicinesMaster, convertMasterToInventoryItems } fro
 import { AnalyticsView } from '@/components/views/AnalyticsView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { DoctorManagementSettings } from '@/components/settings/DoctorManagementSettings';
-import { verifyBranchGatewayLogin, verifyBranchDoctorPin } from '@/lib/doctorService';
+import { verifyBranchGatewayLogin, verifyBranchDoctorPin, validateAccessPin } from '@/lib/doctorService';
 import { ToastNotification, ToastMessage, ToastType } from '@/components/ui/ToastNotification';
 import { getTodayIST } from '@/lib/utils';
 
@@ -630,6 +630,91 @@ function DashboardContent() {
       return;
     }
 
+    // 1. Primary: Validate via unified access_pins table RPC
+    const pinRes = await validateAccessPin(clean);
+    if (pinRes.success && pinRes.clinic_id) {
+      const clinicId = pinRes.clinic_id;
+      const clinicName = pinRes.clinic_name || 'Clinic';
+      const locationId = pinRes.location_id || undefined;
+      const doctorId = pinRes.doctor_id || undefined;
+      const isDoctor = Boolean(pinRes.has_doctor && doctorId);
+      const isAdmin = !pinRes.has_branch && !pinRes.has_doctor;
+
+      if (isDoctor) {
+        saveDoctorSessionLocal({
+          doctorId: doctorId!,
+          name: pinRes.doctor_name || 'Doctor',
+          title: 'Consultant',
+          expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+          clinicId,
+          clinicName,
+          isAdmin: false,
+        });
+        setIsLoggedIn(true);
+        setIsDoctorAdmin(false);
+        setDoctorProfile({
+          name: pinRes.doctor_name || 'Doctor',
+          title: 'Consultant',
+        });
+      } else if (isAdmin) {
+        saveDoctorSessionLocal({
+          doctorId: 'admin',
+          name: `${clinicName} Admin`,
+          title: 'Medical Director / Admin',
+          expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+          clinicId,
+          clinicName,
+          isAdmin: true,
+        });
+        setIsLoggedIn(true);
+        setIsDoctorAdmin(true);
+        setDoctorProfile({
+          name: `${clinicName} Admin`,
+          title: 'Administrator',
+        });
+      } else {
+        saveClinicSessionLocal({
+          role: 'assistant',
+          name: pinRes.branch_name ? `${pinRes.branch_name} Reception` : 'Clinic Reception',
+          expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+          clinicId,
+          clinicName,
+          locationId,
+          isAdmin: false,
+        });
+        clearDoctorSessionLocal();
+        setIsLoggedIn(false);
+        setIsDoctorAdmin(false);
+        setDoctorProfile({
+          name: pinRes.branch_name ? `${pinRes.branch_name} Reception` : 'Clinic Reception',
+          title: 'Reception & Triage',
+        });
+      }
+
+      setCurrentClinicId(clinicId);
+      const freshLocs = await fetchClinicLocations(clinicId);
+      setClinicLocations(freshLocs);
+      const matched = (locationId && freshLocs.find((l) => l.id === locationId)) || freshLocs[0];
+      if (matched) {
+        setCurrentLocation(matched);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('healthsync_active_location_id', matched.id);
+          localStorage.setItem('healthsync_active_clinic_id', clinicId);
+        }
+      }
+
+      setShowPinModal(false);
+      setPinError(false);
+      setPinErrorMessage('');
+      setPinInput('');
+      setPortalMode('dashboard');
+      setActiveSection(intendedSection || 'dashboard');
+      setIntendedSection(null);
+      showToast('success', 'Access Granted', pinRes.label || 'Authenticated successfully');
+      syncQueueOnly();
+      return;
+    }
+
     if (portalMode === 'gateway') {
       const branchRes = await verifyBranchGatewayLogin(clean);
       if (branchRes.success && branchRes.branch_id) {
@@ -887,6 +972,7 @@ function DashboardContent() {
         phone: walkinPhone.trim(),
         priority: walkinPriority,
         locationId: currentLocation?.id,
+        clinicId: currentClinicId || currentLocation?.clinic_id || undefined,
       });
 
       if (res && res.success) {
@@ -1479,7 +1565,100 @@ function DashboardContent() {
                 return { success: false, message: 'Please enter a PIN' };
               }
 
-              // 1. Try Branch Gateway PIN
+              // 1. Primary: Validate via unified access_pins table RPC
+              const accessPinRes = await validateAccessPin(clean);
+              if (accessPinRes.success && accessPinRes.clinic_id) {
+                if (accessPinRes.clinic_id !== clinic.id) {
+                  return {
+                    success: false,
+                    message: `This PIN belongs to ${accessPinRes.clinic_name || 'a different clinic'}.`,
+                  };
+                }
+                if (branch && accessPinRes.has_branch && accessPinRes.location_id && accessPinRes.location_id !== branch.id) {
+                  return {
+                    success: false,
+                    message: `This PIN is assigned to ${accessPinRes.branch_name || 'another branch'}.`,
+                  };
+                }
+
+                const clinicId = accessPinRes.clinic_id;
+                const clinicName = accessPinRes.clinic_name || clinic.name;
+                const locationId = branch?.id || accessPinRes.location_id || undefined;
+                const doctorId = accessPinRes.doctor_id || undefined;
+                const isDoctor = Boolean(accessPinRes.has_doctor && doctorId);
+                const isAdmin = !accessPinRes.has_branch && !accessPinRes.has_doctor;
+
+                if (isDoctor) {
+                  saveDoctorSessionLocal({
+                    doctorId: doctorId!,
+                    name: accessPinRes.doctor_name || 'Doctor',
+                    title: 'Consultant',
+                    expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+                    clinicId,
+                    clinicName,
+                    isAdmin: false,
+                  });
+                  setIsLoggedIn(true);
+                  setIsDoctorAdmin(false);
+                  setDoctorProfile({
+                    name: accessPinRes.doctor_name || 'Doctor',
+                    title: 'Consultant',
+                  });
+                } else if (isAdmin) {
+                  saveDoctorSessionLocal({
+                    doctorId: 'admin',
+                    name: `${clinicName} Admin`,
+                    title: 'Medical Director / Admin',
+                    expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+                    clinicId,
+                    clinicName,
+                    isAdmin: true,
+                  });
+                  setIsLoggedIn(true);
+                  setIsDoctorAdmin(true);
+                  setDoctorProfile({
+                    name: `${clinicName} Admin`,
+                    title: 'Administrator',
+                  });
+                } else {
+                  saveClinicSessionLocal({
+                    role: 'assistant',
+                    name: accessPinRes.branch_name ? `${accessPinRes.branch_name} Reception` : `${clinicName} Reception`,
+                    expiresAt: Date.now() + 8 * 60 * 60 * 1000,
+                    clinicId,
+                    clinicName,
+                    locationId,
+                    isAdmin: false,
+                  });
+                  clearDoctorSessionLocal();
+                  setIsLoggedIn(false);
+                  setIsDoctorAdmin(false);
+                  setDoctorProfile({
+                    name: accessPinRes.branch_name ? `${accessPinRes.branch_name} Reception` : `${clinicName} Reception`,
+                    title: 'Reception & Triage',
+                  });
+                }
+
+                setCurrentClinicId(clinicId);
+                const freshLocs = await fetchClinicLocations(clinicId);
+                setClinicLocations(freshLocs);
+                const matched = (locationId && freshLocs.find((l) => l.id === locationId)) || freshLocs[0];
+                if (matched) {
+                  setCurrentLocation(matched);
+                  if (typeof window !== 'undefined') {
+                    localStorage.setItem('healthsync_active_location_id', matched.id);
+                    localStorage.setItem('healthsync_active_clinic_id', clinicId);
+                  }
+                }
+
+                setPortalMode('dashboard');
+                setActiveSection('dashboard');
+                showToast('success', 'Access Granted', accessPinRes.label || 'Authenticated successfully');
+                syncQueueOnly();
+                return { success: true };
+              }
+
+              // 2. Fallback: Try Branch Gateway PIN
               const branchRes = await verifyBranchGatewayLogin(clean);
               if (branchRes.success && branchRes.branch_id) {
                 if (branchRes.clinic_id && branchRes.clinic_id !== clinic.id) {

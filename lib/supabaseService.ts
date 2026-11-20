@@ -39,6 +39,7 @@ export interface FormattedQueuePatient {
   visitType?: string;
   cancellationReason?: string;
   locationId?: string;
+  clinicId?: string;
 }
 
 export interface FormattedInventoryItem {
@@ -1132,6 +1133,7 @@ export async function registerWalkinPatientDb(params: {
   phone?: string;
   priority?: 'Normal' | 'Urgent';
   locationId?: string;
+  clinicId?: string;
 }): Promise<RegisterWalkinResult> {
   try {
     const cleanName = params.name ? params.name.trim() : '';
@@ -1239,6 +1241,9 @@ export async function registerWalkinPatientDb(params: {
     };
     if (params.locationId) {
       newApptPayload.location_id = params.locationId;
+    }
+    if (params.clinicId) {
+      newApptPayload.clinic_id = params.clinicId;
     }
 
     const { data: apptData, error: apptError } = await supabase
@@ -2617,6 +2622,7 @@ export interface BookAppointmentSlotParams {
   slotTime: string;
   reason?: string;
   locationId?: string;
+  clinicId?: string;
 }
 
 export interface BookAppointmentSlotResult {
@@ -2734,6 +2740,8 @@ export async function bookAppointmentSlotDb(
         p_full_name: cleanName,
         p_phone_number: cleanPhone,
         p_doctor_id: params.doctorId,
+        p_location_id: params.locationId || null,
+        p_clinic_id: params.clinicId || null,
         p_scheduled_time: scheduledTime,
         p_age: params.age || 28,
         p_gender: params.gender || 'Male',
