@@ -43,6 +43,86 @@ export interface AdminUpsertDoctorPayload {
   branch_ids: string[];
 }
 
+export interface ValidateAccessPinResult {
+  success: boolean;
+  clinic_id?: string;
+  location_id?: string | null;
+  doctor_id?: string | null;
+  label?: string;
+  clinic_name?: string;
+  branch_name?: string | null;
+  doctor_name?: string | null;
+  has_branch?: boolean;
+  has_doctor?: boolean;
+  error?: string;
+}
+
+/**
+ * Direct validation using the unified access_pins table
+ */
+export async function validateAccessPin(pin: string): Promise<ValidateAccessPinResult> {
+  const cleanPin = pin ? pin.trim() : '';
+  if (!cleanPin) return { success: false, error: 'Please enter a PIN' };
+
+  try {
+    // 1. Try PostgreSQL RPC
+    const { data, error } = await supabase.rpc('validate_access_pin', {
+      p_pin: cleanPin,
+    });
+
+    if (!error && data && data.success === true) {
+      return data as ValidateAccessPinResult;
+    }
+
+    // 2. Direct fallback to access_pins table (works immediately even if RPC is not created yet)
+    const { data: ap, error: apErr } = await supabase
+      .from('access_pins')
+      .select('pin, clinic_id, location_id, doctor_id, label, is_active')
+      .eq('pin', cleanPin)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (ap && !apErr) {
+      let clinicName = 'Clinic';
+      if (ap.clinic_id) {
+        const { data: c } = await supabase.from('clinics').select('name').eq('id', ap.clinic_id).maybeSingle();
+        if (c?.name) clinicName = c.name;
+      }
+      let branchName: string | null = null;
+      if (ap.location_id) {
+        const { data: b } = await supabase.from('clinic_locations').select('branch_name').eq('id', ap.location_id).maybeSingle();
+        if (b?.branch_name) branchName = b.branch_name;
+      }
+      let doctorName: string | null = null;
+      if (ap.doctor_id) {
+        const { data: d } = await supabase.from('doctors').select('full_name').eq('id', ap.doctor_id).maybeSingle();
+        if (d?.full_name) doctorName = d.full_name;
+      }
+
+      return {
+        success: true,
+        clinic_id: ap.clinic_id,
+        location_id: ap.location_id,
+        doctor_id: ap.doctor_id,
+        label: ap.label,
+        clinic_name: clinicName,
+        branch_name: branchName,
+        doctor_name: doctorName,
+        has_branch: Boolean(ap.location_id),
+        has_doctor: Boolean(ap.doctor_id),
+      };
+    }
+
+    return {
+      success: false,
+      error: data?.error || 'Invalid PIN. Please try again.',
+    };
+  } catch (err: any) {
+    console.warn('validateAccessPin exception:', err);
+    return { success: false, error: err?.message || 'Verification failed' };
+  }
+}
+
 // In-memory failed attempts tracker for chamber lockout
 const chamberFailedAttempts = new Map<string, { count: number; lockedUntil: number }>();
 

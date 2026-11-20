@@ -6,11 +6,13 @@ import EcgActionLoader from "@/components/loading/EcgActionLoader";
 
 interface WalkInRegistrationModalProps {
   doctorId?: string;
+  locationId?: string;
+  clinicId?: string;
   onClose: () => void;
   onSuccess: (data: any) => void;
 }
 
-export function WalkInRegistrationModal({ doctorId, onClose, onSuccess }: WalkInRegistrationModalProps) {
+export function WalkInRegistrationModal({ doctorId, locationId, clinicId, onClose, onSuccess }: WalkInRegistrationModalProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [age, setAge] = useState("");
@@ -32,14 +34,21 @@ export function WalkInRegistrationModal({ doctorId, onClose, onSuccess }: WalkIn
     const nowIso = new Date().toISOString();
     const cleanPhone = phone.trim();
 
+    const storedLoc = typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') : null;
+    const storedClinic = typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null;
+    const effectiveLocId = locationId || storedLoc || null;
+    const effectiveClinicId = clinicId || storedClinic || null;
+
     const { data, error } = await supabase.rpc("register_walk_in_patient", {
       p_full_name: cleanName,
       p_phone_number: cleanPhone,
       p_doctor_id: doctorId || null,
-      p_scheduled_time: nowIso,
+      p_location_id: effectiveLocId,
+      p_clinic_id: effectiveClinicId,
       p_age: age ? parseInt(age, 10) : null,
       p_gender: gender,
       p_priority: priority,
+      p_scheduled_time: nowIso,
     });
 
     setLoading(false);
