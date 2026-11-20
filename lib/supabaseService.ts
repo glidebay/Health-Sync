@@ -2979,7 +2979,6 @@ export async function bookAppointmentSlotDb(
                 timeZone: 'Asia/Kolkata',
               });
             } catch {
-              // fallback
             }
           }
         }
