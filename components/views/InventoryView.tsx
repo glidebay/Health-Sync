@@ -58,6 +58,9 @@ interface InventoryViewProps {
   onSearchChange?: (query: string) => void;
   isDoctorUnlocked?: boolean;
   onInventorySync?: (updatedItems: InventoryItem[]) => void;
+  clinicId?: string;
+  locationId?: string;
+  branchName?: string;
 }
 
 const DEFAULT_CATEGORIES = [
@@ -97,6 +100,9 @@ export function InventoryView({
   onSearchChange,
   isDoctorUnlocked = true,
   onInventorySync,
+  clinicId,
+  locationId,
+  branchName,
 }: InventoryViewProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [internalSearch, setInternalSearch] = useState(searchQuery);
@@ -151,14 +157,18 @@ export function InventoryView({
     if (!silent) setLoadingMeds(true);
     try {
       const [data, sups] = await Promise.all([
-        fetchMedicinesMaster((chunkMeds, totalCount) => {
-          setMedicines(chunkMeds);
-          if (chunkMeds.length < totalCount) {
-            setSyncingChunks(true);
-          } else {
-            setSyncingChunks(false);
-          }
-        }),
+        fetchMedicinesMaster(
+          (chunkMeds, totalCount) => {
+            setMedicines(chunkMeds);
+            if (chunkMeds.length < totalCount) {
+              setSyncingChunks(true);
+            } else {
+              setSyncingChunks(false);
+            }
+          },
+          clinicId,
+          locationId
+        ),
         fetchSuppliers(),
       ]);
       setMedicines(data);
@@ -194,7 +204,7 @@ export function InventoryView({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [clinicId, locationId]);
 
   useEffect(() => {
     setInternalSearch(searchQuery);
@@ -309,6 +319,8 @@ export function InventoryView({
       supplierId: addSupplierId && addSupplierId !== '__custom__' ? addSupplierId : undefined,
       supplierName: addSupplierName.trim() || undefined,
       responsibleUser: isDoctorUnlocked ? 'Dr. Sunny' : 'Staff Pharmacist',
+      clinicId,
+      locationId,
     });
 
     setMedicines((prev) => {
@@ -391,8 +403,13 @@ export function InventoryView({
           <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
             Pharmacy Stock &amp; Medicine Master
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            FEFO batch-wise inventory tracking, stock movements, and master data import
+          <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+            <span>FEFO batch-wise inventory tracking</span>
+            {branchName && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                {branchName}
+              </span>
+            )}
           </p>
         </div>
 

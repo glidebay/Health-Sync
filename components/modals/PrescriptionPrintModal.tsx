@@ -573,9 +573,9 @@ export function PrescriptionPrintModal({
                       <p className="text-xs text-[#5E6470] font-medium">
                         {doctorProfile.name} • {doctorProfile.title}
                       </p>
-                      {config?.clinic_address && (
+                      {(config?.branch_address || config?.clinic_address || config?.branch_phone || config?.clinic_phone) && (
                         <p className="text-[10px] text-[#8A909D] mt-0.5">
-                          {[config.clinic_address, config.clinic_phone].filter(Boolean).join(' • ')}
+                          {[config.branch_address || config.clinic_address, config.branch_phone || config.clinic_phone].filter(Boolean).join(' • ')}
                         </p>
                       )}
                     </div>

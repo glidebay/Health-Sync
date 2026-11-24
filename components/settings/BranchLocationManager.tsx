@@ -14,18 +14,20 @@ import {
   Edit3,
   RefreshCw,
   MessageSquare,
-  ShieldCheck,
+  Users,
   X,
 } from 'lucide-react';
 import { DbClinicLocation } from '@/types/database';
 import { fetchClinicLocations } from '@/lib/supabaseService';
 import { supabase } from '@/lib/supabaseClient';
+import EcgActionLoader from '@/components/loading/EcgActionLoader';
 
 interface BranchLocationManagerProps {
   currentLocationId?: string;
   onSelectLocation?: (loc: DbClinicLocation) => void;
   clinicId?: string | null;
   clinicName?: string | null;
+  onRefreshLocations?: () => Promise<void>;
 }
 
 export function BranchLocationManager({
@@ -33,6 +35,7 @@ export function BranchLocationManager({
   onSelectLocation,
   clinicId,
   clinicName,
+  onRefreshLocations,
 }: BranchLocationManagerProps = {}) {
   const [locations, setLocations] = useState<DbClinicLocation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,34 +46,33 @@ export function BranchLocationManager({
   const [isSaving, setIsSaving] = useState(false);
   const [editingLoc, setEditingLoc] = useState<DbClinicLocation | null>(null);
 
-  // Form inputs
+  // Form inputs (styled to match Walkin Register UI)
   const [formName, setFormName] = useState('');
   const [formCode, setFormCode] = useState('');
   const [formPin, setFormPin] = useState('1234');
   const [formAddress, setFormAddress] = useState('');
   const [formPhone, setFormPhone] = useState('');
-  const [formWaDisplayNumber, setFormWaDisplayNumber] = useState('');
   const [formWaPhoneId, setFormWaPhoneId] = useState('');
   const [formQuota, setFormQuota] = useState('40');
 
   const loadLocations = async () => {
     setIsLoading(true);
+    const startTime = Date.now();
     try {
-      // 1. Load via get_clinic_branding_master RPC
-      const { data: brandingData, error: rpcErr } = await supabase.rpc('get_clinic_branding_master');
-      let locs: DbClinicLocation[] = [];
-      if (!rpcErr && brandingData && Array.isArray(brandingData.locations)) {
-        locs = brandingData.locations;
-      } else {
-        const activeClinic = clinicId || (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) || undefined;
-        locs = await fetchClinicLocations(activeClinic);
-      }
+      const activeClinic =
+        clinicId ||
+        (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) ||
+        undefined;
+      let locs = await fetchClinicLocations(activeClinic);
 
-      // Strict clinic tenancy: only show branches for the authenticated clinic
       if (clinicId) {
         locs = locs.filter((l) => l.clinic_id === clinicId);
       }
       setLocations(locs);
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 450) {
+        await new Promise((r) => setTimeout(r, 450 - elapsed));
+      }
     } catch (e) {
       console.warn('Failed loading branches:', e);
     } finally {
@@ -88,8 +90,7 @@ export function BranchLocationManager({
     setFormCode(`HS-LOC-${Math.floor(100 + Math.random() * 900)}`);
     setFormPin('1234');
     setFormAddress('');
-    setFormPhone('+91 ');
-    setFormWaDisplayNumber('');
+    setFormPhone('');
     setFormWaPhoneId('');
     setFormQuota('40');
     setIsModalOpen(true);
@@ -102,7 +103,6 @@ export function BranchLocationManager({
     setFormPin(loc.gateway_pin || '1234');
     setFormAddress(loc.address || '');
     setFormPhone(loc.phone || '');
-    setFormWaDisplayNumber((loc as any).whatsapp_display_number || loc.phone || '');
     setFormWaPhoneId(loc.whatsapp_phone_number_id || '');
     setFormQuota(String(loc.daily_quota || 40));
     setIsModalOpen(true);
@@ -110,7 +110,9 @@ export function BranchLocationManager({
 
   const getFullBookingUrl = (loc: DbClinicLocation): string => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://healthsync.in';
-    const path = loc.booking_url || (loc.branch_slug ? `/${loc.branch_slug}/booking` : `/booking?branch=${loc.branch_code || loc.id}`);
+    const path =
+      loc.booking_url ||
+      (loc.branch_slug ? `/${loc.branch_slug}/booking` : `/booking?branch=${loc.branch_code || loc.id}`);
     return `${origin}${path.startsWith('/') ? '' : '/'}${path}`;
   };
 
@@ -131,12 +133,11 @@ export function BranchLocationManager({
         branch_name: formName.trim(),
         branch_code: formCode.trim().toUpperCase(),
         gateway_pin: formPin.trim() || '1234',
-        address: formAddress.trim() || 'Kerala, India',
-        phone: formPhone.trim() || undefined,
-        whatsapp_display_number: formWaDisplayNumber.trim() || formPhone.trim() || undefined,
+        address: formAddress.trim() || null,
+        phone: formPhone.trim() || null,
         whatsapp_phone_number_id: formWaPhoneId.trim() || null,
         daily_quota: parseInt(formQuota, 10) || 40,
-        is_active: true,
+        updated_at: new Date().toISOString(),
       };
 
       if (editingLoc) {
@@ -144,17 +145,29 @@ export function BranchLocationManager({
           .from('clinic_locations')
           .update(payload)
           .eq('id', editingLoc.id);
+
+        if (editingLoc.id === currentLocationId && onSelectLocation) {
+          onSelectLocation({
+            ...editingLoc,
+            ...payload,
+          });
+        }
       } else {
-        const activeClinic = clinicId || (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) || '33ef6459-44ae-45b7-8726-ce71abf51832';
-        const activeName = clinicName || (activeClinic === '22222222-2222-2222-2222-222222222222' ? 'Dreams Pharma & Clinic' : 'HealthSync Medical Center');
+        const activeClinic =
+          clinicId ||
+          (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) ||
+          'c714c4c3-e1ba-4f9c-bac9-ed20763d6f5c';
+        const activeName = clinicName || 'HealthSync Clinic';
         const newId = `loc-${formCode.trim().toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
         payload.id = newId;
         payload.clinic_id = activeClinic;
         payload.clinic_name = activeName;
+        payload.is_active = true;
         await supabase.from('clinic_locations').insert([payload]);
       }
 
       await loadLocations();
+      await onRefreshLocations?.();
       setIsModalOpen(false);
     } catch (err) {
       console.error('Failed to save branch location:', err);
@@ -164,150 +177,167 @@ export function BranchLocationManager({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-[#ECEEF2] p-5 sm:p-6 shadow-2xs space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-[#2563EB]" />
-              <span>Multi-Branch &amp; Location Registry</span>
-            </h3>
-            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
-              {locations.length} Locations
-            </span>
+    <div className="space-y-6">
+      <EcgActionLoader isLoading={isLoading || isSaving} fullscreen={true} />
+
+      {/* Header Bar */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center shadow-sm flex-shrink-0">
+            <Building2 className="w-5 h-5 stroke-[2.2]" />
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Configure physical clinic branches, Assistant Gateway PINs, and dedicated WhatsApp numbers
-          </p>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-base font-bold text-neutral-900 tracking-tight">
+                Branches &amp; Clinic Locations
+              </h3>
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100/80">
+                {locations.length} {locations.length === 1 ? 'Location' : 'Locations'}
+              </span>
+            </div>
+            <p className="text-xs text-neutral-400 mt-0.5">
+              Manage physical branches, dedicated WhatsApp lines, and assistant gateway credentials
+            </p>
+          </div>
         </div>
 
         <button
           type="button"
           onClick={handleOpenAdd}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#2563EB] hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-xs transition cursor-pointer self-start sm:self-auto"
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-2xl text-xs shadow-sm transition-all cursor-pointer self-start sm:self-auto whitespace-nowrap"
         >
-          <Plus className="w-3.5 h-3.5" />
+          <Plus className="w-4 h-4 stroke-[2.2]" />
           <span>Add New Branch</span>
         </button>
       </div>
 
-      {isLoading ? (
-        <div className="py-12 flex items-center justify-center text-xs text-slate-400 gap-2">
-          <RefreshCw className="w-4 h-4 animate-spin text-[#2563EB]" />
-          <span>Loading branch locations...</span>
-        </div>
-      ) : locations.length === 0 ? (
-        <div className="py-12 text-center text-xs text-slate-400">
-          <MapPin className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-          <p className="font-semibold text-slate-600">No branch locations registered yet</p>
-          <p className="text-slate-400 mt-0.5">Click &quot;Add New Branch&quot; to configure your first clinic location.</p>
+      {/* Separate Branch Cards Grid */}
+      {locations.length === 0 && !isLoading ? (
+        <div className="bg-white rounded-3xl p-12 text-center border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]">
+          <MapPin className="w-9 h-9 text-slate-300 mx-auto mb-2" />
+          <h4 className="text-sm font-bold text-slate-800">No branch locations registered yet</h4>
+          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+            Click &quot;Add New Branch&quot; to configure your first clinic location and gateway credentials.
+          </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {locations.map((loc) => {
             const code = loc.branch_code || loc.id;
             const isCopied = copiedCode === loc.id;
             const fullBookingUrl = getFullBookingUrl(loc);
+            const isActive = currentLocationId === loc.id;
 
             return (
               <div
                 key={loc.id}
-                className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/40 hover:bg-white hover:border-blue-200 transition space-y-3"
+                className={`bg-white rounded-3xl border transition-all duration-200 p-5 sm:p-6 flex flex-col justify-between space-y-4 relative group ${
+                  isActive
+                    ? 'border-blue-500 shadow-sm'
+                    : 'border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] hover:shadow-md hover:border-slate-200'
+                }`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-bold flex-shrink-0">
-                      <MapPin className="w-4 h-4" />
+                <div className="space-y-3">
+                  {/* Top Row: Icon & Status Badges */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center shadow-sm flex-shrink-0">
+                      <MapPin className="w-5 h-5 stroke-[2.2]" />
                     </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2 flex-wrap">
-                        <span>{loc.branch_name}</span>
-                        {code && (
-                          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                            {code}
-                          </span>
-                        )}
-                        {currentLocationId === loc.id && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            Active
-                          </span>
-                        )}
-                      </h4>
-                      <p className="text-[11px] text-slate-500 mt-0.5">{loc.address || 'Kochi, Kerala'}</p>
+
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      {isActive && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Active
+                        </span>
+                      )}
+                      {code && (
+                        <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-lg bg-neutral-100 text-neutral-600 border border-neutral-200">
+                          {code}
+                        </span>
+                      )}
                     </div>
                   </div>
+
+                  {/* Branch Name & Address */}
+                  <div>
+                    <h4 className="text-base font-bold text-neutral-900 tracking-tight leading-snug">
+                      {loc.branch_name}
+                    </h4>
+                    <p className="text-xs text-neutral-400 mt-1 flex items-start gap-1 line-clamp-2">
+                      <MapPin className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0 mt-0.5" />
+                      <span>{loc.address || 'Physical address not configured'}</span>
+                    </p>
+                  </div>
+
+                  {/* Operational Details Grid */}
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                    <div className="bg-neutral-50 rounded-2xl p-3 border border-neutral-100/80 space-y-0.5">
+                      <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider block">
+                        WhatsApp Contact
+                      </span>
+                      <span className="font-semibold text-neutral-800 truncate block">
+                        {loc.phone || <span className="text-neutral-400 italic">Not set</span>}
+                      </span>
+                    </div>
+
+                    <div className="bg-neutral-50 rounded-2xl p-3 border border-neutral-100/80 space-y-0.5">
+                      <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider block">
+                        Gateway PIN
+                      </span>
+                      <span className="font-mono font-bold text-neutral-800 flex items-center gap-1">
+                        <KeyRound className="w-3.5 h-3.5 text-amber-500" />
+                        {loc.gateway_pin || '1234'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-neutral-50 rounded-2xl p-3 border border-neutral-100/80 flex items-center justify-between text-xs">
+                    <span className="text-neutral-500 font-medium">Daily Consultation Quota</span>
+                    <span className="font-bold text-neutral-800">{loc.daily_quota || 40} patients / day</span>
+                  </div>
+                </div>
+
+                {/* Bottom Action Buttons */}
+                <div className="pt-3 border-t border-neutral-100 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleCopyUrl(loc)}
+                    className="flex-1 py-2.5 px-3 bg-neutral-100 hover:bg-neutral-200/80 text-neutral-700 rounded-2xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    title="Copy online booking link for this branch"
+                  >
+                    {isCopied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-emerald-600 font-bold">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-neutral-500" />
+                        <span>Copy Booking Link</span>
+                      </>
+                    )}
+                  </button>
+
+                  <a
+                    href={fullBookingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2.5 bg-neutral-100 hover:bg-neutral-200/80 text-neutral-600 rounded-2xl text-xs transition-colors cursor-pointer"
+                    title="Open booking portal in new tab"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
 
                   <button
                     type="button"
                     onClick={() => handleOpenEdit(loc)}
-                    className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
-                    title="Edit branch parameters"
+                    className="py-2.5 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-2xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    title="Edit branch details"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit</span>
                   </button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-[11px]">
-                  <div className="space-y-0.5">
-                    <span className="text-slate-400 block font-medium">Assistant Gateway PIN</span>
-                    <span className="font-mono font-bold text-slate-700 flex items-center gap-1">
-                      <KeyRound className="w-3 h-3 text-amber-500" />
-                      {loc.gateway_pin || '1234'}
-                    </span>
-                  </div>
-
-                  <div className="space-y-0.5">
-                    <span className="text-slate-400 block font-medium">WhatsApp Cloud Phone ID</span>
-                    <span className="font-mono text-slate-700 truncate block">
-                      {loc.whatsapp_phone_number_id ? (
-                        <span className="text-emerald-700 font-bold flex items-center gap-1">
-                          <MessageSquare className="w-3 h-3 text-emerald-500" />
-                          {loc.whatsapp_phone_number_id}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 italic">Unlinked</span>
-                      )}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Booking URL with Copy Link & External Open */}
-                <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-100 flex-wrap gap-2">
-                  <span className="text-[11px] text-slate-500">
-                    Quota: <strong className="text-slate-800">{loc.daily_quota || 40}</strong> / day
-                  </span>
-
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={fullBookingUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-blue-600 transition"
-                      title="Open Portal in New Tab"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                      <span>Open</span>
-                    </a>
-
-                    <button
-                      type="button"
-                      onClick={() => handleCopyUrl(loc)}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[#2563EB] hover:text-blue-800 transition cursor-pointer"
-                    >
-                      {isCopied ? (
-                        <>
-                          <Check className="w-3 h-3 text-emerald-600" />
-                          <span className="text-emerald-600">Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3" />
-                          <span>Copy Booking URL</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
                 </div>
               </div>
             );
@@ -315,147 +345,154 @@ export function BranchLocationManager({
         </div>
       )}
 
-      {/* MODAL: ADD / EDIT BRANCH */}
+      {/* POPUP MODAL: ADD / EDIT BRANCH */}
       <AnimatePresence>
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
             <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] relative"
             >
-              <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
-                <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-blue-600" />
-                  <span>{editingLoc ? 'Edit Branch Location' : 'Add New Branch Location'}</span>
-                </h4>
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <h3 className="text-sm font-bold text-slate-800">
+                  {editingLoc ? 'Edit Branch Location' : 'Add New Branch'}
+                </h3>
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+                  className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                  aria-label="Close"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <form onSubmit={handleSave} className="p-4 sm:p-5 space-y-3.5 text-xs">
+              {/* Modal Body */}
+              <form onSubmit={handleSave} className="p-6 overflow-y-auto space-y-4">
+                {/* Branch Name */}
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Branch Name</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Branch Name <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
                     required
+                    placeholder="e.g. Apollo Clinic - Ernakulam"
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
-                    placeholder="e.g. HealthSync Central - Kochi"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                    className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden"
                   />
                 </div>
 
+                {/* Branch Code & Assistant Gateway PIN */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Branch Code (URL Slug)</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Branch Code <span className="text-red-500">*</span>
+                    </label>
                     <input
                       type="text"
                       required
+                      placeholder="e.g. APL-EKM"
                       value={formCode}
                       onChange={(e) => setFormCode(e.target.value.toUpperCase())}
-                      placeholder="e.g. HS-KOC"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono outline-none focus:border-blue-500 focus:bg-white transition"
+                      className="w-full px-3.5 py-2 text-xs font-mono font-bold border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Assistant Gateway PIN</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Gateway PIN <span className="text-red-500">*</span>
+                    </label>
                     <input
                       type="text"
                       required
                       maxLength={6}
+                      placeholder="1234"
                       value={formPin}
                       onChange={(e) => setFormPin(e.target.value)}
-                      placeholder="1234"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono outline-none focus:border-blue-500 focus:bg-white transition"
+                      className="w-full px-3.5 py-2 text-xs font-mono font-bold border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden"
                     />
                   </div>
                 </div>
 
+                {/* Physical Address */}
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Address &amp; Landmark</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Physical Address
+                  </label>
                   <input
                     type="text"
+                    placeholder="Physical street address & landmark"
                     value={formAddress}
                     onChange={(e) => setFormAddress(e.target.value)}
-                    placeholder="e.g. Kakkanad, Kochi, Kerala"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                    className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden"
                   />
                 </div>
 
+                {/* WhatsApp Contact & Daily Quota */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Helpline Phone</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      WhatsApp Contact
+                    </label>
                     <input
-                      type="text"
+                      type="tel"
+                      placeholder="+91 98460 12345"
                       value={formPhone}
                       onChange={(e) => setFormPhone(e.target.value)}
-                      placeholder="+91 98470 12345"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                      className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Daily Max Token Quota</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Daily Quota
+                    </label>
                     <input
                       type="number"
+                      min="1"
+                      max="500"
+                      placeholder="40"
                       value={formQuota}
                       onChange={(e) => setFormQuota(e.target.value)}
-                      placeholder="40"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
+                      className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">
-                      WhatsApp Display Number
-                    </label>
-                    <input
-                      type="text"
-                      value={formWaDisplayNumber}
-                      onChange={(e) => setFormWaDisplayNumber(e.target.value)}
-                      placeholder="+91 98472 55667"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:bg-white transition"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">
-                      Meta Phone ID
-                    </label>
-                    <input
-                      type="text"
-                      value={formWaPhoneId}
-                      onChange={(e) => setFormWaPhoneId(e.target.value)}
-                      placeholder="e.g. 109823471029384"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-[11px] outline-none focus:border-blue-500 focus:bg-white transition"
-                    />
-                  </div>
+                {/* WhatsApp Cloud Phone Number ID (Optional) */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    WhatsApp Cloud Phone Number ID <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 109823471029384"
+                    value={formWaPhoneId}
+                    onChange={(e) => setFormWaPhoneId(e.target.value)}
+                    className="w-full px-3.5 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden"
+                  />
                 </div>
 
-                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                {/* Modal Footer */}
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition cursor-pointer"
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSaving}
-                    className="px-5 py-2 bg-[#2563EB] hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs transition cursor-pointer disabled:opacity-60"
+                    className="px-5 py-2 text-xs font-bold bg-[#2563EB] hover:bg-blue-700 text-white rounded-xl shadow-xs transition cursor-pointer disabled:opacity-50"
                   >
-                    {isSaving ? 'Saving...' : editingLoc ? 'Update Branch' : 'Create Branch'}
+                    {isSaving ? 'Saving...' : editingLoc ? 'Save Changes' : 'Create Branch'}
                   </button>
                 </div>
               </form>
@@ -466,5 +503,5 @@ export function BranchLocationManager({
     </div>
   );
 }
-export default BranchLocationManager;
 
+export default BranchLocationManager;

@@ -63,11 +63,10 @@ import {
 import { DbDoctor, DbClinicLocation } from '@/types/database';
 
 import EcgLoadingScreen from '@/components/loading/EcgLoadingScreen';
+import { EcgActionLoader } from '@/components/loading/EcgActionLoader';
 import { SideMenu, NavItemConfig } from '@/components/layout/SideMenu';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { GlobalPatientSearch } from '@/components/common/GlobalPatientSearch';
-import { GlobalPharmacySearch } from '@/components/common/GlobalPharmacySearch';
-import { GlobalSettingsSearch } from '@/components/common/GlobalSettingsSearch';
 import { GlobalAnalyticsSearch } from '@/components/common/GlobalAnalyticsSearch';
 import { NavigationDock } from '@/components/layout/NavigationDock';
 import { DoctorAuthModal } from '@/components/auth/DoctorAuthModal';
@@ -225,6 +224,11 @@ function DashboardContent() {
     currentLocationRef.current = currentLocation;
   }, [currentLocation]);
 
+  const [switchingBranch, setSwitchingBranch] = useState<{
+    branchName: string;
+    branchCode?: string;
+  } | null>(null);
+
   const [currentClinicId, setCurrentClinicId] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('healthsync_active_clinic_id') || null;
@@ -370,7 +374,7 @@ function DashboardContent() {
       const [dbQueue, dbInventory, dbDoctors, locs] = await Promise.all([
         fetchQueueFromDb(undefined, undefined, locId, activeClinic),
         fetchInventoryFromDb(activeClinic, locId),
-        getDoctors(activeClinic),
+        getDoctors(activeClinic, locId),
         fetchClinicLocations(activeClinic),
       ]);
 
@@ -406,24 +410,64 @@ function DashboardContent() {
     }
   }, [currentClinicId]);
 
-  const handleSelectLocation = useCallback((loc: DbClinicLocation) => {
+  const handleSelectLocation = useCallback(async (loc: DbClinicLocation) => {
+    if (currentLocationRef.current?.id === loc.id) {
+      return;
+    }
+
+    setSwitchingBranch({
+      branchName: loc.branch_name,
+      branchCode: loc.branch_code || undefined,
+    });
+
+    const activeClinic = loc.clinic_id || currentClinicId || undefined;
+    if (loc.clinic_id && loc.clinic_id !== currentClinicId) {
+      setCurrentClinicId(loc.clinic_id);
+    }
     setCurrentLocation(loc);
-    const activeClinic =
-      loc.clinic_id ||
-      currentClinicId ||
-      (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) ||
-      undefined;
+    currentLocationRef.current = loc;
+
     if (typeof window !== 'undefined') {
       localStorage.setItem('healthsync_active_location_id', loc.id);
       if (activeClinic) {
         localStorage.setItem('healthsync_active_clinic_id', activeClinic);
       }
     }
-    fetchQueueFromDb(undefined, undefined, loc.id, activeClinic).then((fresh) => {
-      if (fresh && Array.isArray(fresh)) {
-        setQueue(sortQueueWithCompletedAtEnd(fresh));
+
+    const startTime = Date.now();
+
+    try {
+      await Promise.all([
+        fetchQueueFromDb(undefined, undefined, loc.id, activeClinic).then((fresh) => {
+          if (fresh && Array.isArray(fresh)) {
+            setQueue(sortQueueWithCompletedAtEnd(fresh));
+          }
+        }),
+        fetchInventoryFromDb(activeClinic, loc.id).then((freshInv) => {
+          if (freshInv && freshInv.length > 0) {
+            setInventory(freshInv);
+          } else {
+            setInventory([]);
+          }
+        }),
+        getDoctors(activeClinic, loc.id).then((freshDocs) => {
+          if (freshDocs && freshDocs.length > 0) {
+            setAvailableDoctors(freshDocs);
+            setBookDoctorId((prev) => (freshDocs.some((d) => d.id === prev) ? prev : freshDocs[0].id));
+            setWalkinDoctorId((prev) => (freshDocs.some((d) => d.id === prev) ? prev : freshDocs[0].id));
+          }
+        }),
+      ]);
+
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 500) {
+        await new Promise((resolve) => setTimeout(resolve, 500 - elapsed));
       }
-    });
+    } catch (err) {
+      console.warn('Failed to sync data while switching branch:', err);
+    } finally {
+      setSwitchingBranch(null);
+    }
   }, [currentClinicId]);
 
   useEffect(() => {
@@ -436,7 +480,7 @@ function DashboardContent() {
         const [dbQueue, dbInventory, dbDoctors, locs] = await Promise.all([
           fetchQueueFromDb(undefined, undefined, storedLoc || undefined, storedClinic || undefined),
           fetchInventoryFromDb(storedClinic || undefined, storedLoc || undefined),
-          getDoctors(storedClinic || undefined),
+          getDoctors(storedClinic || undefined, storedLoc || undefined),
           fetchClinicLocations(storedClinic || undefined),
         ]);
 
@@ -445,6 +489,19 @@ function DashboardContent() {
             setClinicLocations(locs);
             const matched = locs.find((l) => l.id === storedLoc) || locs[0];
             setCurrentLocation(matched);
+            const activeClinic = matched?.clinic_id || storedClinic;
+            if (activeClinic && activeClinic !== currentClinicId) {
+              setCurrentClinicId(activeClinic);
+            }
+            if (matched) {
+              getDoctors(activeClinic || undefined, matched.id).then((branchDocs) => {
+                if (isMounted && branchDocs && branchDocs.length > 0) {
+                  setAvailableDoctors(branchDocs);
+                  setBookDoctorId((prev) => (branchDocs.some((d) => d.id === prev) ? prev : branchDocs[0].id));
+                  setWalkinDoctorId((prev) => (branchDocs.some((d) => d.id === prev) ? prev : branchDocs[0].id));
+                }
+              });
+            }
           }
           if (dbQueue) {
             setQueue(sortQueueWithCompletedAtEnd(dbQueue));
@@ -520,6 +577,7 @@ function DashboardContent() {
   const [showWalkinModal, setShowWalkinModal] = useState(false);
   const [showDoctorEditModal, setShowDoctorEditModal] = useState(false);
   const [isWalkinSubmitting, setIsWalkinSubmitting] = useState(false);
+  const [walkinDoctorId, setWalkinDoctorId] = useState('');
   const [walkinName, setWalkinName] = useState('');
   const [walkinAge, setWalkinAge] = useState('');
   const [walkinPhone, setWalkinPhone] = useState('');
@@ -965,12 +1023,14 @@ function DashboardContent() {
     const ageNum = parseInt(walkinAge, 10);
     setIsWalkinSubmitting(true);
     try {
+      const targetDocId = walkinDoctorId || bookDoctorId || availableDoctors[0]?.id || undefined;
       const res = await registerWalkinPatientDb({
         name: walkinName.trim(),
         age: ageNum,
         gender: walkinGender,
         phone: walkinPhone.trim(),
         priority: walkinPriority,
+        doctorId: targetDocId,
         locationId: currentLocation?.id,
         clinicId: currentClinicId || currentLocation?.clinic_id || undefined,
       });
@@ -991,7 +1051,7 @@ function DashboardContent() {
       } else {
         const msg = res?.message || 'Could not register walk-in patient.';
         const isQuotaReached = msg.toLowerCase().includes('quota');
-        const canSwitchUrgent = msg.toLowerCase().includes('urgent');
+        const canSwitchUrgent = msg.toLowerCase().includes('urgent') && config.allow_quota_override !== false;
 
         showNotification({
           type: isQuotaReached ? 'warning' : 'error',
@@ -1554,6 +1614,10 @@ function DashboardContent() {
   return (
     <>
       <EcgLoadingScreen />
+      <EcgActionLoader
+        isLoading={Boolean(switchingBranch)}
+        fullscreen={true}
+      />
 
       <AnimatePresence mode="wait">
         {!isLoading && portalMode === 'gateway' && (
@@ -1571,13 +1635,13 @@ function DashboardContent() {
                 if (accessPinRes.clinic_id !== clinic.id) {
                   return {
                     success: false,
-                    message: `This PIN belongs to ${accessPinRes.clinic_name || 'a different clinic'}.`,
+                    message: 'Invalid PIN. Please check and try again.',
                   };
                 }
                 if (branch && accessPinRes.has_branch && accessPinRes.location_id && accessPinRes.location_id !== branch.id) {
                   return {
                     success: false,
-                    message: `This PIN is assigned to ${accessPinRes.branch_name || 'another branch'}.`,
+                    message: 'Invalid PIN. Please check and try again.',
                   };
                 }
 
@@ -1651,6 +1715,13 @@ function DashboardContent() {
                   }
                 }
 
+                const freshDocs = await getDoctors(clinicId, matched?.id || locationId);
+                if (freshDocs && freshDocs.length > 0) {
+                  setAvailableDoctors(freshDocs);
+                  setBookDoctorId((prev) => (freshDocs.some((d) => d.id === prev) ? prev : freshDocs[0].id));
+                  setWalkinDoctorId((prev) => (freshDocs.some((d) => d.id === prev) ? prev : freshDocs[0].id));
+                }
+
                 setPortalMode('dashboard');
                 setActiveSection('dashboard');
                 showToast('success', 'Access Granted', accessPinRes.label || 'Authenticated successfully');
@@ -1664,13 +1735,13 @@ function DashboardContent() {
                 if (branchRes.clinic_id && branchRes.clinic_id !== clinic.id) {
                   return {
                     success: false,
-                    message: 'This gateway PIN belongs to a different clinic.',
+                    message: 'Invalid PIN. Please check and try again.',
                   };
                 }
                 if (branch && branchRes.branch_id !== branch.id) {
                   return {
                     success: false,
-                    message: `This PIN is not assigned to ${branch.branch_name}.`,
+                    message: 'Invalid PIN. Please check and try again.',
                   };
                 }
 
@@ -1977,28 +2048,14 @@ function DashboardContent() {
                 </motion.section>
               )}
 
-              {isMobile && (
+              {isMobile && !['settings', 'admin_doctors', 'inventory'].includes(activeSection) && (
                 <motion.div
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.15 }}
                   className="relative w-full mb-6"
                 >
-                  {activeSection === 'inventory' ? (
-                    <GlobalPharmacySearch
-                      isMobile
-                      inventory={inventory}
-                      placeholder="Search medicines..."
-                    />
-                  ) : activeSection === 'settings' ? (
-                    <GlobalSettingsSearch
-                      isMobile
-                      placeholder="Search settings..."
-                      onSelectSetting={(key) => {
-                        setSearchQuery(key);
-                      }}
-                    />
-                  ) : activeSection === 'analytics' ? (
+                  {activeSection === 'analytics' ? (
                     <GlobalAnalyticsSearch
                       isMobile
                       placeholder="Search analytics & insights..."
@@ -2065,6 +2122,7 @@ function DashboardContent() {
                     isLoggedIn={isDoctorUnlocked}
                     locationId={currentLocation?.id}
                     clinicId={currentClinicId || currentLocation?.clinic_id || undefined}
+                    branchName={currentLocation?.branch_name || undefined}
                     onRegisterWalkin={() => setShowWalkinModal(true)}
                     onViewAllQueue={() => setActiveSection('assistant')}
                     onReallocate={handleReallocate}
@@ -2121,6 +2179,7 @@ function DashboardContent() {
                       initialQueue={queue}
                       locationId={currentLocation?.id}
                       clinicId={currentClinicId || currentLocation?.clinic_id || undefined}
+                      branchName={currentLocation?.branch_name || undefined}
                       onOpenConsultation={(patientId) => {
                         startConsultation(patientId);
                         setActiveSection('consult');
@@ -2148,6 +2207,7 @@ function DashboardContent() {
                     queue={queue}
                     locationId={currentLocation?.id}
                     clinicId={currentClinicId || currentLocation?.clinic_id || undefined}
+                    branchName={currentLocation?.branch_name || undefined}
                     onRegisterWalkin={() => setShowWalkinModal(true)}
                     onReallocate={handleReallocate}
                     onCancelAppointment={handleCancelAppointment}
@@ -2193,6 +2253,9 @@ function DashboardContent() {
                 {activeSection === 'inventory' && (
                   <InventoryView
                     inventory={inventory}
+                    clinicId={currentClinicId || currentLocation?.clinic_id || undefined}
+                    locationId={currentLocation?.id || undefined}
+                    branchName={currentLocation?.branch_name || undefined}
                     newGeneric={newGeneric}
                     setNewGeneric={setNewGeneric}
                     newBrand={newBrand}
@@ -2219,6 +2282,7 @@ function DashboardContent() {
                     onSearchChange={setSearchQuery}
                     locationId={currentLocation?.id}
                     clinicId={currentClinicId || currentLocation?.clinic_id || undefined}
+                    branchName={currentLocation?.branch_name || undefined}
                   />
                 )}
 
@@ -2275,6 +2339,13 @@ function DashboardContent() {
                       onSearchChange={setSearchQuery}
                       currentLocation={currentLocation}
                       onSelectLocation={handleSelectLocation}
+                      clinicId={currentLocation?.clinic_id || currentClinicId || undefined}
+                      clinicLocations={clinicLocations}
+                      onRefreshLocations={async () => {
+                        const activeClinic = currentLocation?.clinic_id || currentClinicId || undefined;
+                        const fresh = await fetchClinicLocations(activeClinic);
+                        if (fresh && fresh.length > 0) setClinicLocations(fresh);
+                      }}
                     />
                   )
                 )}
@@ -2346,8 +2417,12 @@ function DashboardContent() {
             setWalkinGender={setWalkinGender}
             walkinPriority={walkinPriority}
             setWalkinPriority={setWalkinPriority}
+            availableDoctors={availableDoctors}
+            selectedDoctorId={walkinDoctorId || bookDoctorId || availableDoctors[0]?.id || ''}
+            setSelectedDoctorId={setWalkinDoctorId}
             onSubmit={handleRegisterWalkin}
             isSubmitting={isWalkinSubmitting}
+            allowQuotaOverride={config.allow_quota_override !== false}
           />
 
           <DoctorProfileEditModal

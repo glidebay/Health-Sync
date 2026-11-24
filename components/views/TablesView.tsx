@@ -77,6 +77,7 @@ interface TablesViewProps {
   onPrintRecord?: (patient: Patient) => void;
   locationId?: string;
   clinicId?: string;
+  branchName?: string;
 }
 
 export function TablesView({
@@ -85,6 +86,7 @@ export function TablesView({
   onPrintRecord,
   locationId,
   clinicId,
+  branchName,
 }: TablesViewProps) {
   const todayIST = useMemo(() => getTodayIST(), []);
   const [selectedDate, setSelectedDate] = useState<string>(todayIST);
@@ -109,8 +111,9 @@ export function TablesView({
       if (!silent) setIsLoading(true);
       else setIsRefreshing(true);
       try {
+        const queryDate = selectedDate === 'ALL' ? null : selectedDate;
         const visitLogRes = await fetchBranchVisitLogDb({
-          date: selectedDate,
+          date: queryDate,
           status: 'All',
           locationId,
           clinicId,
@@ -120,7 +123,7 @@ export function TablesView({
           setDbPatients(visitLogRes.visits);
         } else {
           const fetched = await fetchPatientAppointmentsFromDb({
-            date: selectedDate,
+            date: queryDate || undefined,
             status: 'All',
             locationId,
             clinicId,
@@ -179,7 +182,10 @@ export function TablesView({
 
   const allDatePatients = useMemo(() => {
     if (dbPatients !== null) return dbPatients;
-    return initialQueue.filter((p) => (p.appointmentDate ? p.appointmentDate === selectedDate : true));
+    return initialQueue.filter((p) => {
+      if (selectedDate === 'ALL') return true;
+      return p.appointmentDate ? p.appointmentDate === selectedDate : true;
+    });
   }, [dbPatients, initialQueue, selectedDate]);
 
   const completedPatients = useMemo(() => {
@@ -254,19 +260,36 @@ export function TablesView({
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-1 gap-3">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
-            Visit Logs
+          <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2 flex-wrap">
+            <span>Visit Logs</span>
+            {branchName && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                {branchName}
+              </span>
+            )}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Verified encounter records and cancellation audits for {formatDisplayDate(selectedDate, todayIST)}
+            Verified encounter records and cancellation audits for {selectedDate === 'ALL' ? 'All Recent Dates' : formatDisplayDate(selectedDate, todayIST)}
           </p>
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          <button
+            type="button"
+            onClick={() => setSelectedDate((prev) => (prev === 'ALL' ? todayIST : 'ALL'))}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              selectedDate === 'ALL'
+                ? 'bg-[#2563EB] text-white shadow-xs'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+            }`}
+          >
+            {selectedDate === 'ALL' ? 'Showing All Recent' : 'All Recent Logs'}
+          </button>
+
           <div className="relative flex items-center bg-white rounded-2xl border border-slate-200 p-1 shadow-xs">
             <button
               type="button"
-              onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
+              onClick={() => setSelectedDate(shiftDate(selectedDate === 'ALL' ? todayIST : selectedDate, -1))}
               className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition cursor-pointer"
               title="Previous day"
             >
@@ -276,14 +299,14 @@ export function TablesView({
             <div className="relative flex items-center gap-2 px-2.5 py-0.5 cursor-pointer">
               <Calendar className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
               <span className="text-xs font-bold text-slate-800 select-none whitespace-nowrap">
-                {formatDisplayDate(selectedDate, todayIST)}
+                {selectedDate === 'ALL' ? 'All Dates' : formatDisplayDate(selectedDate, todayIST)}
               </span>
               <span className="text-xs font-normal text-slate-400 select-none whitespace-nowrap">
-                {selectedDate}
+                {selectedDate === 'ALL' ? 'Recent' : selectedDate}
               </span>
               <input
                 type="date"
-                value={selectedDate}
+                value={selectedDate === 'ALL' ? '' : selectedDate}
                 onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
                 className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                 title="Pick a date"
@@ -292,7 +315,7 @@ export function TablesView({
 
             <button
               type="button"
-              onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
+              onClick={() => setSelectedDate(shiftDate(selectedDate === 'ALL' ? todayIST : selectedDate, 1))}
               className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition cursor-pointer"
               title="Next day"
             >

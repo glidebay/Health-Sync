@@ -62,6 +62,7 @@ interface DashboardViewProps {
   onRefresh?: () => Promise<void> | void;
   locationId?: string;
   clinicId?: string;
+  branchName?: string;
 }
 
 export function DashboardView({
@@ -85,6 +86,7 @@ export function DashboardView({
   onRefresh,
   locationId,
   clinicId,
+  branchName,
 }: DashboardViewProps) {
   const [selectedPatientForReschedule, setSelectedPatientForReschedule] = useState<Patient | null>(null);
   const [selectedPatientForCancel, setSelectedPatientForCancel] = useState<Patient | null>(null);
@@ -455,8 +457,13 @@ export function DashboardView({
                 <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
                   HEALTHSYNC • CLINIC OPS
                 </span>
-                <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
-                  Smart Patient Flow &amp; Chamber Triage
+                <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2 flex-wrap">
+                  <span>Smart Patient Flow &amp; Chamber Triage</span>
+                  {branchName && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                      {branchName}
+                    </span>
+                  )}
                 </h2>
                 <p className="text-xs text-slate-500 leading-relaxed">
                   Direct token sequencing, automated WhatsApp reminders, and real-time consultation coordination with zero waiting congestion.

@@ -96,7 +96,6 @@ export default function EcgLoadingScreen() {
               />
             </div>
 
-
             <p className="text-[11px] font-display font-semibold tracking-[0.25em] uppercase mb-6" style={{ color: 'rgba(37,99,235,0.5)' }}>
               INITIALIZING SYSTEM...
             </p>

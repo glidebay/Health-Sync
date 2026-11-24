@@ -1,15 +1,32 @@
--- ============================================================================
--- RPC: register_walk_in_patient (Branch-Scoped, Quota-Aware, Collision-Safe)
--- ============================================================================
+-- ════════════════════════════════════════════════════════════════════════════
+-- STEP 1: DROP ALL OLD CONFLICTING VERSIONS (Removes ambiguity)
+-- ════════════════════════════════════════════════════════════════════════════
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN 
+    SELECT oid::regprocedure AS func_sig
+    FROM pg_proc
+    WHERE proname = 'register_walk_in_patient'
+      AND pronamespace = 'public'::regnamespace
+  LOOP
+    EXECUTE 'DROP FUNCTION ' || r.func_sig || ' CASCADE;';
+  END LOOP;
+END $$;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- STEP 2: INSTALL THE NEW ZERO-EGRESS BRANCH-WISE FUNCTION
+-- ════════════════════════════════════════════════════════════════════════════
 CREATE OR REPLACE FUNCTION public.register_walk_in_patient(
   p_full_name       text,
   p_phone_number    text,
-  p_doctor_id       uuid,
-  p_location_id     uuid DEFAULT NULL,
-  p_clinic_id       uuid DEFAULT NULL,
+  p_location_id     text,                         -- Branch ID (e.g. 'loc-apollo-01')
+  p_doctor_id       uuid DEFAULT NULL,            -- Doctor ID (Optional: auto-assigns if NULL)
+  p_clinic_id       text DEFAULT NULL,            -- Clinic ID (Optional: resolved from branch)
   p_age             integer DEFAULT NULL,
   p_gender          text DEFAULT NULL,
-  p_priority        text DEFAULT NULL,
+  p_priority        text DEFAULT 'Normal',        -- 'Normal' or 'Urgent'
   p_scheduled_time  timestamptz DEFAULT NULL
 )
 RETURNS jsonb
@@ -23,11 +40,15 @@ DECLARE
   v_appointment_id uuid;
   v_clean_phone text;
   v_clean_name text;
+  v_resolved_doc_id uuid;
+  v_doctor_name text;
+  v_resolved_clinic_id uuid;
+  v_branch_name text;
   v_daily_quota integer;
   v_slot_duration integer;
-  v_allow_override text;
-  v_today_count integer;
-  v_token_no integer;
+  v_allow_override text := 'true';
+  v_today_count integer := 0;
+  v_token_no integer := 1;
   v_start_time time;
   v_end_time time;
   v_start_timestamptz timestamptz;
@@ -36,79 +57,138 @@ DECLARE
   v_booking_time timestamptz;
   v_found boolean := false;
 BEGIN
-  -- 1. READ APP_CONFIG
-  SELECT coalesce(value::int, 20) INTO v_daily_quota   FROM app_config WHERE key = 'daily_quota';
-  SELECT coalesce(value::int, 15) INTO v_slot_duration  FROM app_config WHERE key = 'slot_duration_mins';
-  SELECT coalesce(value, 'true')  INTO v_allow_override FROM app_config WHERE key = 'allow_quota_override';
-
-  -- 2. VALIDATE NAME & PHONE
-  v_clean_name := trim(coalesce(p_full_name, ''));
+  -- 1. Input Sanitization
+  v_clean_name := trim(COALESCE(p_full_name, ''));
   IF v_clean_name = '' OR length(v_clean_name) < 2 THEN
-    RETURN jsonb_build_object('success', false, 'error_code', 'MISSING_NAME',
-      'error_message', 'Patient name must be at least 2 characters.');
+    RETURN jsonb_build_object('success', false, 'error_code', 'MISSING_NAME', 'error_message', 'Patient name must be at least 2 characters.');
   END IF;
 
-  v_clean_phone := trim(coalesce(p_phone_number, ''));
-  IF v_clean_phone = '' OR length(regexp_replace(v_clean_phone, '[^0-9]', '', 'g')) < 10 THEN
-    RETURN jsonb_build_object('success', false, 'error_code', 'MISSING_PHONE',
-      'error_message', 'Phone number must contain at least 10 digits.');
+  v_clean_phone := regexp_replace(trim(COALESCE(p_phone_number, '')), '[^0-9]', '', 'g');
+  IF length(v_clean_phone) < 10 THEN
+    RETURN jsonb_build_object('success', false, 'error_code', 'MISSING_PHONE', 'error_message', 'Phone number must contain at least 10 valid digits.');
   END IF;
 
-  -- 3. VERIFY DOCTOR
-  IF NOT EXISTS (SELECT 1 FROM doctors WHERE id = p_doctor_id) THEN
-    RETURN jsonb_build_object('success', false, 'error_code', 'DOCTOR_NOT_FOUND',
-      'error_message', 'Selected doctor not found.');
+  -- 2. Branch Resolution
+  IF p_location_id IS NULL OR trim(p_location_id) = '' THEN
+    RETURN jsonb_build_object('success', false, 'error_code', 'MISSING_BRANCH', 'error_message', 'Branch location is required.');
   END IF;
 
-  -- 4. QUOTA CHECK (branch-scoped)
-  PERFORM 1 FROM doctors WHERE id = p_doctor_id FOR UPDATE;
+  SELECT loc.branch_name, loc.clinic_id, COALESCE(loc.daily_quota, 40), COALESCE(loc.slot_duration_mins, 15)
+  INTO v_branch_name, v_resolved_clinic_id, v_daily_quota, v_slot_duration
+  FROM public.clinic_locations loc
+  WHERE loc.id::text = trim(p_location_id) AND loc.is_active = true
+  LIMIT 1;
+
+  IF v_branch_name IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error_code', 'BRANCH_NOT_FOUND', 'error_message', 'Selected clinic branch is invalid or inactive.');
+  END IF;
+
+  IF p_clinic_id IS NOT NULL AND trim(p_clinic_id) <> '' THEN
+    v_resolved_clinic_id := p_clinic_id::uuid;
+  END IF;
+
+  -- 3. Branch-Wise Doctor Resolution
+  IF p_doctor_id IS NOT NULL THEN
+    SELECT d.id, d.full_name, COALESCE(d.daily_quota, v_daily_quota)
+    INTO v_resolved_doc_id, v_doctor_name, v_daily_quota
+    FROM public.doctors d
+    WHERE d.id = p_doctor_id;
+
+    IF v_resolved_doc_id IS NULL THEN
+      RETURN jsonb_build_object('success', false, 'error_code', 'DOCTOR_NOT_FOUND', 'error_message', 'Selected doctor not found.');
+    END IF;
+
+    -- Validate branch assignment
+    IF NOT EXISTS (
+      SELECT 1 FROM public.access_pins ap
+      WHERE ap.doctor_id::text = v_resolved_doc_id::text
+        AND (ap.location_id::text = trim(p_location_id) OR ap.location_id IS NULL)
+        AND ap.is_active = true
+    ) AND NOT EXISTS (
+      SELECT 1 FROM public.doctors doc
+      WHERE doc.id = v_resolved_doc_id AND doc.clinic_id = v_resolved_clinic_id
+    ) THEN
+      RETURN jsonb_build_object('success', false, 'error_code', 'DOCTOR_BRANCH_MISMATCH',
+        'error_message', v_doctor_name || ' is not practicing at ' || v_branch_name || '.');
+    END IF;
+  ELSE
+    -- Auto-select active doctor with smallest queue at this branch
+    SELECT d.id, d.full_name, COALESCE(d.daily_quota, v_daily_quota)
+    INTO v_resolved_doc_id, v_doctor_name, v_daily_quota
+    FROM public.access_pins ap
+    JOIN public.doctors d ON d.id::text = ap.doctor_id::text
+    WHERE ap.location_id::text = trim(p_location_id)
+      AND ap.doctor_id IS NOT NULL
+      AND ap.is_active = true
+    ORDER BY (
+      SELECT count(*) FROM public.appointments a 
+      WHERE a.doctor_id = d.id 
+        AND a.location_id::text = trim(p_location_id)
+        AND date(a.scheduled_time AT TIME ZONE 'Asia/Kolkata') = current_date
+        AND a.status NOT IN ('Cancelled', 'Reallocated')
+    ) ASC
+    LIMIT 1;
+
+    IF v_resolved_doc_id IS NULL THEN
+      SELECT d.id, d.full_name, COALESCE(d.daily_quota, v_daily_quota)
+      INTO v_resolved_doc_id, v_doctor_name, v_daily_quota
+      FROM public.doctors d
+      WHERE d.clinic_id = v_resolved_clinic_id
+      LIMIT 1;
+    END IF;
+
+    IF v_resolved_doc_id IS NULL THEN
+      RETURN jsonb_build_object('success', false, 'error_code', 'NO_DOCTOR_AVAILABLE', 'error_message', 'No active doctor found at ' || v_branch_name || '.');
+    END IF;
+  END IF;
+
+  -- 4. Quota Gate
+  SELECT COALESCE(value, 'true') INTO v_allow_override FROM public.app_config WHERE key = 'allow_quota_override';
+
+  PERFORM 1 FROM public.doctors WHERE id = v_resolved_doc_id FOR UPDATE;
+
   SELECT count(*) INTO v_today_count
-  FROM appointments
-  WHERE doctor_id = p_doctor_id
-    AND (p_location_id IS NULL OR location_id = p_location_id)
-    AND (p_clinic_id   IS NULL OR clinic_id   = p_clinic_id)
+  FROM public.appointments
+  WHERE doctor_id = v_resolved_doc_id
+    AND location_id::text = trim(p_location_id)
     AND date(scheduled_time AT TIME ZONE 'Asia/Kolkata') = current_date
     AND status NOT IN ('Cancelled', 'Reallocated');
 
   IF v_today_count >= v_daily_quota THEN
     IF p_priority = 'Urgent' AND v_allow_override = 'true' THEN
-      NULL; -- Emergency bypass
+      NULL;
     ELSE
-      RETURN jsonb_build_object('success', false, 'error_code', 'QUOTA_FULL',
-        'error_message', 'Daily quota of ' || v_daily_quota || ' patients reached. ' ||
-        CASE WHEN v_allow_override = 'true'
-          THEN 'Mark Priority as Urgent for emergency walk-in.'
-          ELSE 'Emergency override is disabled in App Settings.' END);
+      RETURN jsonb_build_object(
+        'success', false,
+        'error_code', 'QUOTA_FULL',
+        'error_message', v_doctor_name || ' has reached daily quota of ' || v_daily_quota || ' at ' || v_branch_name || '.'
+      );
     END IF;
   END IF;
 
-  -- 5. FIND NEAREST AVAILABLE SLOT
+  -- 5. Calculate Slot with Double-Booking Prevention
   IF p_scheduled_time IS NOT NULL THEN
     v_booking_time := p_scheduled_time;
-    IF EXISTS (
-      SELECT 1 FROM appointments
-      WHERE doctor_id = p_doctor_id
-        AND (p_location_id IS NULL OR location_id = p_location_id)
+    -- Ensure provided time does not collide with existing appointment for this doctor
+    WHILE EXISTS (
+      SELECT 1 FROM public.appointments
+      WHERE doctor_id = v_resolved_doc_id
         AND scheduled_time = v_booking_time
         AND status NOT IN ('Cancelled', 'Reallocated')
-    ) THEN
-      RETURN jsonb_build_object('success', false, 'error_code', 'SLOT_TAKEN',
-        'error_message', 'This slot is already booked.',
-        'suggested_time', to_char((v_booking_time + (v_slot_duration || ' minutes')::interval)
-          AT TIME ZONE 'Asia/Kolkata', 'hh12:mi AM'));
-    END IF;
+    ) LOOP
+      v_booking_time := v_booking_time + (v_slot_duration || ' minutes')::interval;
+    END LOOP;
   ELSE
     SELECT start_time, end_time INTO v_start_time, v_end_time
-    FROM doctor_schedules
-    WHERE doctor_id = p_doctor_id
+    FROM public.doctor_schedules
+    WHERE doctor_id = v_resolved_doc_id
       AND day_of_week IN (
         extract(dow FROM current_date)::smallint,
-        extract(isodow FROM current_date)::smallint
-      )
+        extract(isodow FROM current_date)::smallint)
     LIMIT 1;
 
-    v_start_time := coalesce(v_start_time, time '09:00:00');
-    v_end_time   := coalesce(v_end_time,   time '18:00:00');
+    v_start_time := COALESCE(v_start_time, time '08:00:00');
+    v_end_time   := COALESCE(v_end_time,   time '22:00:00');
     v_start_timestamptz := (current_date || ' ' || v_start_time || ' Asia/Kolkata')::timestamptz;
     v_end_timestamptz   := (current_date || ' ' || v_end_time   || ' Asia/Kolkata')::timestamptz;
 
@@ -124,9 +204,8 @@ BEGIN
 
     WHILE v_candidate_slot < v_end_timestamptz LOOP
       IF NOT EXISTS (
-        SELECT 1 FROM appointments
-        WHERE doctor_id = p_doctor_id
-          AND (p_location_id IS NULL OR location_id = p_location_id)
+        SELECT 1 FROM public.appointments
+        WHERE doctor_id = v_resolved_doc_id
           AND scheduled_time = v_candidate_slot
           AND status NOT IN ('Cancelled', 'Reallocated')
       ) THEN
@@ -138,69 +217,100 @@ BEGIN
     END LOOP;
 
     IF NOT v_found THEN
-      v_booking_time := now();
+      -- Out of hours / late evening walk-in: calculate forward from current time
+      v_booking_time := date_trunc('hour', now()) +
+        (ceil(extract(minute FROM now())::numeric / v_slot_duration) * v_slot_duration * interval '1 minute');
+      WHILE EXISTS (
+        SELECT 1 FROM public.appointments
+        WHERE doctor_id = v_resolved_doc_id
+          AND scheduled_time = v_booking_time
+          AND status NOT IN ('Cancelled', 'Reallocated')
+      ) LOOP
+        v_booking_time := v_booking_time + (v_slot_duration || ' minutes')::interval;
+      END LOOP;
     END IF;
   END IF;
 
-  -- 6. UPSERT PATIENT (branch-scoped duplicate check)
-  SELECT id INTO v_patient_id FROM patients WHERE phone_number = v_clean_phone;
+  -- 6. Upsert Patient
+  SELECT id INTO v_patient_id FROM public.patients WHERE phone_number = v_clean_phone;
+
   IF v_patient_id IS NOT NULL THEN
     IF EXISTS (
-      SELECT 1 FROM appointments
-      WHERE patient_id  = v_patient_id
-        AND doctor_id   = p_doctor_id
-        AND (p_location_id IS NULL OR location_id = p_location_id)
+      SELECT 1 FROM public.appointments
+      WHERE patient_id = v_patient_id
+        AND doctor_id = v_resolved_doc_id
+        AND location_id::text = trim(p_location_id)
         AND date(scheduled_time AT TIME ZONE 'Asia/Kolkata') = current_date
         AND status IN ('Waiting', 'In Progress')
     ) THEN
-      RETURN jsonb_build_object('success', false, 'error_code', 'DUPLICATE_VISIT',
-        'error_message', 'Patient already has an active visit in this branch today.');
+      RETURN jsonb_build_object('success', false, 'error_code', 'DUPLICATE_VISIT', 'error_message', 'Patient already has an active token today.');
     END IF;
 
-    UPDATE patients
+    UPDATE public.patients
     SET full_name = v_clean_name,
-        age       = coalesce(p_age,    age),
-        gender    = coalesce(p_gender, gender)
+        age = COALESCE(p_age, age),
+        gender = COALESCE(p_gender, gender)
     WHERE id = v_patient_id;
   ELSE
-    INSERT INTO patients (full_name, phone_number, age, gender)
+    INSERT INTO public.patients (full_name, phone_number, age, gender)
     VALUES (v_clean_name, v_clean_phone, p_age, p_gender)
     RETURNING id INTO v_patient_id;
   END IF;
 
-  -- 7. SEQUENTIAL TOKEN (branch-scoped)
+  -- 7. Generate Token
   SELECT count(*) + 1 INTO v_token_no
-  FROM appointments
-  WHERE doctor_id = p_doctor_id
-    AND (p_location_id IS NULL OR location_id = p_location_id)
-    AND (p_clinic_id   IS NULL OR clinic_id   = p_clinic_id)
+  FROM public.appointments
+  WHERE doctor_id = v_resolved_doc_id
+    AND location_id::text = trim(p_location_id)
     AND date(scheduled_time AT TIME ZONE 'Asia/Kolkata') = current_date
     AND status NOT IN ('Cancelled', 'Reallocated');
 
-  -- 8. INSERT APPOINTMENT
-  INSERT INTO appointments (
-    patient_id, doctor_id, location_id, clinic_id,
-    scheduled_time, status, visit_type, priority, queue_token_no
-  )
-  VALUES (
-    v_patient_id, p_doctor_id, p_location_id, p_clinic_id,
-    v_booking_time, 'Waiting',
-    'Walk-in', coalesce(p_priority, 'Normal'), v_token_no
-  )
-  RETURNING id INTO v_appointment_id;
+  -- 8. Insert Appointment with Exception Handling for Double-Booking Unique Index
+  BEGIN
+    INSERT INTO public.appointments (
+      patient_id, doctor_id, location_id, clinic_id,
+      scheduled_time, status, visit_type, priority, queue_token_no
+    )
+    VALUES (
+      v_patient_id, v_resolved_doc_id, trim(p_location_id), v_resolved_clinic_id,
+      v_booking_time, 'Waiting', 'Walk-in', COALESCE(p_priority, 'Normal'), v_token_no
+    )
+    RETURNING id INTO v_appointment_id;
+  EXCEPTION WHEN unique_violation THEN
+    -- Fallback bump if race condition occurs on idx_no_double_booking
+    WHILE EXISTS (
+      SELECT 1 FROM public.appointments
+      WHERE doctor_id = v_resolved_doc_id
+        AND scheduled_time = v_booking_time
+        AND status NOT IN ('Cancelled', 'Reallocated')
+    ) LOOP
+      v_booking_time := v_booking_time + (v_slot_duration || ' minutes')::interval;
+    END LOOP;
 
+    INSERT INTO public.appointments (
+      patient_id, doctor_id, location_id, clinic_id,
+      scheduled_time, status, visit_type, priority, queue_token_no
+    )
+    VALUES (
+      v_patient_id, v_resolved_doc_id, trim(p_location_id), v_resolved_clinic_id,
+      v_booking_time, 'Waiting', 'Walk-in', COALESCE(p_priority, 'Normal'), v_token_no
+    )
+    RETURNING id INTO v_appointment_id;
+  END;
+
+  -- 9. Ultra-Compact Return Payload
   RETURN jsonb_build_object(
     'success',            true,
-    'message',            'Walk-in booked in nearest available slot!',
     'appointment_id',     v_appointment_id,
+    'patient_id',         v_patient_id,
     'patient_name',       v_clean_name,
-    'assigned_slot',      to_char(v_booking_time AT TIME ZONE 'Asia/Kolkata', 'hh12:mi AM'),
+    'doctor_name',        v_doctor_name,
+    'branch_name',        v_branch_name,
     'queue_token_no',     v_token_no,
-    'daily_quota_status', (v_today_count + 1) || ' of ' || v_daily_quota,
-    'priority',           coalesce(p_priority, 'Normal'),
-    'status',             'Waiting',
-    'location_id',        p_location_id,
-    'clinic_id',          p_clinic_id
+    'slot_time',          to_char(v_booking_time AT TIME ZONE 'Asia/Kolkata', 'hh12:mi AM'),
+    'quota_status',       (v_today_count + 1) || '/' || v_daily_quota
   );
 END;
 $func$;
+
+GRANT EXECUTE ON FUNCTION public.register_walk_in_patient(text, text, text, uuid, text, integer, text, text, timestamptz) TO authenticated, anon;

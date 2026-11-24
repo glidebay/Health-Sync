@@ -255,10 +255,9 @@ export async function verifyBranchDoctorPin(
     chamberFailedAttempts.delete(lockoutKey);
 
     if (targetClinicId && matchedDoctor.clinic_id && matchedDoctor.clinic_id !== targetClinicId) {
-      const clinicName = branchData?.clinic_name || 'this clinic';
       return {
         success: false,
-        message: `Access Denied: Dr. ${matchedDoctor.full_name} is affiliated with a different clinic organization and cannot access ${clinicName}.`,
+        message: 'Invalid PIN. Please check and try again.',
       };
     }
 
@@ -315,10 +314,9 @@ export async function verifyBranchDoctorPin(
         };
       }
 
-      const branchName = branchData?.branch_name || branchId;
       return {
         success: false,
-        message: `Access Denied: Dr. ${matchedDoctor.full_name} is not assigned to ${branchName}.`,
+        message: 'Invalid PIN. Please check and try again.',
       };
     }
 

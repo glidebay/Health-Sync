@@ -55,33 +55,31 @@ export interface FormattedInventoryItem {
 
 const LOCAL_DOCTORS_KEY = 'healthsync_doctors_cache';
 
-export function getDoctorsLocal(): DbDoctor[] {
+export function getDoctorsLocal(clinicId?: string, locationId?: string): DbDoctor[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(LOCAL_DOCTORS_KEY);
+    const key = `healthsync_doctors_cache_${clinicId || 'all'}_${locationId || 'all'}`;
+    const raw = localStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        if (clinicId) {
+          const match = parsed.filter((d: DbDoctor) => d.clinic_id === clinicId);
+          if (match.length > 0) return match;
+        } else {
+          return parsed;
+        }
+      }
     }
   } catch {}
-  return [
-    {
-      id: 'doc-sunny-default',
-      full_name: 'Dr. Sunny',
-      specialization: 'Consultant Physician & Diabetologist',
-      reg_no: 'KMC-45892',
-      daily_quota: 35,
-      is_active: true,
-      pin_code: bcrypt.hashSync('1234', 10),
-      created_at: new Date().toISOString(),
-    },
-  ];
+  return [];
 }
 
-export function saveDoctorsLocal(doctors: DbDoctor[]): void {
+export function saveDoctorsLocal(doctors: DbDoctor[], clinicId?: string, locationId?: string): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(LOCAL_DOCTORS_KEY, JSON.stringify(doctors));
+    const key = `healthsync_doctors_cache_${clinicId || 'all'}_${locationId || 'all'}`;
+    localStorage.setItem(key, JSON.stringify(doctors));
   } catch {}
 }
 
@@ -117,25 +115,77 @@ export async function getDoctorClinicInfo(doctorId: string): Promise<{ clinicId:
   return { clinicId: '33ef6459-44ae-45b7-8726-ce71abf51832', clinicName: 'HealthSync Medical Center', isAdmin: false };
 }
 
-export async function getDoctors(clinicId?: string): Promise<DbDoctor[]> {
+export async function getDoctors(clinicId?: string, locationId?: string): Promise<DbDoctor[]> {
   try {
-    let query = supabase.from('doctors').select('*');
-    if (clinicId) {
-      query = query.eq('clinic_id', clinicId);
+    let targetClinicId = clinicId;
+    if (!targetClinicId && locationId) {
+      const { data: loc } = await supabase
+        .from('clinic_locations')
+        .select('clinic_id')
+        .eq('id', locationId)
+        .maybeSingle();
+      if (loc?.clinic_id) targetClinicId = loc.clinic_id;
+    }
+
+    let query = supabase.from('doctors').select('*').eq('is_active', true);
+    if (targetClinicId) {
+      query = query.eq('clinic_id', targetClinicId);
     }
     const { data, error } = await query.order('created_at', { ascending: true });
     if (error) {
       console.warn('Error fetching doctors:', error.message);
-      return getDoctorsLocal();
+      return getDoctorsLocal(targetClinicId, locationId);
     }
     if (data && data.length > 0) {
-      saveDoctorsLocal(data);
-      return data as DbDoctor[];
+      let filteredDoctors = data as DbDoctor[];
+
+      if (locationId) {
+        try {
+          const [locRes, pinRes] = await Promise.all([
+            supabase
+              .from('doctor_locations')
+              .select('doctor_id')
+              .eq('location_id', locationId)
+              .eq('is_active', true),
+            supabase
+              .from('access_pins')
+              .select('doctor_id')
+              .eq('location_id', locationId)
+              .not('doctor_id', 'is', null)
+              .eq('is_active', true),
+          ]);
+
+          const branchDoctorIds = new Set<string>();
+          if (locRes.data && locRes.data.length > 0) {
+            locRes.data.forEach((r: { doctor_id: string | null }) => {
+              if (r.doctor_id) branchDoctorIds.add(r.doctor_id);
+            });
+          }
+          if (pinRes.data && pinRes.data.length > 0) {
+            pinRes.data.forEach((r: { doctor_id: string | null }) => {
+              if (r.doctor_id) branchDoctorIds.add(r.doctor_id);
+            });
+          }
+
+          filteredDoctors = filteredDoctors.filter((doc) => {
+            if (targetClinicId && doc.clinic_id && doc.clinic_id !== targetClinicId) return false;
+            if (branchDoctorIds.size > 0) {
+              return branchDoctorIds.has(doc.id) || Boolean(doc.is_admin_doctor);
+            }
+            return false;
+          });
+        } catch (filterErr) {
+          console.warn('Could not filter doctors by branch location:', filterErr);
+        }
+      }
+
+      saveDoctorsLocal(filteredDoctors, targetClinicId, locationId);
+      return filteredDoctors;
     }
-    return getDoctorsLocal();
+    return getDoctorsLocal(targetClinicId, locationId);
   } catch (err) {
     console.warn('Doctors fetch exception:', err);
-    return getDoctorsLocal();
+    return getDoctorsLocal(clinicId, locationId);
   }
 }
 
@@ -864,48 +914,49 @@ export async function fetchQueueFromDb(
       p_search: null,
       p_doctor_id: doctorId || null,
       p_location_id: effectiveLocationId || null,
-      p_clinic_id: null,
+      p_clinic_id: effectiveClinicId || null,
     });
 
-    if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
+    if (!rpcError && Array.isArray(rpcData)) {
       const filtered = rpcData.filter(
         (i: any) =>
-          (!effectiveLocationId || !i.location_id || i.location_id === effectiveLocationId) &&
-          (!effectiveClinicId || !i.clinic_id || i.clinic_id === effectiveClinicId)
+          (!effectiveLocationId || i.location_id === effectiveLocationId) &&
+          (!effectiveClinicId || i.clinic_id === effectiveClinicId)
       );
-      if (filtered.length > 0) {
-        const mapped: FormattedQueuePatient[] = filtered.map((item: any) => {
-          const qTokenNo = typeof item.queue_token_no === 'number' ? item.queue_token_no : 1;
-          const tokenDisplay = `P${String(qTokenNo).padStart(3, '0')}`;
-          const rawVisitType = item.visit_type || 'Walk-in';
-          const isOnline =
-            rawVisitType.toLowerCase().includes('whatsapp') ||
-            rawVisitType.toLowerCase().includes('online');
-
-          return {
-            id: item.appointment_id,
-            patientDbId: item.patient_id,
-            name: item.patient_name || (isOnline ? 'Online Patient' : 'Walk-in Patient'),
-            age: item.age || 30,
-            gender: (item.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
-            phone: item.phone_number || undefined,
-            status: (item.status as 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled') || 'Waiting',
-            time: item.slot_time || '10:00 AM',
-            appointmentDate: item.appointment_date || todayIST,
-            tokenNumber: tokenDisplay,
-            queueTokenNo: qTokenNo,
-            patientNumber: qTokenNo,
-            displayId: tokenDisplay,
-            priority: item.priority === 'Urgent' ? 'Urgent' : 'Normal',
-            scheduledTime: item.slot_time || '10:00 AM',
-            visitType: isOnline ? 'Online' : 'Walk-in',
-            cancellationReason: item.cancellation_reason || undefined,
-            locationId: item.location_id || locationId,
-          };
-        });
-
-        return sortQueuePatients(mapped);
+      if (filtered.length === 0) {
+        return [];
       }
+      const mapped: FormattedQueuePatient[] = filtered.map((item: any) => {
+        const qTokenNo = typeof item.queue_token_no === 'number' ? item.queue_token_no : 1;
+        const tokenDisplay = `P${String(qTokenNo).padStart(3, '0')}`;
+        const rawVisitType = item.visit_type || 'Walk-in';
+        const isOnline =
+          rawVisitType.toLowerCase().includes('whatsapp') ||
+          rawVisitType.toLowerCase().includes('online');
+
+        return {
+          id: item.appointment_id,
+          patientDbId: item.patient_id,
+          name: item.patient_name || (isOnline ? 'Online Patient' : 'Walk-in Patient'),
+          age: item.age || 30,
+          gender: (item.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
+          phone: item.phone_number || undefined,
+          status: (item.status as 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled') || 'Waiting',
+          time: item.slot_time || '10:00 AM',
+          appointmentDate: item.appointment_date || todayIST,
+          tokenNumber: tokenDisplay,
+          queueTokenNo: qTokenNo,
+          patientNumber: qTokenNo,
+          displayId: tokenDisplay,
+          priority: item.priority === 'Urgent' ? 'Urgent' : 'Normal',
+          scheduledTime: item.slot_time || '10:00 AM',
+          visitType: isOnline ? 'Online' : 'Walk-in',
+          cancellationReason: item.cancellation_reason || undefined,
+          locationId: item.location_id || effectiveLocationId,
+        };
+      });
+
+      return sortQueuePatients(mapped);
     }
 
     const startIso = `${todayIST}T00:00:00+05:30`;
@@ -917,6 +968,7 @@ export async function fetchQueueFromDb(
         id,
         patient_id,
         doctor_id,
+        clinic_id,
         location_id,
         scheduled_time,
         status,
@@ -945,8 +997,12 @@ export async function fetchQueueFromDb(
       query = query.eq('doctor_id', doctorId);
     }
 
-    if (locationId) {
-      query = query.eq('location_id', locationId);
+    if (effectiveLocationId) {
+      query = query.eq('location_id', effectiveLocationId);
+    }
+
+    if (effectiveClinicId) {
+      query = query.eq('clinic_id', effectiveClinicId);
     }
 
     const { data, error } = await query;
@@ -1060,7 +1116,7 @@ export async function fetchPatientAppointmentsFromDb(params?: {
       p_search: params?.search?.trim() || null,
       p_doctor_id: params?.doctorId || null,
       p_location_id: effectiveLocationId || null,
-      p_clinic_id: null,
+      p_clinic_id: effectiveClinicId || null,
     });
 
     if (error) {
@@ -1075,8 +1131,8 @@ export async function fetchPatientAppointmentsFromDb(params?: {
 
     const scopedData = data.filter(
       (item: any) =>
-        (!effectiveLocationId || !item.location_id || item.location_id === effectiveLocationId) &&
-        (!effectiveClinicId || !item.clinic_id || item.clinic_id === effectiveClinicId)
+        (!effectiveLocationId || item.location_id === effectiveLocationId) &&
+        (!effectiveClinicId || item.clinic_id === effectiveClinicId)
     );
 
     let mapped: Patient[] = scopedData.map((item: any) => {
@@ -1134,6 +1190,7 @@ export async function registerWalkinPatientDb(params: {
   priority?: 'Normal' | 'Urgent';
   locationId?: string;
   clinicId?: string;
+  doctorId?: string;
 }): Promise<RegisterWalkinResult> {
   try {
     const cleanName = params.name ? params.name.trim() : '';
@@ -1147,6 +1204,70 @@ export async function registerWalkinPatientDb(params: {
     }
     const rawPhone = params.phone ? params.phone.trim() : '';
     const patientPhone = rawPhone.length > 0 ? rawPhone : `+91-WLK-${Date.now().toString().slice(-8)}`;
+
+    // Resolve target doctor
+    let targetDoctorId: string | null = params.doctorId || null;
+    if (!targetDoctorId) {
+      const { data: doctorData } = await supabase.from('doctors').select('id').limit(1);
+      targetDoctorId = doctorData && doctorData.length > 0 ? doctorData[0].id : null;
+    }
+
+    // Attempt RPC register_walk_in_patient first
+    try {
+      const { data: rpcData, error: rpcError } = await supabase.rpc('register_walk_in_patient', {
+        p_full_name: cleanName,
+        p_phone_number: patientPhone,
+        p_doctor_id: targetDoctorId,
+        p_location_id: params.locationId || null,
+        p_clinic_id: params.clinicId || null,
+        p_age: params.age,
+        p_gender: params.gender,
+        p_priority: params.priority || 'Normal',
+        p_scheduled_time: new Date().toISOString(),
+      });
+
+      if (!rpcError && rpcData && rpcData.success !== false) {
+        const rawToken = rpcData.queue_token_no || rpcData.fifo_token_no || 1;
+        const tokenDisplay = typeof rawToken === 'string' && rawToken.startsWith('P') ? rawToken : `P${String(rawToken).padStart(3, '0')}`;
+        const bookingTime = new Date().toISOString();
+        return {
+          success: true,
+          id: rpcData.appointment_id,
+          patientDbId: rpcData.patient_id || rpcData.appointment_id,
+          name: cleanName,
+          age: params.age,
+          gender: (params.gender as any) || 'Male',
+          phone: patientPhone,
+          status: 'Waiting',
+          time: rpcData.slot_time || rpcData.assigned_slot || new Date(bookingTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+          tokenNumber: tokenDisplay,
+          queueTokenNo: typeof rawToken === 'number' ? rawToken : parseInt(rawToken, 10) || 1,
+          patientNumber: rpcData.patient_number || (typeof rawToken === 'number' ? rawToken : 1),
+          displayId: tokenDisplay,
+          priority: (params.priority as any) || 'Normal',
+          scheduledTime: bookingTime,
+          visitType: 'Walk-in',
+        };
+      } else if (rpcError?.message?.includes('Daily Quota Reached') || rpcError?.message?.toLowerCase().includes('quota')) {
+        return {
+          success: false,
+          error: 'QUOTA_FULL',
+          message: rpcError.message,
+          code: 'QUOTA_FULL',
+        };
+      } else if (rpcData && rpcData.success === false && (rpcData.error_code === 'QUOTA_FULL' || rpcData.error_code === 'DUPLICATE_VISIT')) {
+        return {
+          success: false,
+          error: rpcData.error_code,
+          message: rpcData.error_message || 'Cannot register walk-in patient.',
+          code: rpcData.error_code,
+        };
+      } else if (rpcError) {
+        console.warn('register_walk_in_patient RPC returned error, initiating robust direct insert fallback:', rpcError.message);
+      }
+    } catch (rpcErr) {
+      console.warn('register_walk_in_patient RPC fallback to direct insert:', rpcErr);
+    }
 
     let patientId: string | null = null;
     let patientName = cleanName;
@@ -1214,8 +1335,7 @@ export async function registerWalkinPatientDb(params: {
       displayId = `P${String(finalPatNumber).padStart(3, '0')}`;
     }
 
-    const { data: doctorData } = await supabase.from('doctors').select('id').limit(1);
-    const doctorId = doctorData && doctorData.length > 0 ? doctorData[0].id : null;
+    const doctorId = targetDoctorId;
 
     const todayYmd = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
     const { count: todayCount } = await supabase
@@ -1226,13 +1346,11 @@ export async function registerWalkinPatientDb(params: {
     const nextQueueTokenNo = (todayCount || 0) + 1;
     const tokenDisplay = `P${String(nextQueueTokenNo).padStart(3, '0')}`;
 
-    const scheduledTime = new Date().toISOString();
     const clinicalNotes = params.priority === 'Urgent' ? '[URGENT TRIAGE]' : null;
 
     const newApptPayload: Record<string, any> = {
       patient_id: patientId,
       doctor_id: doctorId,
-      scheduled_time: scheduledTime,
       status: 'Waiting',
       visit_type: 'Walk-in',
       clinical_notes: clinicalNotes,
@@ -1246,14 +1364,61 @@ export async function registerWalkinPatientDb(params: {
       newApptPayload.clinic_id = params.clinicId;
     }
 
-    const { data: apptData, error: apptError } = await supabase
-      .from('appointments')
-      .insert([newApptPayload])
-      .select()
-      .maybeSingle();
+    // Determine initial candidate time rounded forward to 15-minute slot boundary
+    let candidateDt = new Date();
+    const slotMins = 15;
+    const remainder = candidateDt.getMinutes() % slotMins;
+    if (remainder !== 0) {
+      candidateDt.setMinutes(candidateDt.getMinutes() + (slotMins - remainder), 0, 0);
+    } else {
+      candidateDt.setSeconds(0, 0);
+    }
+
+    let apptData: any = null;
+    let apptError: any = null;
+    let finalScheduledTime = candidateDt.toISOString();
+
+    // Guard against idx_no_double_booking: retry across sequential slot intervals if slot is occupied
+    for (let attempt = 0; attempt < 8; attempt++) {
+      finalScheduledTime = candidateDt.toISOString();
+      newApptPayload.scheduled_time = finalScheduledTime;
+
+      const { data: inserted, error: insertErr } = await supabase
+        .from('appointments')
+        .insert([newApptPayload])
+        .select()
+        .maybeSingle();
+
+      if (!insertErr && inserted) {
+        apptData = inserted;
+        apptError = null;
+        break;
+      }
+
+      apptError = insertErr;
+      const isCollision =
+        insertErr?.message?.includes('idx_no_double_booking') ||
+        insertErr?.code === '23505' ||
+        insertErr?.message?.toLowerCase().includes('duplicate key');
+
+      if (isCollision) {
+        // Advance candidate time by slot interval to safely bypass double-booking collision
+        candidateDt = new Date(candidateDt.getTime() + slotMins * 60 * 1000);
+      } else {
+        break;
+      }
+    }
 
     if (apptError || !apptData) {
-      const errorMsg = apptError?.message || 'Error creating appointment';
+      let errorMsg = apptError?.message || 'Error creating appointment';
+      if (errorMsg.includes('Daily Quota Reached') || errorMsg.toLowerCase().includes('quota')) {
+        return {
+          success: false,
+          error: 'QUOTA_FULL',
+          message: errorMsg,
+          code: 'QUOTA_FULL',
+        };
+      }
       console.error('Error creating appointment:', errorMsg, apptError);
       return {
         success: false,
@@ -1262,6 +1427,8 @@ export async function registerWalkinPatientDb(params: {
         code: apptError?.code,
       };
     }
+
+    const scheduledTime = apptData.scheduled_time || finalScheduledTime;
 
     const timeStr = new Date(scheduledTime).toLocaleTimeString('en-US', {
       hour: '2-digit',
@@ -1763,26 +1930,37 @@ export async function fetchInventoryFromDb(
       // Fallback to direct table queries below
     }
 
-    const { data: medData, error: medErr } = await supabase
+    let medQuery = supabase
       .from('medicines')
-      .select('*, batches:medicine_batches(available_quantity)')
+      .select('*, batches:medicine_batches(available_quantity, location_id)')
       .order('brand_name', { ascending: true });
 
+    if (effectiveClinicId) {
+      medQuery = medQuery.or(`clinic_id.eq.${effectiveClinicId},clinic_id.is.null`);
+    }
+
+    const { data: medData, error: medErr } = await medQuery;
+
     if (!medErr && Array.isArray(medData)) {
-      return medData.map((m: any) => {
-        const rawBatches: any[] = m.batches || [];
-        const stock = rawBatches.reduce((acc, b) => acc + (Number(b.available_quantity) || 0), 0);
-        return {
-          id: m.id,
-          brand: m.brand_name,
-          generic: m.generic_name,
-          stock,
-          unit: m.unit || 'Units',
-          category: m.category || 'General',
-          unitPrice: Number(m.selling_price) || 0,
-          reorderThreshold: Number(m.minimum_stock_level) || 10,
-        };
-      });
+      return medData
+        .filter((m: any) => !effectiveLocationId || !m.location_id || m.location_id === effectiveLocationId)
+        .map((m: any) => {
+          const rawBatches: any[] = m.batches || [];
+          const branchBatches = effectiveLocationId
+            ? rawBatches.filter((b: any) => !b.location_id || b.location_id === effectiveLocationId)
+            : rawBatches;
+          const stock = branchBatches.reduce((acc, b) => acc + (Number(b.available_quantity) || 0), 0);
+          return {
+            id: m.id,
+            brand: m.brand_name,
+            generic: m.generic_name,
+            stock,
+            unit: m.unit || 'Units',
+            category: m.category || 'General',
+            unitPrice: Number(m.selling_price) || 0,
+            reorderThreshold: Number(m.minimum_stock_level) || 10,
+          };
+        });
     }
 
     const { data, error } = await supabase
@@ -2024,63 +2202,141 @@ export async function sendChatMessageDb(params: {
 
 import { AppConfig, DEFAULT_APP_CONFIG } from '@/data/default-config';
 
-const APP_CONFIG_STORAGE_KEY = 'healthsync_app_config';
+export const APP_CONFIG_STORAGE_KEY = 'healthsync_app_config';
 
-export function getAppConfigLocal(): AppConfig {
+export function getAppConfigLocal(clinicId?: string): AppConfig {
   if (typeof window === 'undefined') return DEFAULT_APP_CONFIG;
   try {
-    const raw = localStorage.getItem(APP_CONFIG_STORAGE_KEY);
-    if (!raw) return DEFAULT_APP_CONFIG;
-    return { ...DEFAULT_APP_CONFIG, ...JSON.parse(raw) };
-  } catch {
-    return DEFAULT_APP_CONFIG;
-  }
+    const activeClinicId =
+      clinicId ||
+      localStorage.getItem('healthsync_active_clinic_id') ||
+      'default';
+    const key = `${APP_CONFIG_STORAGE_KEY}_${activeClinicId}`;
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { ...DEFAULT_APP_CONFIG, ...parsed };
+    }
+  } catch {}
+  return DEFAULT_APP_CONFIG;
 }
 
-export function saveAppConfigLocal(config: AppConfig): void {
+export function saveAppConfigLocal(config: AppConfig, clinicId?: string): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(APP_CONFIG_STORAGE_KEY, JSON.stringify(config));
-  } catch {
-    try {
-      localStorage.removeItem(APP_CONFIG_STORAGE_KEY);
-      const sanitized: Record<string, unknown> = { ...config };
-      if (typeof sanitized.rx_template_url === 'string' && sanitized.rx_template_url.length > 50000) {
-        delete sanitized.rx_template_url;
-      }
-      if (typeof sanitized.logo_url === 'string' && sanitized.logo_url.length > 50000) {
-        delete sanitized.logo_url;
-      }
-      localStorage.setItem(APP_CONFIG_STORAGE_KEY, JSON.stringify(sanitized));
-    } catch {}
-  }
+    const activeClinicId =
+      clinicId ||
+      localStorage.getItem('healthsync_active_clinic_id') ||
+      'default';
+    const key = `${APP_CONFIG_STORAGE_KEY}_${activeClinicId}`;
+    const sanitized: Record<string, unknown> = { ...config };
+    if (typeof sanitized.rx_template_url === 'string' && sanitized.rx_template_url.length > 50000) {
+      delete sanitized.rx_template_url;
+    }
+    if (typeof sanitized.logo_url === 'string' && sanitized.logo_url.length > 50000) {
+      delete sanitized.logo_url;
+    }
+    localStorage.setItem(key, JSON.stringify(sanitized));
+  } catch {}
 }
 
-export async function fetchAppConfigDb(): Promise<AppConfig> {
-  const localConfig = getAppConfigLocal();
+export async function fetchAppConfigDb(clinicId?: string, locationId?: string): Promise<AppConfig> {
+  const activeClinicId =
+    clinicId ||
+    (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) ||
+    undefined;
+  const activeLocId =
+    locationId ||
+    (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') : null) ||
+    undefined;
+
+  const localConfig = getAppConfigLocal(activeClinicId);
   try {
+    let clinicData: any = null;
+    if (activeClinicId) {
+      const { data } = await supabase
+        .from('clinics')
+        .select('name, phone, address, logo_url')
+        .eq('id', activeClinicId)
+        .maybeSingle();
+      clinicData = data;
+    }
+
+    let locData: any = null;
+    if (activeLocId) {
+      const { data } = await supabase
+        .from('clinic_locations')
+        .select('branch_name, phone, address, landmark, daily_quota, slot_duration_mins, pad_template_url, rx_calibrations, is_custom_pad_active, print_bg_graphic, rx_footer_text')
+        .eq('id', activeLocId)
+        .maybeSingle();
+      locData = data;
+    }
+
     const [configRes, docRes] = await Promise.all([
       supabase.from('app_config').select('key, value'),
       supabase.from('doctors').select('daily_quota').limit(1),
     ]);
 
     const rows = configRes.data;
-    if (!rows || rows.length === 0) {
-      return localConfig;
-    }
-
     const validConfigKeys = new Set(Object.keys(DEFAULT_APP_CONFIG));
     const merged: Record<string, unknown> = { ...localConfig };
-    rows.forEach((row) => {
-      if (!validConfigKeys.has(row.key)) return;
-      let val: unknown = row.value;
-      if (typeof val === 'string') {
-        try {
-          val = JSON.parse(val);
-        } catch {}
+
+    if (rows && rows.length > 0) {
+      rows.forEach((row) => {
+        // Exclude global branding keys from app_config table to preserve tenant isolation
+        if (['logo_url', 'clinic_name', 'clinic_phone', 'clinic_address', 'prescription_page_url', 'branch_name', 'branch_phone', 'branch_address', 'branch_landmark'].includes(row.key)) {
+          return;
+        }
+        if (!validConfigKeys.has(row.key)) return;
+        let val: unknown = row.value;
+        if (typeof val === 'string') {
+          try {
+            val = JSON.parse(val);
+          } catch {}
+        }
+        merged[row.key] = val;
+      });
+    }
+
+    // Always overlay the actual tenant clinic identity
+    if (clinicData) {
+      merged.clinic_name = clinicData.name || '';
+      merged.clinic_phone = clinicData.phone || '';
+      merged.clinic_address = clinicData.address || '';
+      merged.logo_url = clinicData.logo_url || '';
+    }
+
+    // Always overlay branch-specific properties
+    if (locData) {
+      merged.branch_name = locData.branch_name || '';
+      merged.branch_phone = locData.phone || '';
+      merged.branch_address = locData.address || '';
+      merged.branch_landmark = locData.landmark || '';
+      if (locData.daily_quota !== null && locData.daily_quota !== undefined) {
+        merged.daily_quota = locData.daily_quota;
       }
-      merged[row.key] = val;
-    });
+      if (locData.slot_duration_mins !== null && locData.slot_duration_mins !== undefined) {
+        merged.slot_duration_mins = locData.slot_duration_mins;
+      }
+      if (locData.pad_template_url) {
+        merged.rx_template_url = locData.pad_template_url;
+      }
+      if (locData.is_custom_pad_active !== null && locData.is_custom_pad_active !== undefined) {
+        merged.rx_template_enabled = Boolean(locData.is_custom_pad_active);
+      }
+      if (locData.print_bg_graphic !== null && locData.print_bg_graphic !== undefined) {
+        merged.rx_template_print_bg = Boolean(locData.print_bg_graphic);
+      }
+      if (locData.rx_footer_text) {
+        merged.rx_footer_text = locData.rx_footer_text;
+      }
+      if (locData.rx_calibrations) {
+        merged.rx_template_fields =
+          typeof locData.rx_calibrations === 'string'
+            ? locData.rx_calibrations
+            : JSON.stringify(locData.rx_calibrations);
+      }
+    }
 
     const booleanKeys: (keyof AppConfig)[] = [
       'allow_quota_override',
@@ -2111,7 +2367,7 @@ export async function fetchAppConfigDb(): Promise<AppConfig> {
     }
 
     const fullConfig = { ...DEFAULT_APP_CONFIG, ...merged } as AppConfig;
-    saveAppConfigLocal(fullConfig);
+    saveAppConfigLocal(fullConfig, activeClinicId);
     return fullConfig;
   } catch (err) {
     console.warn('Error fetching app_config from Supabase, using local:', err);
@@ -2120,55 +2376,105 @@ export async function fetchAppConfigDb(): Promise<AppConfig> {
 }
 
 export async function updateAppConfigDb(
-  updates: Partial<AppConfig>
+  updates: Partial<AppConfig>,
+  clinicId?: string
 ): Promise<{ success: boolean; config: AppConfig; error?: string }> {
-  const current = getAppConfigLocal();
+  const activeClinicId =
+    clinicId ||
+    (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null) ||
+    undefined;
+
+  const activeLocId =
+    (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') : null) ||
+    undefined;
+
+  const current = getAppConfigLocal(activeClinicId);
   const nextConfig: AppConfig = { ...current, ...updates };
 
-  saveAppConfigLocal(nextConfig);
+  saveAppConfigLocal(nextConfig, activeClinicId);
 
   try {
-    const updatePromises = Object.entries(updates).map(async ([key, val]) => {
-      let serializedValue: string;
-      if (typeof val === 'boolean') {
-        serializedValue = val ? 'true' : 'false';
-      } else if (typeof val === 'object' && val !== null) {
-        serializedValue = JSON.stringify(val);
-      } else {
-        serializedValue = String(val);
-      }
+    // 1. If branding fields are updated, update clinics table for this clinic ONLY!
+    if (activeClinicId && (
+      updates.clinic_name !== undefined ||
+      updates.clinic_phone !== undefined ||
+      updates.clinic_address !== undefined ||
+      updates.logo_url !== undefined
+    )) {
+      const clinicUpdates: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (updates.clinic_name !== undefined) clinicUpdates.name = updates.clinic_name.trim();
+      if (updates.clinic_phone !== undefined) clinicUpdates.phone = updates.clinic_phone ? updates.clinic_phone.trim() : null;
+      if (updates.clinic_address !== undefined) clinicUpdates.address = updates.clinic_address ? updates.clinic_address.trim() : null;
+      if (updates.logo_url !== undefined) clinicUpdates.logo_url = updates.logo_url ? updates.logo_url.trim() : null;
 
-      const { error } = await supabase
-        .from('app_config')
-        .upsert(
-          {
-            key,
-            value: serializedValue,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'key' }
-        );
+      await supabase.from('clinics').update(clinicUpdates).eq('id', activeClinicId);
+    }
 
-      if (error) {
-        await supabase
+    // 2. If branch-specific fields are updated, update clinic_locations table for this location
+    if (activeLocId && (
+      updates.branch_name !== undefined ||
+      updates.branch_phone !== undefined ||
+      updates.branch_address !== undefined ||
+      updates.branch_landmark !== undefined ||
+      updates.daily_quota !== undefined ||
+      updates.slot_duration_mins !== undefined
+    )) {
+      const locUpdates: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (updates.branch_name !== undefined) locUpdates.branch_name = updates.branch_name.trim();
+      if (updates.branch_phone !== undefined) locUpdates.phone = updates.branch_phone ? updates.branch_phone.trim() : null;
+      if (updates.branch_address !== undefined) locUpdates.address = updates.branch_address ? updates.branch_address.trim() : null;
+      if (updates.branch_landmark !== undefined) locUpdates.landmark = updates.branch_landmark ? updates.branch_landmark.trim() : null;
+      if (updates.daily_quota !== undefined) locUpdates.daily_quota = updates.daily_quota;
+      if (updates.slot_duration_mins !== undefined) locUpdates.slot_duration_mins = updates.slot_duration_mins;
+
+      await supabase.from('clinic_locations').update(locUpdates).eq('id', activeLocId);
+    }
+
+    // 3. Only save general/operational config parameters to app_config table (exclude tenant keys)
+    const tenantSpecificKeys = new Set([
+      'logo_url',
+      'clinic_name',
+      'clinic_phone',
+      'clinic_address',
+      'prescription_page_url',
+      'branch_name',
+      'branch_phone',
+      'branch_address',
+      'branch_landmark',
+    ]);
+
+    const updatePromises = Object.entries(updates)
+      .filter(([key]) => !tenantSpecificKeys.has(key))
+      .map(async ([key, val]) => {
+        let serializedValue: string;
+        if (typeof val === 'boolean') {
+          serializedValue = val ? 'true' : 'false';
+        } else if (typeof val === 'object' && val !== null) {
+          serializedValue = JSON.stringify(val);
+        } else {
+          serializedValue = String(val);
+        }
+
+        const { error } = await supabase
           .from('app_config')
-          .update({ value: serializedValue })
-          .eq('key', key);
-      }
-    });
+          .upsert(
+            {
+              key,
+              value: serializedValue,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'key' }
+          );
+
+        if (error) {
+          await supabase
+            .from('app_config')
+            .update({ value: serializedValue })
+            .eq('key', key);
+        }
+      });
 
     await Promise.all(updatePromises);
-
-    if (updates.daily_quota !== undefined) {
-      const { error: docError } = await supabase
-        .from('doctors')
-        .update({ daily_quota: updates.daily_quota })
-        .not('id', 'is', null);
-
-      if (docError) {
-        console.warn('Doctors quota update notice:', docError.message);
-      }
-    }
 
     return { success: true, config: nextConfig };
   } catch (err: unknown) {

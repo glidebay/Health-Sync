@@ -392,21 +392,51 @@ export function saveStoredMovements(movements: StockMovement[]) {
 }
 
 export async function fetchMedicinesMaster(
-  onProgressChunk?: (loadedMeds: MedicineMaster[], totalCount: number) => void
+  onProgressChunk?: (loadedMeds: MedicineMaster[], totalCount: number) => void,
+  clinicId?: string,
+  locationId?: string
 ): Promise<MedicineMaster[]> {
   try {
+    const effectiveClinicId =
+      clinicId ||
+      (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') || undefined : undefined);
+    const effectiveLocationId =
+      locationId ||
+      (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') || undefined : undefined);
+
     const PAGE_SIZE = 1000;
-    const { data: firstSlice, count, error: firstErr } = await supabase
+    let query = supabase
       .from('medicines')
-      .select('*, batches:medicine_batches(*)', { count: 'exact' })
+      .select('*, batches:medicine_batches(*)', { count: 'exact' });
+
+    if (effectiveClinicId) {
+      query = query.or(`clinic_id.eq.${effectiveClinicId},clinic_id.is.null`);
+    }
+
+    const { data: firstSlice, count, error: firstErr } = await query
       .order('brand_name', { ascending: true })
       .range(0, PAGE_SIZE - 1);
 
     if (!firstErr && Array.isArray(firstSlice)) {
       const suppliers = await fetchSuppliers();
-      const mapRawDbMed = (m: any): MedicineMaster => {
+      const mapRawDbMed = (m: any): MedicineMaster | null => {
+        // If viewing a specific branch, isolate medicines created for other branches
+        if (effectiveLocationId && m.location_id && m.location_id !== effectiveLocationId) {
+          return null;
+        }
+
         const rawBatches: any[] = m.batches || [];
-        const batches: MedicineBatch[] = rawBatches.map((b) => ({
+        // Strict branch isolation: only count batches physically located at this branch
+        const branchBatches = effectiveLocationId
+          ? rawBatches.filter((b: any) => b.location_id === effectiveLocationId)
+          : rawBatches;
+
+        // If a medicine has batches in the DB but none at this branch, don't show it at this branch
+        if (effectiveLocationId && rawBatches.length > 0 && branchBatches.length === 0) {
+          return null;
+        }
+
+        const batches: MedicineBatch[] = branchBatches.map((b) => ({
           id: b.id,
           medicineId: b.medicine_id,
           batchNumber: b.batch_number,
@@ -456,7 +486,9 @@ export async function fetchMedicinesMaster(
         };
       };
 
-      const allMapped: MedicineMaster[] = firstSlice.map(mapRawDbMed);
+      const allMapped: MedicineMaster[] = firstSlice
+        .map(mapRawDbMed)
+        .filter((item): item is MedicineMaster => item !== null);
       const total = count || allMapped.length;
 
       if (onProgressChunk) {
@@ -475,7 +507,9 @@ export async function fetchMedicinesMaster(
             .range(from, to);
 
           if (sliceErr || !Array.isArray(slice)) break;
-          const sliceMapped = slice.map(mapRawDbMed);
+          const sliceMapped = slice
+            .map(mapRawDbMed)
+            .filter((item): item is MedicineMaster => item !== null);
           allMapped.push(...sliceMapped);
 
           if (onProgressChunk) {
@@ -723,7 +757,15 @@ export async function addMedicineWithInitialBatch(params: {
   supplierName?: string;
   invoiceNumber?: string;
   responsibleUser: string;
+  clinicId?: string;
+  locationId?: string;
 }): Promise<MedicineMaster> {
+  const effectiveClinicId =
+    params.clinicId ||
+    (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') || undefined : undefined);
+  const effectiveLocationId =
+    params.locationId ||
+    (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') || undefined : undefined);
   const medId = generateSafeUuid();
   const batchId = generateSafeUuid();
 
@@ -839,6 +881,8 @@ export async function addMedicineWithInitialBatch(params: {
               minimum_stock_level: newMedicine.minimumStockLevel,
               selling_price: newMedicine.sellingPrice,
               supplier_id: validSupplierId || null,
+              clinic_id: effectiveClinicId || null,
+              location_id: effectiveLocationId || null,
             },
           ],
           { onConflict: 'sku' }
@@ -864,6 +908,18 @@ export async function addMedicineWithInitialBatch(params: {
       p_invoice_number: params.invoiceNumber || null,
       p_responsible_user: params.responsibleUser || 'Doctor/Pharmacist',
     });
+
+    // Tag the batch with the active clinic and location
+    if (effectiveClinicId || effectiveLocationId) {
+      await supabase
+        .from('medicine_batches')
+        .update({
+          clinic_id: effectiveClinicId || null,
+          location_id: effectiveLocationId || null,
+        })
+        .eq('medicine_id', actualMedId)
+        .eq('batch_number', newBatch.batchNumber);
+    }
 
     if (rpcErr) {
       await supabase.from('medicine_batches').upsert(

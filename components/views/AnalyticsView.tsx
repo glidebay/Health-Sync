@@ -28,6 +28,7 @@ import {
   CasemixAndValuationReport,
 } from '@/lib/enterpriseCLMSService';
 import { fetchFullAnalyticsDashboardDb } from '@/lib/supabaseService';
+import { EcgActionLoader } from '@/components/loading/EcgActionLoader';
 
 interface AnalyticsViewProps {
   totalPatientsCount: number;
@@ -37,6 +38,7 @@ interface AnalyticsViewProps {
   onSearchChange?: (q: string) => void;
   locationId?: string;
   clinicId?: string;
+  branchName?: string;
 }
 
 type PeriodType = 'today' | 'week' | 'month' | 'year';
@@ -64,25 +66,43 @@ export function AnalyticsView({
   searchQuery = '',
   locationId,
   clinicId,
+  branchName,
 }: AnalyticsViewProps) {
   const cleanQuery = searchQuery.trim().toLowerCase();
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('month');
   const [cancelledPage, setCancelledPage] = useState(1);
   const [report, setReport] = useState<CasemixAndValuationReport | null>(null);
   const [scopedAnalytics, setScopedAnalytics] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    enterpriseCLMSService.getCasemixAndPharmacyValuation().then((data) => {
-      if (data) setReport(data);
-    }).catch((err) => console.warn('Casemix report load notice:', err));
-  }, []);
+    let isMounted = true;
+    setIsLoading(true);
+    const startTime = Date.now();
 
-  useEffect(() => {
-    fetchFullAnalyticsDashboardDb({ clinicId, locationId })
-      .then((data) => {
-        if (data) setScopedAnalytics(data);
-      })
-      .catch((err) => console.warn('Scoped analytics load notice:', err));
+    Promise.all([
+      enterpriseCLMSService
+        .getCasemixAndPharmacyValuation()
+        .then((data) => {
+          if (isMounted && data) setReport(data);
+        })
+        .catch((err) => console.warn('Casemix report load notice:', err)),
+      fetchFullAnalyticsDashboardDb({ clinicId, locationId })
+        .then((data) => {
+          if (isMounted && data) setScopedAnalytics(data);
+        })
+        .catch((err) => console.warn('Scoped analytics load notice:', err)),
+    ]).finally(async () => {
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 450) {
+        await new Promise((r) => setTimeout(r, 450 - elapsed));
+      }
+      if (isMounted) setIsLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, [clinicId, locationId]);
   const cancelledList = useMemo(() => {
     if (cancelledAppointments !== undefined) {
@@ -351,10 +371,16 @@ export function AnalyticsView({
       transition={{ duration: 0.25 }}
       className="space-y-5 sm:space-y-6 pb-12"
     >
+      <EcgActionLoader isLoading={isLoading} fullscreen={true} />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
-            Clinic Analytics &amp; Practice Insights
+          <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2 flex-wrap">
+            <span>Clinic Analytics &amp; Practice Insights</span>
+            {branchName && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                {branchName}
+              </span>
+            )}
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             Monitor patient volume trends, consultation dynamics, digital adoption, and pharmacy metrics

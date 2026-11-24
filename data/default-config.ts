@@ -43,6 +43,11 @@ export interface AppConfig {
   prescription_page_url: string;
   rx_footer_text: string;
 
+  branch_name?: string;
+  branch_phone?: string;
+  branch_address?: string;
+  branch_landmark?: string;
+
   rx_template_url: string;
   rx_template_enabled: boolean;
   rx_template_print_bg: boolean;
@@ -85,6 +90,11 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   logo_url: '/assets/logo.png',
   prescription_page_url: '',
   rx_footer_text: 'Get well soon! Contact clinic for emergencies.',
+
+  branch_name: '',
+  branch_phone: '',
+  branch_address: '',
+  branch_landmark: '',
 
   rx_template_url: '',
   rx_template_enabled: false,
@@ -137,6 +147,46 @@ export interface ParameterMetadata {
 }
 
 export const SETTINGS_METADATA: ParameterMetadata[] = [
+  {
+    key: 'branch_name',
+    name: 'Branch Location Name',
+    category: 'Clinic Identity & Branding',
+    paramType: 'Functional Parameter',
+    description: 'Specific physical clinic branch or center name displayed on patient tickets and staff worklists.',
+    uiWidget: 'text',
+    target: 'clinic_locations.branch_name',
+    role: 'Admin',
+  },
+  {
+    key: 'branch_phone',
+    name: 'Branch WhatsApp / Contact Number',
+    category: 'Clinic Identity & Branding',
+    paramType: 'Functional Parameter',
+    description: 'Dedicated contact and WhatsApp booking phone for this specific branch. WhatsApp alerts and receipts use this number.',
+    uiWidget: 'phone',
+    target: 'clinic_locations.phone',
+    role: 'Admin',
+  },
+  {
+    key: 'branch_address',
+    name: 'Branch Physical Address',
+    category: 'Clinic Identity & Branding',
+    paramType: 'Functional Parameter',
+    description: 'Physical address of this branch printed on patient consultation receipts and prescription headers.',
+    uiWidget: 'textarea',
+    target: 'clinic_locations.address',
+    role: 'Admin',
+  },
+  {
+    key: 'branch_landmark',
+    name: 'Branch Landmark / Area',
+    category: 'Clinic Identity & Branding',
+    paramType: 'Functional Parameter',
+    description: 'Nearby landmark or navigation reference for patients finding this branch location.',
+    uiWidget: 'text',
+    target: 'clinic_locations.landmark',
+    role: 'Admin',
+  },
   {
     key: 'clinic_name',
     name: 'Clinic Name',

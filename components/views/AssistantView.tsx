@@ -24,6 +24,7 @@ interface AssistantViewProps {
   onStartConsultation?: (patientId: string) => void;
   locationId?: string;
   clinicId?: string;
+  branchName?: string;
 }
 
 export function AssistantView({
@@ -35,6 +36,7 @@ export function AssistantView({
   onStartConsultation,
   locationId,
   clinicId,
+  branchName,
 }: AssistantViewProps) {
   return (
     <motion.section

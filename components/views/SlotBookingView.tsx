@@ -697,7 +697,7 @@ export function SlotBookingView({
                     {config?.clinic_name || 'HealthSync Clinic'}
                   </h4>
                   <p className="text-[10px] text-[#8A909D] truncate">
-                    {[config?.clinic_address, config?.clinic_phone].filter(Boolean).join(' • ')}
+                    {[config?.branch_address || config?.clinic_address, config?.branch_phone || config?.clinic_phone].filter(Boolean).join(' • ')}
                   </p>
                 </div>
               </div>
@@ -1290,19 +1290,19 @@ export function SlotBookingView({
                 </span>
               </div>
               <div className="flex items-center gap-2 sm:gap-3 text-[11px] text-[#8A909D] font-medium flex-wrap mt-0.5">
-                {isMounted && config?.clinic_address && (
+                {isMounted && (config?.branch_address || config?.clinic_address) && (
                   <span className="flex items-center gap-1 truncate max-w-[220px] sm:max-w-none">
                     <MapPin className="w-3 h-3 text-[#2563EB] flex-shrink-0" />
-                    <span className="truncate">{config.clinic_address}</span>
+                    <span className="truncate">{config.branch_address || config.clinic_address}</span>
                   </span>
                 )}
-                {isMounted && config?.clinic_phone && (
+                {isMounted && (config?.branch_phone || config?.clinic_phone) && (
                   <span className="flex items-center gap-1 flex-shrink-0">
                     <Phone className="w-3 h-3 text-[#2563EB]" />
-                    <span>{config.clinic_phone}</span>
+                    <span>{config.branch_phone || config.clinic_phone}</span>
                   </span>
                 )}
-                {(!isMounted || (!config?.clinic_address && !config?.clinic_phone)) && (
+                {(!isMounted || (!config?.branch_address && !config?.clinic_address && !config?.branch_phone && !config?.clinic_phone)) && (
                   <span className="hidden sm:inline">
                     Live OPD Consultation Scheduling & Instant Token Assignment
                   </span>

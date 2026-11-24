@@ -3,22 +3,15 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Stethoscope,
   Building2,
-  ShieldCheck,
   CheckCircle2,
   Plus,
   Edit3,
   Trash2,
-  KeyRound,
   X,
   MapPin,
   Users,
-  Award,
-  Phone,
   AlertCircle,
-  Lock,
-  UserCheck,
 } from 'lucide-react';
 import {
   DoctorWithBranches,
@@ -29,6 +22,7 @@ import {
 import { fetchClinicLocations } from '@/lib/supabaseService';
 import { supabase } from '@/lib/supabaseClient';
 import { DbClinicLocation } from '@/types/database';
+import { EcgActionLoader } from '@/components/loading/EcgActionLoader';
 
 export const CLINIC_OPTIONS = [
   {
@@ -153,6 +147,7 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
   const loadData = useCallback(async () => {
     setIsLoading(true);
     setStatusMessage(null);
+    const startTime = Date.now();
     try {
       const [docList, branchList] = await Promise.all([
         getDoctorsByClinic(selectedClinicId),
@@ -160,6 +155,10 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
       ]);
       setDoctors(docList);
       setBranches(branchList);
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 450) {
+        await new Promise((r) => setTimeout(r, 450 - elapsed));
+      }
     } catch (err: any) {
       console.warn('Failed to load clinic doctor roster:', err);
     } finally {
@@ -290,56 +289,32 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
 
   return (
     <div className="space-y-6">
-      {/* Header & Clinic Isolation Banner */}
-      <div className="bg-white rounded-2xl border border-[#ECEEF2] p-5 sm:p-6 shadow-2xs">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-100">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB] shadow-2xs">
-                <Stethoscope className="w-5 h-5 stroke-[2.2]" />
-              </div>
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-[#16191E] flex items-center gap-2">
-                  <span>Doctor Roster &amp; Branch Allocations</span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                    Admin Only
-                  </span>
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Manage physician credentials, chamber PINs, daily quotas, and branch-level access control.
-                </p>
-              </div>
-            </div>
-          </div>
+      <EcgActionLoader isLoading={isLoading} fullscreen={true} />
 
-          <button
-            type="button"
-            onClick={handleOpenAdd}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-xs transition cursor-pointer self-start md:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add New Doctor</span>
-          </button>
-        </div>
-
-        {/* Dedicated Scoped Clinic Badge (Strict Tenant Isolation) */}
-        <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Building2 className="w-4 h-4 text-[#2563EB]" />
-              <span>Clinic Organization:</span>
+      {/* Clean Header */}
+      <div className="bg-white rounded-2xl border border-[#ECEEF2] p-5 sm:p-6 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-base sm:text-lg font-bold text-[#16191E]">
+              Doctor Management
+            </h2>
+            <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
+              {doctors.length} {doctors.length === 1 ? 'Doctor' : 'Doctors'}
             </span>
-            <div className="px-3.5 py-1.5 rounded-xl bg-blue-50/90 text-[#2563EB] border border-blue-200/80 text-xs font-bold shadow-2xs flex items-center gap-2">
-              <span>{activeClinicMeta.name}</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 font-semibold uppercase tracking-wider">
-                {activeClinicMeta.badge}
-              </span>
-            </div>
           </div>
-          <span className="text-xs font-bold text-slate-500 bg-slate-50 border border-slate-200/60 px-3 py-1 rounded-lg">
-            {doctors.length} {doctors.length === 1 ? 'Physician' : 'Physicians'} Configured
-          </span>
+          <p className="text-xs text-slate-500 mt-1">
+            Manage doctors, specializations, daily quotas, and branch allocations for {activeClinicMeta.name}.
+          </p>
         </div>
+
+        <button
+          type="button"
+          onClick={handleOpenAdd}
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-xs transition cursor-pointer self-start sm:self-auto"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add New Doctor</span>
+        </button>
       </div>
 
       {statusMessage && (
@@ -360,17 +335,12 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
       )}
 
       {/* Doctor Directory Grid */}
-      {isLoading ? (
-        <div className="p-12 text-center bg-white rounded-2xl border border-slate-100 text-slate-400 text-xs flex items-center justify-center gap-2">
-          <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-          <span>Loading physicians for {activeClinicMeta.name}...</span>
-        </div>
-      ) : doctors.length === 0 ? (
-        <div className="p-12 text-center bg-white rounded-2xl border border-slate-200">
+      {doctors.length === 0 && !isLoading ? (
+        <div className="p-12 text-center bg-white rounded-2xl border border-[#ECEEF2]">
           <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-          <h4 className="text-sm font-bold text-slate-700">No Doctors Configured</h4>
+          <h4 className="text-sm font-bold text-slate-700">No Doctors Found</h4>
           <p className="text-xs text-slate-400 mt-1">
-            Click &quot;Add New Doctor&quot; above to onboard a doctor for this clinic.
+            Click &quot;Add New Doctor&quot; above to add a doctor for this clinic.
           </p>
         </div>
       ) : (
@@ -391,108 +361,96 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
               <motion.div
                 key={doc.id}
                 layout
-                className="bg-white rounded-2xl border border-[#ECEEF2] p-5 shadow-2xs flex flex-col justify-between hover:border-blue-300 hover:shadow-xs transition duration-200 relative group"
+                className="bg-white rounded-2xl border border-[#ECEEF2] p-5 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition duration-150"
               >
                 <div>
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 flex items-center justify-center text-[#2563EB] font-bold text-xs flex-shrink-0 shadow-2xs">
-                        {initials || 'DR'}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-sm font-bold text-slate-900 truncate">
-                            {formattedName}
-                          </h4>
-                          {isAdmin ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs">
-                              <Award className="w-3 h-3 text-amber-600" />
-                              <span>Admin Doctor (All Branches)</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                              <span>Standard OPD Doctor</span>
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs font-semibold text-[#2563EB] mt-0.5 truncate">
-                          {doc.specialization}
-                        </p>
-                      </div>
+                  {/* Top: Avatar, Name, Specialization */}
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100/60 flex items-center justify-center text-[#2563EB] font-bold text-xs flex-shrink-0">
+                      {initials || 'DR'}
                     </div>
-
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEdit(doc)}
-                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition cursor-pointer"
-                        title="Edit Doctor Profile"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteDoctor(doc)}
-                        className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                        title="Deactivate Doctor"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm font-bold text-slate-900 truncate">
+                          {formattedName}
+                        </h4>
+                        {isAdmin && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/60">
+                            Admin
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5 truncate">
+                        {doc.specialization}
+                      </p>
                     </div>
                   </div>
 
                   {/* Credentials / Details */}
-                  <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 py-2.5 border-y border-slate-100/90 my-2 bg-slate-50/40 rounded-xl px-3">
+                  <div className="grid grid-cols-2 gap-2 text-xs py-2.5 px-3 bg-slate-50/70 rounded-xl border border-slate-100 my-3 text-slate-600">
                     <div>
-                      <span className="text-slate-400">Reg No: </span>
-                      <span className="font-bold text-slate-700">{doc.reg_no || 'Pending'}</span>
+                      <span className="text-[11px] text-slate-400 block">Registration No.</span>
+                      <span className="font-semibold text-slate-800 text-xs">{doc.reg_no || '—'}</span>
                     </div>
                     <div>
-                      <span className="text-slate-400">Daily Quota: </span>
-                      <span className="font-bold text-slate-700">{doc.daily_quota || 30} Patients</span>
+                      <span className="text-[11px] text-slate-400 block">Daily Quota</span>
+                      <span className="font-semibold text-slate-800 text-xs">{doc.daily_quota || 30} patients</span>
                     </div>
                   </div>
 
                   {/* Branch Assignments */}
-                  <div className="mt-3">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
-                      {isAdmin ? 'Clinic Scope:' : 'Assigned Branches:'}
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1.5">
+                      {isAdmin ? 'Scope' : 'Branches'}
                     </span>
                     {isAdmin ? (
-                      <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50/70 border border-emerald-200/80 px-2.5 py-1.5 rounded-xl">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                        <span>Authorized for all branches under {activeClinicMeta.name}</span>
-                      </div>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-700">
+                        <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                        <span>All Branches</span>
+                      </span>
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
                         {doc.assigned_branches && doc.assigned_branches.length > 0 ? (
                           doc.assigned_branches.map((b) => (
                             <span
                               key={b.id}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-100"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-700"
                             >
-                              <MapPin className="w-3 h-3 text-blue-500" />
+                              <MapPin className="w-3 h-3 text-slate-400" />
                               <span>{b.branch_name}</span>
-                              {b.branch_code && <span className="opacity-70 font-mono">({b.branch_code})</span>}
+                              {b.branch_code && (
+                                <span className="text-slate-400 font-mono text-[10px]">({b.branch_code})</span>
+                              )}
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs text-amber-600 italic">No physical branches assigned</span>
+                          <span className="text-xs text-slate-400 italic">No branch assigned</span>
                         )}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Footer status */}
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                  <span className="inline-flex items-center gap-1.5 text-emerald-600 font-semibold">
-                    <KeyRound className="w-3.5 h-3.5" />
-                    <span>Chamber PIN Configured</span>
-                  </span>
-                  <span className="text-slate-400">
-                    Status: <strong className="text-emerald-700">Active</strong>
-                  </span>
+                {/* Bottom Actions */}
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEdit(doc)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition cursor-pointer"
+                    title="Edit Doctor"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteDoctor(doc)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer"
+                    title="Delete Doctor"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                    <span>Delete</span>
+                  </button>
                 </div>
               </motion.div>
             );
@@ -512,14 +470,9 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
             >
               {/* Modal Header */}
               <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                <div className="flex items-center gap-2">
-                  <Stethoscope className="w-5 h-5 text-[#2563EB]" />
-                  <h3 className="text-sm font-bold text-slate-800">
-                    {editingDoctor
-                      ? `Edit ${formatDoctorDisplayName(editingDoctor.full_name)}`
-                      : `Onboard New Doctor (${activeClinicMeta.name})`}
-                  </h3>
-                </div>
+                <h3 className="text-sm font-bold text-slate-800">
+                  {editingDoctor ? 'Edit Doctor' : 'Add New Doctor'}
+                </h3>
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
@@ -633,20 +586,20 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
                 </div>
 
                 {/* Admin Doctor Toggle */}
-                <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/60 flex items-start gap-3">
+                <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 flex items-start gap-3">
                   <input
                     type="checkbox"
                     id="adminDoctorCheckbox"
                     checked={formIsAdmin}
                     onChange={(e) => setFormIsAdmin(e.target.checked)}
-                    className="mt-1 w-4 h-4 text-blue-600 rounded-sm border-slate-300 focus:ring-blue-500 cursor-pointer"
+                    className="mt-0.5 w-4 h-4 text-blue-600 rounded-sm border-slate-300 focus:ring-blue-500 cursor-pointer"
                   />
                   <label htmlFor="adminDoctorCheckbox" className="text-xs text-slate-700 cursor-pointer">
-                    <strong className="text-amber-900 block font-bold">
-                      Grant Admin Doctor Privileges (All Branches in {activeClinicMeta.name})
-                    </strong>
-                    <span className="text-[11px] text-slate-600">
-                      Authorizes this doctor across all branches in this clinic organization with permission to manage settings and schedules.
+                    <span className="font-semibold text-slate-800 block">
+                      Admin Doctor
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Grants administrative privileges and access across all clinic branches.
                     </span>
                   </label>
                 </div>
