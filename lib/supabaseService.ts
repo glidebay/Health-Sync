@@ -3038,7 +3038,6 @@ export async function bookAppointmentSlotDb(
         }
       }
     } catch (e) {
-      // Fall through to standard booking logic
     }
     const { data: rpcData, error: rpcError } = await supabase.rpc(
       'register_walk_in_patient',
