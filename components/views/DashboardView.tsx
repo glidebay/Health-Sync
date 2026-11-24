@@ -355,17 +355,17 @@ export function DashboardView({
           variants={fadeScale}
           whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
               Today&apos;s Patients
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+              <span className="text-2xl font-bold text-[#16191E] tracking-tight">
                 <AnimatedCounter target={effectiveTotalCount} />
               </span>
-              <span className="inline-flex items-center text-xs font-semibold text-emerald-500">
+              <span className="inline-flex items-center text-xs font-semibold text-emerald-600">
                 +12% <span className="text-slate-400 font-normal text-[11px] ml-1">today</span>
               </span>
             </div>
@@ -379,17 +379,17 @@ export function DashboardView({
           variants={fadeScale}
           whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
               Completed Consults
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+              <span className="text-2xl font-bold text-[#16191E] tracking-tight">
                 <AnimatedCounter target={effectiveCompletedCount} />
               </span>
-              <span className="inline-flex items-center text-xs font-semibold text-emerald-500">
+              <span className="inline-flex items-center text-xs font-semibold text-emerald-600">
                 {completionRate}% <span className="text-slate-400 font-normal text-[11px] ml-1">rate</span>
               </span>
             </div>
@@ -403,14 +403,14 @@ export function DashboardView({
           variants={fadeScale}
           whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
               Waiting in Queue
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+              <span className="text-2xl font-bold text-[#16191E] tracking-tight">
                 <AnimatedCounter target={effectiveWaitingCount} />
               </span>
               <span className="inline-flex items-center text-xs font-semibold text-blue-600">
@@ -427,17 +427,17 @@ export function DashboardView({
           variants={fadeScale}
           whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
               Pharmacy Stock
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+              <span className="text-2xl font-bold text-[#16191E] tracking-tight">
                 <AnimatedCounter target={effectiveStockUnits} />
               </span>
-              <span className="inline-flex items-center text-xs font-semibold text-emerald-500">
+              <span className="inline-flex items-center text-xs font-semibold text-emerald-600">
                 <ShieldCheck className="w-3 h-3 mr-0.5" />
                 Synced <span className="text-slate-400 font-normal text-[11px] ml-1">units</span>
               </span>
@@ -450,17 +450,17 @@ export function DashboardView({
       </motion.section>
 
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        <div className="lg:col-span-7 bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] min-w-0">
+        <div className="lg:col-span-7 bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs min-w-0">
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-5 items-stretch h-full">
             <div className="sm:col-span-7 flex flex-col justify-between py-1 space-y-4">
               <div className="space-y-1.5">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                   HEALTHSYNC • CLINIC OPS
                 </span>
-                <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold text-[#16191E] tracking-tight flex items-center gap-2 flex-wrap">
                   <span>Smart Patient Flow &amp; Chamber Triage</span>
                   {branchName && (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                       {branchName}
                     </span>
                   )}
@@ -475,7 +475,7 @@ export function DashboardView({
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={onRegisterWalkin}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold transition shadow-sm shadow-blue-500/20 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Register Walk-in</span>
@@ -483,7 +483,7 @@ export function DashboardView({
                 <button
                   type="button"
                   onClick={onViewAllQueue}
-                  className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-slate-700 hover:text-[#2563EB] transition cursor-pointer"
+                  className="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold text-slate-600 hover:text-[#2563EB] transition cursor-pointer"
                 >
                   <span>Full Queue</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -491,7 +491,7 @@ export function DashboardView({
               </div>
             </div>
 
-            <div className="sm:col-span-5 h-full min-h-[170px] sm:min-h-[190px] rounded-2xl overflow-hidden relative shadow-sm border border-slate-100 bg-[#EBF4FF] flex items-center justify-center">
+            <div className="sm:col-span-5 h-full min-h-[170px] sm:min-h-[190px] rounded-xl overflow-hidden relative shadow-xs border border-slate-100 bg-[#EBF4FF] flex items-center justify-center">
               <img
                 src="/images/medical-rocket.jpg"
                 alt="HealthSync Clinical Ops"
@@ -501,9 +501,9 @@ export function DashboardView({
           </div>
         </div>
 
-        <div className="lg:col-span-5 bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] min-w-0 flex flex-col">
+        <div className="lg:col-span-5 bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs min-w-0 flex flex-col">
           <div
-            className="relative h-full min-h-[190px] rounded-2xl overflow-hidden p-5 text-white shadow-sm border border-slate-800/20 flex flex-col items-end text-right"
+            className="relative h-full min-h-[190px] rounded-xl overflow-hidden p-5 text-white shadow-xs border border-slate-800/20 flex flex-col items-end text-right"
             style={{
               backgroundImage: "linear-gradient(135deg, rgba(15, 23, 42, 0.35) 0%, rgba(10, 18, 38, 0.75) 100%), url('/images/doctor-telemetry-bg.jpg')",
               backgroundSize: 'cover',
@@ -511,10 +511,10 @@ export function DashboardView({
             }}
           >
             <div className="relative z-10 flex flex-col items-end text-right space-y-1.5">
-              <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-blue-300 drop-shadow-xs">
+              <span className="text-xs font-bold uppercase tracking-wider text-blue-300 drop-shadow-xs">
                 CHAMBER TELEMETRY
               </span>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-white/20 border border-white/30 text-white font-bold text-xs sm:text-sm tracking-wide shadow-xs backdrop-blur-xs">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-white/20 border border-white/30 text-white font-bold text-xs tracking-wide shadow-xs backdrop-blur-xs">
                 {pavilionSummary?.telemetry?.active_token
                   ? `Token ${pavilionSummary.telemetry.active_token}`
                   : effectiveInChamber
@@ -523,7 +523,7 @@ export function DashboardView({
                       ? `Token ${formatPatientToken(effectiveNextWaiting)}`
                       : 'Token --'}
               </span>
-              <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight truncate max-w-[260px] drop-shadow-xs">
+              <h3 className="text-base sm:text-lg font-bold text-white tracking-tight truncate max-w-[260px] drop-shadow-xs">
                 {effectiveInChamber
                   ? effectiveInChamber.name
                   : effectiveNextWaiting
@@ -536,9 +536,9 @@ export function DashboardView({
       </section>
 
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        <div className="lg:col-span-5 bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between min-w-0">
+        <div className="lg:col-span-5 bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0">
           <div>
-            <div className="bg-[#181F38] rounded-2xl p-4 text-white shadow-sm relative overflow-hidden">
+            <div className="bg-[#181F38] rounded-xl p-4 text-white shadow-xs relative overflow-hidden">
               <div className="h-40 w-full relative">
                 <svg className="w-full h-full" viewBox="0 0 360 160" preserveAspectRatio="none">
                   <text x="32" y="28" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">400</text>
@@ -572,9 +572,9 @@ export function DashboardView({
             </div>
 
             <div className="pt-4">
-              <h3 className="text-base font-bold text-slate-800">Clinical Activity</h3>
+              <h3 className="text-sm sm:text-base font-bold text-[#16191E]">Clinical Activity</h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                <span className="font-bold text-emerald-500">(+21.4%)</span> annual growth in patient consultations
+                <span className="font-bold text-emerald-600">(+21.4%)</span> annual growth in patient consultations
               </p>
             </div>
           </div>
@@ -585,9 +585,9 @@ export function DashboardView({
                 <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-[#7928CA] to-[#FF0080] flex items-center justify-center text-white shadow-2xs">
                   <Users className="w-2.5 h-2.5 stroke-[2.5]" />
                 </div>
-                <span className="text-xs font-semibold text-slate-500">Patients</span>
+                <span className="text-[11px] font-bold text-slate-500">Patients</span>
               </div>
-              <div className="text-lg font-bold text-slate-800 mt-1">11.8K</div>
+              <div className="text-base font-bold text-[#16191E] mt-1">11.8K</div>
               <div className="w-full h-1 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
                 <div className="h-full bg-gradient-to-r from-[#7928CA] to-[#FF0080] rounded-full w-[65%]" />
               </div>
@@ -598,9 +598,9 @@ export function DashboardView({
                 <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-2xs">
                   <MessageSquare className="w-2.5 h-2.5 stroke-[2.5]" />
                 </div>
-                <span className="text-xs font-semibold text-slate-500">WhatsApp</span>
+                <span className="text-[11px] font-bold text-slate-500">WhatsApp</span>
               </div>
-              <div className="text-lg font-bold text-slate-800 mt-1">50.3%</div>
+              <div className="text-base font-bold text-[#16191E] mt-1">50.3%</div>
               <div className="w-full h-1 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
                 <div className="h-full bg-gradient-to-r from-emerald-600 to-teal-400 rounded-full w-[78%]" />
               </div>
@@ -611,9 +611,9 @@ export function DashboardView({
                 <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-[#2152ff] to-[#21d4fd] flex items-center justify-center text-white shadow-2xs">
                   <Clock className="w-2.5 h-2.5 stroke-[2.5]" />
                 </div>
-                <span className="text-xs font-semibold text-slate-500">Avg Time</span>
+                <span className="text-[11px] font-bold text-slate-500">Avg Time</span>
               </div>
-              <div className="text-lg font-bold text-slate-800 mt-1">14m</div>
+              <div className="text-base font-bold text-[#16191E] mt-1">14m</div>
               <div className="w-full h-1 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
                 <div className="h-full bg-gradient-to-r from-[#2152ff] to-[#21d4fd] rounded-full w-[55%]" />
               </div>
@@ -624,9 +624,9 @@ export function DashboardView({
                 <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-[#ea0606] to-[#ff667c] flex items-center justify-center text-white shadow-2xs">
                   <Pill className="w-2.5 h-2.5 stroke-[2.5]" />
                 </div>
-                <span className="text-xs font-semibold text-slate-500">Rx Stock</span>
+                <span className="text-[11px] font-bold text-slate-500">Rx Stock</span>
               </div>
-              <div className="text-lg font-bold text-slate-800 mt-1">{totalStockUnits || 716}</div>
+              <div className="text-base font-bold text-[#16191E] mt-1">{totalStockUnits || 716}</div>
               <div className="w-full h-1 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
                 <div className="h-full bg-gradient-to-r from-[#ea0606] to-[#ff667c] rounded-full w-[82%]" />
               </div>
@@ -634,12 +634,12 @@ export function DashboardView({
           </div>
         </div>
 
-        <div className="lg:col-span-7 bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between min-w-0">
+        <div className="lg:col-span-7 bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
             <div>
-              <h3 className="text-base font-bold text-slate-800">Patient Intake Overview</h3>
+              <h3 className="text-sm sm:text-base font-bold text-[#16191E]">Patient Intake Overview</h3>
               <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                <span className="font-bold text-emerald-500 flex items-center">
+                <span className="font-bold text-emerald-600 flex items-center">
                   ↑ +21.4%
                 </span>
                 <span>annual growth in clinical consultations</span>
@@ -794,10 +794,10 @@ export function DashboardView({
       </section>
 
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        <div className="lg:col-span-8 bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] space-y-3.5">
+        <div className="lg:col-span-8 bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-2xs space-y-3.5">
           <div className="pb-3 border-b border-slate-100">
-            <h3 className="text-base font-bold text-slate-800">Projects</h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <h3 className="text-sm sm:text-base font-bold text-[#16191E]">Patient Queue</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
               Real-time patient queue and consultation triage
             </p>
           </div>
@@ -845,7 +845,7 @@ export function DashboardView({
                               {tokenDisplay}
                             </div>
                             <div className="min-w-0">
-                              <span className="text-xs font-semibold text-slate-800 block truncate max-w-[130px]">
+                              <span className="text-xs font-bold text-slate-800 block truncate max-w-[130px]">
                                 {p.name}
                               </span>
                               <span className="text-[11px] text-slate-400 block">
@@ -858,7 +858,7 @@ export function DashboardView({
                         <td className="py-3 px-3">
                           <div className="flex items-center gap-1">
                             <span
-                              className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${isOnline
+                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${isOnline
                                 ? 'bg-emerald-50 text-emerald-700'
                                 : 'bg-slate-100 text-slate-600'
                                 }`}
@@ -866,7 +866,7 @@ export function DashboardView({
                               {isOnline ? 'Online WA' : 'Walk-in'}
                             </span>
                             {p.priority === 'Urgent' && (
-                              <span className="inline-flex items-center gap-0.5 bg-rose-50 text-rose-700 text-[10px] font-bold px-1 py-0.5 rounded">
+                              <span className="inline-flex items-center gap-0.5 bg-rose-50 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
                                 <Flame className="w-2.5 h-2.5 fill-rose-500 text-rose-500" />
                                 Urgent
                               </span>
@@ -875,8 +875,8 @@ export function DashboardView({
                         </td>
 
                         <td className="py-3 px-3">
-                          <div className="text-xs text-slate-700 font-medium flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-blue-600" />
+                          <div className="text-xs text-slate-700 font-semibold flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-[#2563EB]" />
                             <span>{p.time}</span>
                           </div>
                         </td>
@@ -909,14 +909,14 @@ export function DashboardView({
                                 <button
                                   type="button"
                                   onClick={() => setSelectedPatientForCancel(p)}
-                                  className="px-2 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                  className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
                                 >
                                   Cancel
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setSelectedPatientForReschedule(p)}
-                                  className="px-2 py-1 text-[11px] font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                                  className="px-2.5 py-1 text-xs font-semibold text-[#2563EB] hover:bg-blue-50 rounded-lg transition cursor-pointer"
                                 >
                                   Reschedule
                                 </button>
@@ -930,7 +930,7 @@ export function DashboardView({
                                   if (isLoggedIn) onStartConsultation(p.id);
                                   else onRequireLogin();
                                 }}
-                                className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition cursor-pointer flex items-center gap-1"
+                                className="px-3 py-1 text-xs font-bold bg-[#2563EB] hover:bg-blue-700 text-white rounded-lg transition cursor-pointer flex items-center gap-1"
                               >
                                 <span>Resume</span>
                                 <ArrowRight className="w-3.5 h-3.5" />
@@ -966,12 +966,12 @@ export function DashboardView({
           )}
         </div>
 
-        <div className="lg:col-span-4 bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between min-w-0">
+        <div className="lg:col-span-4 bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0">
           <div>
             <div className="pb-3 border-b border-slate-100">
-              <h3 className="text-sm sm:text-base font-bold text-slate-800">Orders overview</h3>
-              <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
-                <span className="font-bold text-emerald-500">↑ 24%</span> this month
+              <h3 className="text-sm sm:text-base font-bold text-[#16191E]">Activity Stream</h3>
+              <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                <span className="font-bold text-emerald-600">↑ 24%</span> this month
               </p>
             </div>
 
@@ -987,10 +987,10 @@ export function DashboardView({
                     </div>
 
                     <div className="min-w-0 flex-1 pl-2">
-                      <h4 className="text-xs font-semibold text-slate-800 leading-snug">
+                      <h4 className="text-xs font-bold text-slate-800 leading-snug">
                         {item.title}
                       </h4>
-                      <p className="text-[11px] text-slate-400 mt-0.5 leading-tight">
+                      <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
                         {item.subtitle}
                       </p>
                     </div>
@@ -1008,7 +1008,7 @@ export function DashboardView({
             <button
               type="button"
               onClick={onViewAllQueue}
-              className="w-full py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
+              className="w-full py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-slate-200/60"
             >
               <span>View Full Chamber Board</span>
               <ArrowRight className="w-3.5 h-3.5 text-[#2563EB]" />

@@ -181,21 +181,21 @@ export function BranchLocationManager({
       <EcgActionLoader isLoading={isLoading || isSaving} fullscreen={true} />
 
       {/* Header Bar */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center shadow-sm flex-shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100/60 text-[#2563EB] flex items-center justify-center flex-shrink-0">
             <Building2 className="w-5 h-5 stroke-[2.2]" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base font-bold text-neutral-900 tracking-tight">
+              <h3 className="text-base sm:text-lg font-bold text-[#16191E] tracking-tight">
                 Branches &amp; Clinic Locations
               </h3>
-              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100/80">
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
                 {locations.length} {locations.length === 1 ? 'Location' : 'Locations'}
               </span>
             </div>
-            <p className="text-xs text-neutral-400 mt-0.5">
+            <p className="text-xs text-slate-500 mt-1">
               Manage physical branches, dedicated WhatsApp lines, and assistant gateway credentials
             </p>
           </div>
@@ -204,7 +204,7 @@ export function BranchLocationManager({
         <button
           type="button"
           onClick={handleOpenAdd}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-2xl text-xs shadow-sm transition-all cursor-pointer self-start sm:self-auto whitespace-nowrap"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#2563EB] hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-xs transition cursor-pointer self-start sm:self-auto whitespace-nowrap"
         >
           <Plus className="w-4 h-4 stroke-[2.2]" />
           <span>Add New Branch</span>
@@ -213,7 +213,7 @@ export function BranchLocationManager({
 
       {/* Separate Branch Cards Grid */}
       {locations.length === 0 && !isLoading ? (
-        <div className="bg-white rounded-3xl p-12 text-center border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]">
+        <div className="bg-white rounded-2xl p-12 text-center border border-[#ECEEF2]">
           <MapPin className="w-9 h-9 text-slate-300 mx-auto mb-2" />
           <h4 className="text-sm font-bold text-slate-800">No branch locations registered yet</h4>
           <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
@@ -231,28 +231,28 @@ export function BranchLocationManager({
             return (
               <div
                 key={loc.id}
-                className={`bg-white rounded-3xl border transition-all duration-200 p-5 sm:p-6 flex flex-col justify-between space-y-4 relative group ${
+                className={`bg-white rounded-2xl border transition-all duration-150 p-5 flex flex-col justify-between space-y-4 relative group shadow-2xs hover:border-slate-300 ${
                   isActive
-                    ? 'border-blue-500 shadow-sm'
-                    : 'border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] hover:shadow-md hover:border-slate-200'
+                    ? 'border-blue-500 ring-1 ring-blue-500/20'
+                    : 'border-[#ECEEF2]'
                 }`}
               >
                 <div className="space-y-3">
                   {/* Top Row: Icon & Status Badges */}
                   <div className="flex items-start justify-between gap-3">
-                    <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center shadow-sm flex-shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100/60 text-[#2563EB] flex items-center justify-center flex-shrink-0">
                       <MapPin className="w-5 h-5 stroke-[2.2]" />
                     </div>
 
                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
                       {isActive && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                           Active
                         </span>
                       )}
                       {code && (
-                        <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-lg bg-neutral-100 text-neutral-600 border border-neutral-200">
+                        <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200/60">
                           {code}
                         </span>
                       )}
@@ -261,49 +261,49 @@ export function BranchLocationManager({
 
                   {/* Branch Name & Address */}
                   <div>
-                    <h4 className="text-base font-bold text-neutral-900 tracking-tight leading-snug">
+                    <h4 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight leading-snug">
                       {loc.branch_name}
                     </h4>
-                    <p className="text-xs text-neutral-400 mt-1 flex items-start gap-1 line-clamp-2">
-                      <MapPin className="w-3.5 h-3.5 text-neutral-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-slate-500 mt-1 flex items-start gap-1 line-clamp-2">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
                       <span>{loc.address || 'Physical address not configured'}</span>
                     </p>
                   </div>
 
                   {/* Operational Details Grid */}
                   <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-                    <div className="bg-neutral-50 rounded-2xl p-3 border border-neutral-100/80 space-y-0.5">
-                      <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider block">
+                    <div className="bg-slate-50/70 rounded-xl p-3 border border-slate-100 space-y-0.5">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                         WhatsApp Contact
                       </span>
-                      <span className="font-semibold text-neutral-800 truncate block">
-                        {loc.phone || <span className="text-neutral-400 italic">Not set</span>}
+                      <span className="font-bold text-slate-800 text-xs truncate block">
+                        {loc.phone || <span className="text-slate-400 font-normal italic">Not set</span>}
                       </span>
                     </div>
 
-                    <div className="bg-neutral-50 rounded-2xl p-3 border border-neutral-100/80 space-y-0.5">
-                      <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider block">
+                    <div className="bg-slate-50/70 rounded-xl p-3 border border-slate-100 space-y-0.5">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                         Gateway PIN
                       </span>
-                      <span className="font-mono font-bold text-neutral-800 flex items-center gap-1">
+                      <span className="font-mono font-bold text-slate-800 text-xs flex items-center gap-1">
                         <KeyRound className="w-3.5 h-3.5 text-amber-500" />
                         {loc.gateway_pin || '1234'}
                       </span>
                     </div>
                   </div>
 
-                  <div className="bg-neutral-50 rounded-2xl p-3 border border-neutral-100/80 flex items-center justify-between text-xs">
-                    <span className="text-neutral-500 font-medium">Daily Consultation Quota</span>
-                    <span className="font-bold text-neutral-800">{loc.daily_quota || 40} patients / day</span>
+                  <div className="bg-slate-50/70 rounded-xl p-3 border border-slate-100 flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-medium">Daily Consultation Quota</span>
+                    <span className="font-bold text-slate-800">{loc.daily_quota || 40} patients / day</span>
                   </div>
                 </div>
 
                 {/* Bottom Action Buttons */}
-                <div className="pt-3 border-t border-neutral-100 flex items-center gap-2">
+                <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => handleCopyUrl(loc)}
-                    className="flex-1 py-2.5 px-3 bg-neutral-100 hover:bg-neutral-200/80 text-neutral-700 rounded-2xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200/80 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
                     title="Copy online booking link for this branch"
                   >
                     {isCopied ? (
@@ -313,7 +313,7 @@ export function BranchLocationManager({
                       </>
                     ) : (
                       <>
-                        <Copy className="w-3.5 h-3.5 text-neutral-500" />
+                        <Copy className="w-3.5 h-3.5 text-slate-500" />
                         <span>Copy Booking Link</span>
                       </>
                     )}
@@ -323,7 +323,7 @@ export function BranchLocationManager({
                     href={fullBookingUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-2.5 bg-neutral-100 hover:bg-neutral-200/80 text-neutral-600 rounded-2xl text-xs transition-colors cursor-pointer"
+                    className="p-2 bg-slate-100 hover:bg-slate-200/80 text-slate-600 rounded-xl text-xs transition cursor-pointer"
                     title="Open booking portal in new tab"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
@@ -332,7 +332,7 @@ export function BranchLocationManager({
                   <button
                     type="button"
                     onClick={() => handleOpenEdit(loc)}
-                    className="py-2.5 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-2xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="py-2 px-3.5 bg-blue-50 hover:bg-blue-100 text-[#2563EB] rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-blue-100/60"
                     title="Edit branch details"
                   >
                     <Edit3 className="w-3.5 h-3.5" />

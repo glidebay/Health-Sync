@@ -431,7 +431,7 @@ export function PatientSlotBookingPortal({
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="bg-white rounded-3xl border border-rose-200 p-6 sm:p-8 max-w-md w-full text-center shadow-xl space-y-4"
+          className="bg-white rounded-2xl border border-rose-200 p-6 sm:p-8 max-w-md w-full text-center shadow-xl space-y-4"
         >
           <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-2xs">
             <AlertTriangle className="w-7 h-7 stroke-[2]" />
@@ -461,7 +461,7 @@ export function PatientSlotBookingPortal({
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="max-w-xl w-full bg-white rounded-3xl border border-emerald-200/90 shadow-xl overflow-hidden"
+          className="max-w-xl w-full bg-white rounded-2xl border border-emerald-200/90 shadow-xl overflow-hidden"
         >
           {/* Header Banner */}
           <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-6 sm:p-8 text-white text-center relative overflow-hidden">
@@ -567,7 +567,7 @@ export function PatientSlotBookingPortal({
     <div className="min-h-screen bg-[#F8F9FB] text-slate-800 py-6 sm:py-10 px-4 sm:px-6 flex flex-col justify-between">
       <div className="max-w-2xl mx-auto w-full">
         {/* Dynamic Branch Isolated Header Banner */}
-        <div className="bg-white rounded-3xl border border-[#ECEEF2] p-5 sm:p-6 shadow-2xs mb-6">
+        <div className="bg-white rounded-2xl border border-[#ECEEF2] p-5 sm:p-6 shadow-2xs mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
             <div className="flex items-center space-x-3.5">
               <div className="w-11 h-11 rounded-2xl bg-[#2563EB] flex items-center justify-center text-white shadow-md shadow-blue-500/20 flex-shrink-0">
@@ -619,7 +619,7 @@ export function PatientSlotBookingPortal({
         </div>
 
         {/* Booking Form Card */}
-        <form onSubmit={handleSubmitBooking} className="bg-white rounded-3xl border border-[#ECEEF2] p-5 sm:p-7 shadow-xs space-y-6">
+        <form onSubmit={handleSubmitBooking} className="bg-white rounded-2xl border border-[#ECEEF2] p-5 sm:p-7 shadow-xs space-y-6">
           {submitError && (
             <motion.div
               initial={{ opacity: 0, y: -8 }}

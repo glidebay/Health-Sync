@@ -216,7 +216,7 @@ export function QueueView({
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-          <div className="relative flex items-center bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/80 p-1 shadow-xs hover:border-slate-300 transition-all">
+          <div className="relative flex items-center bg-white/90 backdrop-blur-md rounded-xl border border-[#ECEEF2] p-1 shadow-2xs hover:border-slate-300 transition-all">
             <button
               type="button"
               onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
@@ -267,7 +267,7 @@ export function QueueView({
 
       <div className="relative min-h-[200px]">
         {currentPatients.length === 0 ? (
-          <div className="bg-white rounded-2xl p-8 sm:p-10 border border-slate-100 text-center shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]">
+          <div className="bg-white rounded-2xl p-8 sm:p-10 border border-[#ECEEF2] text-center shadow-2xs">
             <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-3 shadow-2xs border border-blue-100/60">
               <Stethoscope className="w-6 h-6 stroke-[1.75]" />
             </div>
@@ -303,9 +303,9 @@ export function QueueView({
                     whileHover={!isCompleted ? { y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' } : {}}
                     transition={{ type: 'spring', damping: 25, stiffness: 400 }}
                     onClick={() => !isCompleted && onStartConsultation(p.id, p)}
-                    className={`bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${isCompleted
+                    className={`bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-2xs relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-300 transition duration-150 ${isCompleted
                       ? 'opacity-65 cursor-default'
-                      : 'cursor-pointer hover:border-slate-200'
+                      : 'cursor-pointer'
                       }`}
                   >
                     <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
@@ -320,7 +320,7 @@ export function QueueView({
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-sm sm:text-base font-bold text-slate-800 tracking-tight truncate hover:text-blue-600 transition-colors">
+                          <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight truncate hover:text-blue-600 transition-colors">
                             {p.name}
                           </h3>
                           <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/60 flex-shrink-0">

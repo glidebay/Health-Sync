@@ -661,7 +661,7 @@ export function SlotBookingView({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ type: 'spring', damping: 18, stiffness: 220 }}
-            className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-8 md:p-10 border border-emerald-200 shadow-md text-center max-w-xl mx-auto"
+            className="bg-white rounded-2xl p-5 sm:p-8 md:p-10 border border-emerald-200 shadow-md text-center max-w-xl mx-auto"
           >
             <motion.div
               initial={{ scale: 0 }}
@@ -797,7 +797,7 @@ export function SlotBookingView({
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.3 }}
             onSubmit={handleBookingFormSubmit}
-            className="bg-white rounded-2xl sm:rounded-3xl border border-[#ECEEF2] p-4 sm:p-7 lg:p-8 shadow-sm space-y-4 sm:space-y-6 relative overflow-hidden"
+            className="bg-white rounded-2xl border border-[#ECEEF2] p-4 sm:p-7 lg:p-8 shadow-sm space-y-4 sm:space-y-6 relative overflow-hidden"
           >
             <EcgActionLoader isLoading={isBookingSubmitting} text="Confirming consultation booking..." />
             <div className="text-center pb-4 sm:pb-5 border-b border-[#ECEEF2]">

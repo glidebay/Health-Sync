@@ -388,7 +388,7 @@ export function AnalyticsView({
         </div>
 
         <div className="flex items-center space-x-3 self-start sm:self-auto">
-          <div className="flex items-center bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/80 p-1 shadow-xs hover:border-slate-300 transition-all">
+          <div className="flex items-center bg-white/90 backdrop-blur-md rounded-xl border border-[#ECEEF2] p-1 shadow-2xs hover:border-slate-300 transition-all">
             {PERIOD_OPTIONS.map((period) => {
               const isActive = selectedPeriod === period.id;
               return (
@@ -424,14 +424,14 @@ export function AnalyticsView({
           variants={fadeScale}
           whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
               Walking Patients
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight block">
+              <span className="text-2xl font-bold text-[#16191E] tracking-tight block">
                 <AnimatedCounter target={walkinCount} />
               </span>
               <span className="text-[11px] text-slate-400 font-normal">Active</span>
@@ -451,14 +451,14 @@ export function AnalyticsView({
           variants={fadeScale}
           whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
               WhatsApp Bookings
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight block">
+              <span className="text-2xl font-bold text-emerald-600 tracking-tight block">
                 <AnimatedCounter target={whatsappCount} />
               </span>
               <span className="text-[11px] text-slate-400 font-normal">Active</span>
@@ -478,14 +478,14 @@ export function AnalyticsView({
           variants={fadeScale}
           whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
               Completed Patients
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-extrabold text-indigo-600 tracking-tight block">
+              <span className="text-2xl font-bold text-indigo-600 tracking-tight block">
                 <AnimatedCounter target={completedCount} />
               </span>
               <span className="text-[11px] text-slate-400 font-normal">Today</span>
@@ -505,14 +505,14 @@ export function AnalyticsView({
           variants={fadeScale}
           whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
               Cancelled Patients
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-extrabold text-rose-600 tracking-tight block">
+              <span className="text-2xl font-bold text-rose-600 tracking-tight block">
                 <AnimatedCounter target={cancelledCount} />
               </span>
               <span className="text-[11px] text-slate-400 font-normal">Rate</span>
@@ -565,11 +565,11 @@ export function AnalyticsView({
           animate="visible"
           whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
           transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between"
+          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between"
         >
           <div className="flex items-start justify-between gap-3 mb-5">
             <div>
-              <h3 className="text-base font-bold text-slate-800 tracking-tight">
+              <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
                 Top Selling &amp; Dispensed Medicines
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -596,11 +596,11 @@ export function AnalyticsView({
           animate="visible"
           whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
           transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between"
+          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between"
         >
           <div className="flex items-start justify-between gap-3 mb-5">
             <div>
-              <h3 className="text-base font-bold text-slate-800 tracking-tight">
+              <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
                 Consultation Case Breakdown
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -706,11 +706,11 @@ export function AnalyticsView({
         variants={fadeScale}
         initial="hidden"
         animate="visible"
-        className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]"
+        className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs"
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2.5">
-            <h3 className="text-base font-bold text-slate-800">
+            <h3 className="text-sm sm:text-base font-bold text-[#16191E]">
               Cancelled Appointments
             </h3>
             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">

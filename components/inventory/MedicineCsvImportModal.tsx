@@ -336,7 +336,7 @@ export function MedicineCsvImportModal({
           initial={{ opacity: 0, scale: 0.96, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 15 }}
-          className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden"
+          className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden"
         >
           <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-[#FAFBFD]">
             <div className="flex items-center gap-3">
@@ -389,7 +389,7 @@ export function MedicineCsvImportModal({
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-3xl p-10 sm:p-16 flex flex-col items-center justify-center text-center cursor-pointer transition bg-[#FAFBFD] hover:bg-blue-50/20 group"
+                  className="border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-2xl p-10 sm:p-16 flex flex-col items-center justify-center text-center cursor-pointer transition bg-[#FAFBFD] hover:bg-blue-50/20 group"
                 >
                   <input
                     ref={fileInputRef}
@@ -682,7 +682,7 @@ export function MedicineCsvImportModal({
             {currentStep === 'results' && finalResult && (
               <div className="space-y-6">
                 {finalResult.successfullyImported > 0 ? (
-                  <div className="p-6 bg-emerald-50/50 border border-emerald-100 rounded-3xl text-center space-y-2">
+                  <div className="p-6 bg-emerald-50/50 border border-emerald-100 rounded-2xl text-center space-y-2">
                     <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-2">
                       <CheckCircle className="w-6 h-6" />
                     </div>
@@ -694,7 +694,7 @@ export function MedicineCsvImportModal({
                     </p>
                   </div>
                 ) : finalResult.skippedRows > 0 && finalResult.failedRows === 0 ? (
-                  <div className="p-6 bg-amber-50/50 border border-amber-200 rounded-3xl text-center space-y-2">
+                  <div className="p-6 bg-amber-50/50 border border-amber-200 rounded-2xl text-center space-y-2">
                     <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-2">
                       <AlertTriangle className="w-6 h-6" />
                     </div>
@@ -707,7 +707,7 @@ export function MedicineCsvImportModal({
                     </p>
                   </div>
                 ) : (
-                  <div className="p-6 bg-red-50/50 border border-red-200 rounded-3xl text-center space-y-2">
+                  <div className="p-6 bg-red-50/50 border border-red-200 rounded-2xl text-center space-y-2">
                     <div className="w-12 h-12 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-2">
                       <AlertCircle className="w-6 h-6" />
                     </div>
@@ -825,7 +825,7 @@ export function MedicineCsvImportModal({
 
         {editingRow && (
           <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs">
-            <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-lg p-5 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-lg p-5 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div>
                   <h3 className="text-base font-bold text-slate-800">

@@ -20,7 +20,7 @@ export function BrandLogo({
   const iconSizes = {
     sm: 'w-8 h-8 rounded-xl',
     md: 'w-11 h-11 rounded-2xl',
-    lg: 'w-16 h-16 sm:w-20 sm:h-20 rounded-3xl',
+    lg: 'w-16 h-16 sm:w-20 sm:h-20 rounded-2xl',
   };
 
   const svgSizes = {

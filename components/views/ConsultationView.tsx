@@ -111,7 +111,7 @@ export function ConsultationView({
       className="space-y-4 sm:space-y-6"
     >
       {!activePatient ? (
-        <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border border-[#ECEEF2] shadow-sm">
+        <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border border-[#ECEEF2] shadow-2xs">
           <Stethoscope className="w-12 h-12 text-[#2563EB] opacity-40 mx-auto mb-3" />
           <h3 className="text-base font-bold text-[#16191E]">No Active Patient Selected</h3>
           <p className="text-xs text-[#8A909D] max-w-sm mx-auto mt-1 mb-5">
@@ -121,14 +121,14 @@ export function ConsultationView({
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.96 }}
             onClick={onGoToQueue}
-            className="bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold px-6 py-2.5 rounded-xl transition cursor-pointer"
+            className="bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl transition cursor-pointer shadow-xs"
           >
             Go to Queue
           </motion.button>
         </div>
       ) : (
         <div className="space-y-4 sm:space-y-6">
-          <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center space-x-2">
                 <h2 className="text-base sm:text-lg font-bold text-[#16191E]">{activePatient.name}</h2>
@@ -252,8 +252,8 @@ export function ConsultationView({
             )}
           </AnimatePresence>
 
-          <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
-            <h3 className="text-sm font-bold text-[#16191E] mb-3">Clinical Diagnostic Notes</h3>
+          <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs">
+            <h3 className="text-sm sm:text-base font-bold text-[#16191E] mb-3">Clinical Diagnostic Notes</h3>
             <textarea
               rows={3}
               value={diagnosticNotes}
@@ -263,10 +263,10 @@ export function ConsultationView({
             />
           </div>
 
-          <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
+          <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
               <div>
-                <h3 className="text-sm font-bold text-[#16191E] flex items-center gap-1.5">
+                <h3 className="text-sm sm:text-base font-bold text-[#16191E] flex items-center gap-1.5">
                   <CalendarPlus className="w-4 h-4 text-blue-600" />
                   Next-Visit Follow-Up Charting
                 </h3>
@@ -327,9 +327,9 @@ export function ConsultationView({
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-sm">
+          <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-4">
-              <h3 className="text-sm font-bold text-[#16191E]">
+              <h3 className="text-sm sm:text-base font-bold text-[#16191E]">
                 Prescription Builder
               </h3>
             </div>

@@ -118,7 +118,7 @@ export function EditMedicineModal({
           initial={{ opacity: 0, scale: 0.96, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 15 }}
-          className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden"
+          className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden"
         >
           <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-[#FAFBFD]">
             <div className="flex items-center gap-3">

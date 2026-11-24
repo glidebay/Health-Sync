@@ -573,7 +573,7 @@ export function TablesView({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 12 }}
               transition={{ duration: 0.2 }}
-              className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
             >
               <div className="p-4 sm:p-5 border-b border-slate-100 flex items-start justify-between bg-slate-50/60">
                 <div className="flex items-center gap-3">

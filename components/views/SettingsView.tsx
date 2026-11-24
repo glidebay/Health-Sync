@@ -604,7 +604,7 @@ export function SettingsView({
               checkScroll();
             }
           }}
-          className="flex items-center gap-1.5 p-1 bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-xs overflow-x-auto scroll-smooth w-full select-none"
+          className="flex items-center gap-1.5 p-1 bg-white/90 backdrop-blur-md rounded-xl border border-[#ECEEF2] shadow-2xs overflow-x-auto scroll-smooth w-full select-none"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           {availableCategories.map((cat) => {
@@ -648,13 +648,13 @@ export function SettingsView({
                 return (
                   <div
                     key={meta.key}
-                    className="bg-white rounded-2xl p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-slate-200"
+                    className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div className="space-y-1">
                           <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                            <h3 className="text-sm font-bold text-slate-800">{meta.name}</h3>
+                            <h3 className="text-sm font-bold text-[#16191E]">{meta.name}</h3>
                           </div>
                           <p className="text-xs text-slate-400 leading-relaxed">
                             {meta.description}

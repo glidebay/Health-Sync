@@ -2147,7 +2147,7 @@ function DashboardContent() {
                     <motion.div
                       initial={{ opacity: 0, scale: 0.96 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      className="bg-white rounded-3xl p-8 sm:p-12 border border-slate-100 shadow-sm max-w-lg mx-auto text-center mt-12"
+                      className="bg-white rounded-2xl p-8 sm:p-12 border border-[#ECEEF2] shadow-2xs max-w-lg mx-auto text-center mt-12"
                     >
                       <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto mb-4 text-amber-600">
                         <Lock className="w-8 h-8" />

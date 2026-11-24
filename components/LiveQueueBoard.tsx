@@ -14,18 +14,18 @@ export function LiveQueueBoard({ doctorId, date }: LiveQueueBoardProps) {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center text-slate-500 relative flex items-center justify-center min-h-[220px]">
+      <div className="bg-white rounded-2xl border border-[#ECEEF2] shadow-2xs p-12 text-center text-slate-500 relative flex items-center justify-center min-h-[220px]">
         <EcgActionLoader overlay={false} text="Synchronizing Live Queue..." />
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+    <div className="bg-white rounded-2xl border border-[#ECEEF2] shadow-2xs p-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Today's Live Queue</h2>
-          <p className="text-sm text-slate-500">Auto-synchronized with Doctor Cabin</p>
+          <h2 className="text-base sm:text-lg font-bold text-[#16191E] tracking-tight">Today's Live Queue</h2>
+          <p className="text-xs text-slate-500 mt-0.5">Auto-synchronized with Doctor Cabin</p>
         </div>
         <div className="flex items-center gap-3">
           <button

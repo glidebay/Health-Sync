@@ -228,7 +228,7 @@ export function QueueList({
         </div>
 
         <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
-          <div className="relative flex items-center bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/80 p-1 shadow-xs hover:border-slate-300 transition-all">
+          <div className="relative flex items-center bg-white/90 backdrop-blur-md rounded-xl border border-[#ECEEF2] p-1 shadow-2xs hover:border-slate-300 transition-all">
             <button
               type="button"
               onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
@@ -280,7 +280,7 @@ export function QueueList({
               whileHover={{ scale: 1.02, y: -1 }}
               whileTap={{ scale: 0.98 }}
               onClick={onRegisterWalkin}
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-xs px-4 py-2.5 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center space-x-1.5 self-start sm:self-auto"
+              className="bg-[#2563EB] hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs transition cursor-pointer flex items-center space-x-1.5 self-start sm:self-auto"
             >
               <Plus className="w-4 h-4" />
               <span>Register Walk-in</span>
@@ -291,7 +291,7 @@ export function QueueList({
 
       <div className="relative min-h-[200px]">
         {currentPatients.length === 0 ? (
-          <div className="bg-white rounded-2xl p-8 sm:p-10 border border-slate-100 text-center shadow-[0_10px_25px_0_rgba(0,0,0,0.03)]">
+          <div className="bg-white rounded-2xl p-8 sm:p-10 border border-[#ECEEF2] text-center shadow-2xs">
             <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-3 shadow-2xs border border-blue-100/60">
               <Users className="w-6 h-6 stroke-[1.75]" />
             </div>
@@ -326,7 +326,7 @@ export function QueueList({
                     variants={cardVariants}
                     whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
                     transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-                    className={`bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] hover:border-slate-200 flex flex-col justify-between gap-3 ${
+                    className={`bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-2xs hover:border-slate-300 transition duration-150 flex flex-col justify-between gap-3 ${
                       isCompleted ? 'opacity-65' : ''
                     }`}
                   >
@@ -338,7 +338,7 @@ export function QueueList({
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="font-bold text-sm text-slate-800 truncate">{p.name}</h4>
+                              <h4 className="font-bold text-sm sm:text-base text-[#16191E] truncate">{p.name}</h4>
                               <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/60 flex-shrink-0">
                                 {tokenDisplay}
                               </span>

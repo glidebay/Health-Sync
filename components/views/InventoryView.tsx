@@ -463,14 +463,14 @@ export function InventoryView({
           variants={fadeScale}
           whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
               Total Medicines
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+              <span className="text-2xl font-bold text-[#16191E] tracking-tight">
                 <AnimatedCounter target={totalMedicines} />
               </span>
               <span className="text-[11px] text-slate-400 font-normal">Active</span>
@@ -485,14 +485,14 @@ export function InventoryView({
           variants={fadeScale}
           whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
               Adequate Stocks
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+              <span className="text-2xl font-bold text-[#16191E] tracking-tight">
                 <AnimatedCounter target={adequateCount} />
               </span>
               <span className="inline-flex items-center text-xs font-semibold text-emerald-500">
@@ -509,14 +509,14 @@ export function InventoryView({
           variants={fadeScale}
           whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
               Low Stock Alert
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+              <span className="text-2xl font-bold text-[#16191E] tracking-tight">
                 <AnimatedCounter target={lowStockCount} />
               </span>
               <span className="inline-flex items-center text-xs font-semibold text-amber-500">
@@ -533,14 +533,14 @@ export function InventoryView({
           variants={fadeScale}
           whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
               Stock Depleted
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+              <span className="text-2xl font-bold text-[#16191E] tracking-tight">
                 <AnimatedCounter target={outOfStockCount} />
               </span>
               <span className="inline-flex items-center text-xs font-semibold text-rose-500">
@@ -557,14 +557,14 @@ export function InventoryView({
           variants={fadeScale}
           whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
           transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] flex items-center justify-between min-w-0 col-span-2 sm:col-span-1"
+          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0 col-span-2 sm:col-span-1"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
               Near Expiry / Expired
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-800 tracking-tight">
+              <span className="text-2xl font-bold text-[#16191E] tracking-tight">
                 <AnimatedCounter target={nearExpiryCount + expiredCount} />
               </span>
               <span className="text-[10px] text-slate-400 font-medium">
@@ -956,10 +956,10 @@ export function InventoryView({
       </AnimatePresence>
 
       <div className="relative space-y-5">
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_10px_25px_0_rgba(0,0,0,0.03)] p-4 sm:p-5 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-[#ECEEF2] shadow-2xs p-4 sm:p-5 overflow-hidden">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-4 border-b border-slate-100 gap-3">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h3 className="text-base font-bold text-slate-800">
+              <h3 className="text-sm sm:text-base font-bold text-[#16191E]">
                 Medicine Directory
               </h3>
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">

@@ -113,7 +113,7 @@ export function NotificationModal({ notification, onClose }: NotificationModalPr
           transition={{ type: 'spring', damping: 24, stiffness: 320 }}
           role="dialog"
           aria-modal="true"
-          className="relative w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-[#ECEEF2] overflow-hidden z-10"
+          className="relative w-full max-w-md bg-white rounded-2xl p-6 sm:p-7 shadow-2xl border border-[#ECEEF2] overflow-hidden z-10"
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
           <button
