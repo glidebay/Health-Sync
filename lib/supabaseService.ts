@@ -75,6 +75,20 @@ export function getDoctorsLocal(clinicId?: string, locationId?: string): DbDocto
   return [];
 }
 
+export function clearDoctorsCacheLocal(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('healthsync_doctors_cache') || key.startsWith('healthsync_doctors_'))) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to clear doctor cache:', e);
+  }
+}
+
 export function saveDoctorsLocal(doctors: DbDoctor[], clinicId?: string, locationId?: string): void {
   if (typeof window === 'undefined') return;
   try {
@@ -98,17 +112,23 @@ export async function getDoctorClinicInfo(doctorId: string): Promise<{ clinicId:
   }
 
   try {
-    const { data: dl } = await supabase.from('doctor_locations').select('location_id').eq('doctor_id', doctorId).eq('is_active', true);
-    if (dl && dl.length > 0) {
-      const locIds = dl.map((d: any) => d.location_id);
-      const { data: cl } = await supabase.from('clinic_locations').select('clinic_id, clinic_name').in('id', locIds).limit(1);
-      if (cl && cl.length > 0 && cl[0].clinic_id) {
-        return {
-          clinicId: cl[0].clinic_id,
-          clinicName: cl[0].clinic_name || 'Clinic',
-          isAdmin: false,
-        };
-      }
+    const { data: doc } = await supabase
+      .from('doctors')
+      .select('clinic_id, is_admin_doctor')
+      .eq('id', doctorId)
+      .maybeSingle();
+
+    if (doc?.clinic_id) {
+      const { data: clinicRow } = await supabase
+        .from('clinics')
+        .select('name')
+        .eq('id', doc.clinic_id)
+        .maybeSingle();
+      return {
+        clinicId: doc.clinic_id,
+        clinicName: clinicRow?.name || 'Clinic',
+        isAdmin: Boolean(doc.is_admin_doctor),
+      };
     }
   } catch {}
 
@@ -127,60 +147,32 @@ export async function getDoctors(clinicId?: string, locationId?: string): Promis
       if (loc?.clinic_id) targetClinicId = loc.clinic_id;
     }
 
-    let query = supabase.from('doctors').select('*').eq('is_active', true);
+    let query = supabase
+      .from('doctors')
+      .select('*')
+      .eq('is_active', true)
+      .neq('is_deleted', true);
+
     if (targetClinicId) {
       query = query.eq('clinic_id', targetClinicId);
     }
-    const { data, error } = await query.order('created_at', { ascending: true });
+
+    if (locationId) {
+      // Direct branch match OR All Branches (NULL) OR Admin Doctor
+      query = query.or(`location_id.eq.${locationId},location_id.is.null,is_admin_doctor.eq.true`);
+    }
+
+    const { data, error } = await query
+      .order('is_admin_doctor', { ascending: false })
+      .order('full_name', { ascending: true });
+
     if (error) {
       console.warn('Error fetching doctors:', error.message);
       return getDoctorsLocal(targetClinicId, locationId);
     }
     if (data && data.length > 0) {
-      let filteredDoctors = data as DbDoctor[];
-
-      if (locationId) {
-        try {
-          const [locRes, pinRes] = await Promise.all([
-            supabase
-              .from('doctor_locations')
-              .select('doctor_id')
-              .eq('location_id', locationId)
-              .eq('is_active', true),
-            supabase
-              .from('access_pins')
-              .select('doctor_id')
-              .eq('location_id', locationId)
-              .not('doctor_id', 'is', null)
-              .eq('is_active', true),
-          ]);
-
-          const branchDoctorIds = new Set<string>();
-          if (locRes.data && locRes.data.length > 0) {
-            locRes.data.forEach((r: { doctor_id: string | null }) => {
-              if (r.doctor_id) branchDoctorIds.add(r.doctor_id);
-            });
-          }
-          if (pinRes.data && pinRes.data.length > 0) {
-            pinRes.data.forEach((r: { doctor_id: string | null }) => {
-              if (r.doctor_id) branchDoctorIds.add(r.doctor_id);
-            });
-          }
-
-          filteredDoctors = filteredDoctors.filter((doc) => {
-            if (targetClinicId && doc.clinic_id && doc.clinic_id !== targetClinicId) return false;
-            if (branchDoctorIds.size > 0) {
-              return branchDoctorIds.has(doc.id) || Boolean(doc.is_admin_doctor);
-            }
-            return false;
-          });
-        } catch (filterErr) {
-          console.warn('Could not filter doctors by branch location:', filterErr);
-        }
-      }
-
-      saveDoctorsLocal(filteredDoctors, targetClinicId, locationId);
-      return filteredDoctors;
+      saveDoctorsLocal(data, targetClinicId, locationId);
+      return data as DbDoctor[];
     }
     return getDoctorsLocal(targetClinicId, locationId);
   } catch (err) {
@@ -892,6 +884,14 @@ function sortQueuePatients(patients: FormattedQueuePatient[]): FormattedQueuePat
   });
 }
 
+function normalizePatientStatus(rawStatus?: string | null): PatientStatus {
+  const s = (rawStatus || '').trim().toLowerCase();
+  if (s === 'in progress' || s === 'in-progress' || s === 'in_progress') return 'In Progress';
+  if (s === 'completed') return 'Completed';
+  if (s === 'cancelled' || s === 'canceled' || s === 'reallocated') return 'Cancelled';
+  return 'Waiting';
+}
+
 export async function fetchQueueFromDb(
   targetDate?: string,
   doctorId?: string,
@@ -941,7 +941,7 @@ export async function fetchQueueFromDb(
           age: item.age || 30,
           gender: (item.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
           phone: item.phone_number || undefined,
-          status: (item.status as 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled') || 'Waiting',
+          status: normalizePatientStatus(item.status),
           time: item.slot_time || '10:00 AM',
           appointmentDate: item.appointment_date || todayIST,
           tokenNumber: tokenDisplay,
@@ -1041,7 +1041,7 @@ export async function fetchQueueFromDb(
         age: patient?.age || 30,
         gender: (patient?.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
         phone: patient?.phone_number || undefined,
-        status: (item.status as 'Waiting' | 'In Progress' | 'Completed' | 'Cancelled') || 'Waiting',
+        status: normalizePatientStatus(item.status),
         time: timeStr,
         appointmentDate: todayIST,
         tokenNumber: tokenDisplay,
@@ -1146,7 +1146,7 @@ export async function fetchPatientAppointmentsFromDb(params?: {
         age: item.age || 30,
         gender: (item.gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
         phone: item.phone_number || undefined,
-        status: (item.status as PatientStatus) || 'Waiting',
+        status: normalizePatientStatus(item.status),
         time: item.slot_time || '10:00 AM',
         appointmentDate: item.appointment_date,
         tokenNumber: tokenDisplay,
@@ -1157,6 +1157,9 @@ export async function fetchPatientAppointmentsFromDb(params?: {
         scheduledTime: item.scheduled_time,
         visitType: item.visit_type || 'Walk-in',
         cancellationReason: item.cancellation_reason || undefined,
+        locationId: item.location_id || effectiveLocationId,
+        doctorId: item.doctor_id || undefined,
+        doctorName: item.doctor_name || undefined,
       };
     });
 
@@ -1212,14 +1215,14 @@ export async function registerWalkinPatientDb(params: {
       targetDoctorId = doctorData && doctorData.length > 0 ? doctorData[0].id : null;
     }
 
-    // Attempt RPC register_walk_in_patient first
+    // Attempt RPC register_walk_in_patient first (exact SQL parameter order & keys)
     try {
       const { data: rpcData, error: rpcError } = await supabase.rpc('register_walk_in_patient', {
+        p_clinic_id: params.clinicId || null,
+        p_location_id: params.locationId || null,
+        p_doctor_id: targetDoctorId,
         p_full_name: cleanName,
         p_phone_number: patientPhone,
-        p_doctor_id: targetDoctorId,
-        p_location_id: params.locationId || null,
-        p_clinic_id: params.clinicId || null,
         p_age: params.age,
         p_gender: params.gender,
         p_priority: params.priority || 'Normal',
@@ -1238,7 +1241,7 @@ export async function registerWalkinPatientDb(params: {
           age: params.age,
           gender: (params.gender as any) || 'Male',
           phone: patientPhone,
-          status: 'Waiting',
+          status: normalizePatientStatus(rpcData.status || 'waiting'),
           time: rpcData.slot_time || rpcData.assigned_slot || new Date(bookingTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
           tokenNumber: tokenDisplay,
           queueTokenNo: typeof rawToken === 'number' ? rawToken : parseInt(rawToken, 10) || 1,
@@ -1255,12 +1258,14 @@ export async function registerWalkinPatientDb(params: {
           message: rpcError.message,
           code: 'QUOTA_FULL',
         };
-      } else if (rpcData && rpcData.success === false && (rpcData.error_code === 'QUOTA_FULL' || rpcData.error_code === 'DUPLICATE_VISIT')) {
+      } else if (rpcData && rpcData.success === false) {
+        const errCode = rpcData.error_code || 'WALKIN_REJECTED';
+        const errMsg = rpcData.error_message || rpcData.error || 'Cannot register walk-in patient.';
         return {
           success: false,
-          error: rpcData.error_code,
-          message: rpcData.error_message || 'Cannot register walk-in patient.',
-          code: rpcData.error_code,
+          error: errCode,
+          message: errMsg,
+          code: errCode,
         };
       } else if (rpcError) {
         console.warn('register_walk_in_patient RPC returned error, initiating robust direct insert fallback:', rpcError.message);
@@ -1559,6 +1564,7 @@ export interface RescheduleAdvancedParams {
   fillPatientId?: string | null;
   shiftAllRemaining?: boolean;
   notes?: string;
+  newDoctorId?: string | null;
 }
 
 export interface RescheduleResult {
@@ -1672,6 +1678,32 @@ export async function rescheduleAppointmentAdvancedDb(
         errorCode: data.error || data.error_code,
         error: data.message || data.error_message || 'Reschedule failed',
       };
+    }
+
+    // If a new doctor was explicitly allotted during reschedule, update appointments.doctor_id
+    if (params.newDoctorId) {
+      const { error: docUpdateErr } = await supabase
+        .from('appointments')
+        .update({
+          doctor_id: params.newDoctorId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', params.appointmentId);
+
+      if (docUpdateErr) {
+        console.warn('Failed updating reassigned doctor_id:', docUpdateErr.message);
+      } else {
+        try {
+          await supabase.from('appointment_logs').insert([
+            {
+              appointment_id: params.appointmentId,
+              action: 'Doctor Reassigned',
+              reason: params.notes || 'Patient reallocated to another doctor',
+              performed_by: 'Reception / Doctor',
+            },
+          ]);
+        } catch {}
+      }
     }
 
     return {
@@ -1818,6 +1850,32 @@ export async function completeConsultationDb(params: {
   }>;
 }): Promise<boolean> {
   try {
+    // 1. Primary: Atomic PostgreSQL SECURITY DEFINER transaction
+    const { data: txData, error: txError } = await supabase.rpc('complete_consultation_transaction', {
+      p_appointment_id: params.appointmentId,
+      p_notes: params.notes || null,
+      p_next_visit_date: params.nextVisitDate || null,
+      p_prescriptions: params.prescriptions.map((rx) => ({
+        inventory_id: String(rx.inventoryId),
+        qty: rx.qty,
+        medicine_name: rx.medicineName || null,
+        dosage: rx.dosage || null,
+        frequency: rx.frequency || null,
+        duration: rx.duration || null,
+        instructions: rx.instructions || null,
+      })),
+    });
+
+    if (!txError && txData && txData.success !== false) {
+      return true;
+    }
+
+    if (txData && txData.success === false) {
+      console.warn('complete_consultation_transaction returned false:', txData.error || txData.message);
+      return false;
+    }
+
+    // 2. Fallback if atomic RPC is not deployed yet in Supabase
     const updatePayload: Record<string, any> = {
       status: 'Completed',
       clinical_notes: params.notes,
@@ -1963,10 +2021,19 @@ export async function fetchInventoryFromDb(
         });
     }
 
-    const { data, error } = await supabase
+    let invQuery = supabase
       .from('inventory')
       .select('*')
       .order('generic_name', { ascending: true });
+
+    if (effectiveClinicId) {
+      invQuery = invQuery.eq('clinic_id', effectiveClinicId);
+    }
+    if (effectiveLocationId) {
+      invQuery = invQuery.eq('location_id', effectiveLocationId);
+    }
+
+    const { data, error } = await invQuery;
 
     if (error) {
       console.warn('Error fetching inventory from Supabase:', error.message);
@@ -3969,7 +4036,7 @@ export async function fetchBranchVisitLogDb(params?: {
             age: item.patient_age || 30,
             gender: (item.patient_gender?.toLowerCase() === 'female' ? 'Female' : 'Male') as 'Male' | 'Female' | 'Other',
             phone: item.patient_phone || undefined,
-            status: (item.status === 'Reallocated' ? 'Cancelled' : item.status || 'Waiting') as PatientStatus,
+            status: normalizePatientStatus(item.status),
             time: item.formatted_time || '10:00 AM',
             appointmentDate: item.scheduled_time
               ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(item.scheduled_time))

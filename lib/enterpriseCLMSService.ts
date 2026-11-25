@@ -192,17 +192,27 @@ export interface PavilionDashboardData {
     doctor_name: string;
   };
   clinical_activity: {
-    yearly_patients_formatted: string;
+    subtitle?: string;
+    max_hour_count?: number;
+    today_patients?: number;
+    daily_quota?: number;
+    quota_used_pct?: number;
+    yearly_patients_formatted?: string;
     whatsapp_rate_pct: number;
-    avg_consult_time: string;
+    slot_duration_mins?: number;
+    avg_slot_label?: string;
+    avg_consult_time?: string;
     pharmacy_stock: number;
-    bars: Array<{ hour: string; count: number; height: number }>;
+    bars: Array<{ hour: string; hour_num?: number; count: number; height: number }>;
   };
   intake_overview: {
     growth_label: string;
+    max_daily_intake?: number;
     series: Array<{
-      month: string;
-      month_index: number;
+      day?: string;
+      date_str?: string;
+      month?: string;
+      month_index?: number;
       walk_in: number;
       whatsapp: number;
       total: number;

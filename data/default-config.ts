@@ -47,6 +47,7 @@ export interface AppConfig {
   branch_phone?: string;
   branch_address?: string;
   branch_landmark?: string;
+  branch_logo_url?: string;
 
   rx_template_url: string;
   rx_template_enabled: boolean;
@@ -95,6 +96,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   branch_phone: '',
   branch_address: '',
   branch_landmark: '',
+  branch_logo_url: '',
 
   rx_template_url: '',
   rx_template_enabled: false,
@@ -186,6 +188,16 @@ export const SETTINGS_METADATA: ParameterMetadata[] = [
     uiWidget: 'text',
     target: 'clinic_locations.landmark',
     role: 'Admin',
+  },
+  {
+    key: 'branch_logo_url',
+    name: 'Branch Logo Asset',
+    category: 'Clinic Identity & Branding',
+    paramType: 'Functional Parameter',
+    description: 'Dedicated branding logo for this specific branch displayed on branch headers, tickets, and prescriptions.',
+    uiWidget: 'file',
+    target: 'clinic_locations.logo_url',
+    role: 'Admin / Doctor',
   },
   {
     key: 'clinic_name',

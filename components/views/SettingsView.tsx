@@ -54,6 +54,7 @@ interface SettingsViewProps {
   adminPin?: string;
   clinicLocations?: DbClinicLocation[];
   onRefreshLocations?: () => Promise<void>;
+  isAdmin?: boolean;
 }
 
 interface CategoryConfig {
@@ -194,6 +195,7 @@ export function SettingsView({
   adminPin,
   clinicLocations = [],
   onRefreshLocations,
+  isAdmin = true,
 }: SettingsViewProps) {
   const { config, updateAllConfigs, resetConfigToDefaults } = useClinic();
 
@@ -210,11 +212,11 @@ export function SettingsView({
   const isMultiBranch = Boolean(clinicLocations && clinicLocations.length > 1);
 
   const availableCategories = useMemo(() => {
-    if (!isMultiBranch) {
+    if (!isAdmin) {
       return CATEGORIES.filter((c) => c.id !== 'Multi-Branch & Locations');
     }
     return CATEGORIES;
-  }, [isMultiBranch]);
+  }, [isAdmin]);
 
   // Fetch unified branch & clinic settings from Supabase on mount / branch switch
   useEffect(() => {
@@ -233,6 +235,7 @@ export function SettingsView({
             branch_phone: s.branch_phone || (isSingle ? s.clinic_phone : '') || '',
             branch_address: s.branch_address || (isSingle ? s.clinic_address : '') || '',
             branch_landmark: s.branch_landmark || '',
+            branch_logo_url: s.branch_logo_url || '',
             daily_quota: s.daily_quota ?? 40,
             slot_duration_mins: s.slot_duration_mins ?? 15,
             rx_template_url: s.pad_template_url || '',
@@ -296,17 +299,20 @@ export function SettingsView({
 
   const filteredParameters = useMemo(() => {
     return SETTINGS_METADATA.filter((meta) => {
-      // If single clinic (no multiple branches), hide branch-specific fields
-      if (!isMultiBranch) {
-        if (['branch_name', 'branch_phone', 'branch_address', 'branch_landmark'].includes(meta.key)) {
+      if (!isAdmin) {
+        // Branch-side users manage their own branch identity (name, logo, phone, address, landmark), not clinic-wide master identity
+        if (['clinic_name', 'clinic_phone', 'clinic_address', 'logo_url'].includes(meta.key)) {
+          return false;
+        }
+      } else if (!isMultiBranch) {
+        // If single clinic (no multiple branches), hide duplicate branch-specific fields
+        if (['branch_name', 'branch_phone', 'branch_address', 'branch_landmark', 'branch_logo_url'].includes(meta.key)) {
           return false;
         }
       } else {
-        // If multi-branch:
-        // In 'Clinic Identity & Branding', hide clinic_phone and clinic_address to avoid duplicate confusion,
-        // because each branch has its own dedicated phone & address.
-        // Also hide branch_name and branch_landmark here because they are managed under 'Branches & Locations'.
-        if (['clinic_phone', 'clinic_address', 'branch_name', 'branch_landmark'].includes(meta.key)) {
+        // If multi-branch Clinic Admin:
+        // Hide clinic_phone and clinic_address in Identity & Branding because each branch has its own dedicated phone & address
+        if (['clinic_phone', 'clinic_address'].includes(meta.key)) {
           return false;
         }
       }
@@ -314,7 +320,7 @@ export function SettingsView({
       return meta.category === activeCategory;
     }).map((meta) => {
       // Contextual labels & descriptions for multi-branch vs single clinic
-      if (isMultiBranch) {
+      if (isMultiBranch || !isAdmin) {
         const branchTitle = currentLocation?.branch_name || 'Active Branch';
         if (meta.key === 'clinic_name') {
           return {
@@ -328,6 +334,13 @@ export function SettingsView({
             ...meta,
             name: 'Clinic Master Logo Asset',
             description: 'Official branding logo displayed on headers and prescription prints across all branches.',
+          };
+        }
+        if (meta.key === 'branch_logo_url') {
+          return {
+            ...meta,
+            name: `Branch Logo (${branchTitle})`,
+            description: `Dedicated logo image for ${branchTitle} displayed on branch headers, tokens, and prescriptions.`,
           };
         }
         if (meta.key === 'branch_phone') {
@@ -383,7 +396,7 @@ export function SettingsView({
       }
       return meta;
     });
-  }, [activeCategory, isMultiBranch, currentLocation]);
+  }, [activeCategory, isMultiBranch, isAdmin, currentLocation]);
 
   const handleFieldChange = (key: keyof AppConfig, value: unknown) => {
     setEdits((prev) => ({ ...prev, [key]: value as never }));
@@ -435,6 +448,7 @@ export function SettingsView({
           branch_phone: branchPhoneToSave,
           branch_address: branchAddressToSave,
           branch_landmark: formData.branch_landmark,
+          branch_logo_url: (isAdmin && isSingle) ? (formData.logo_url || formData.branch_logo_url) : formData.branch_logo_url,
           daily_quota: formData.daily_quota,
           slot_duration_mins: formData.slot_duration_mins,
           allow_quota_override: formData.allow_quota_override,
@@ -894,7 +908,7 @@ export function SettingsView({
         </motion.div>
       )}
 
-      {isMultiBranch && activeCategory === 'Multi-Branch & Locations' && (
+      {isAdmin && activeCategory === 'Multi-Branch & Locations' && (
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}

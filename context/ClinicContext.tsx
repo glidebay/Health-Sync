@@ -126,27 +126,17 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
 
     async function loadDbData() {
       try {
-        const [dbPatients, dbInventory, dbDoctors, dbConfig] = await Promise.all([
-          fetchQueueFromDb(),
-          fetchInventoryFromDb(),
-          getDoctors(),
-          fetchAppConfigDb(),
-        ]);
+        const dbConfig = await fetchAppConfigDb();
 
         if (isMounted) {
           if (dbConfig) {
             setConfig(dbConfig);
           }
-          if (dbPatients) {
-            setPatients(dbPatients as unknown as Patient[]);
-          }
-          if (dbInventory) {
-            setInventory(dbInventory as unknown as InventoryItem[]);
-          }
-          if (dbDoctors && dbDoctors.length > 0) {
-            const savedSession = getDoctorSessionLocal();
-            if (savedSession) {
-              const matched = dbDoctors.find((d: DbDoctor) => d.id === savedSession.doctorId);
+          const savedSession = getDoctorSessionLocal();
+          if (savedSession && savedSession.doctorId) {
+            const doctors = await getDoctors();
+            if (isMounted && doctors && doctors.length > 0) {
+              const matched = doctors.find((d: DbDoctor) => d.id === savedSession.doctorId);
               if (
                 matched &&
                 matched.pin_session_until &&
@@ -166,10 +156,6 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
                 setRole('assistant');
                 setCurrentDoctor(null);
               }
-            } else {
-              setIsLoggedIn(false);
-              setRole('assistant');
-              setCurrentDoctor(null);
             }
           }
         }
@@ -180,8 +166,15 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
 
     loadDbData();
 
-    const unsubscribe = subscribeToClinicUpdates(() => {
-      loadDbData();
+    const unsubscribe = subscribeToClinicUpdates(async () => {
+      try {
+        const dbConfig = await fetchAppConfigDb();
+        if (isMounted && dbConfig) {
+          setConfig(dbConfig);
+        }
+      } catch (err) {
+        console.warn('ClinicContext config refresh error:', err);
+      }
     });
 
     return () => {

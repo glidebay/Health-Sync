@@ -22,6 +22,7 @@ import {
   Package,
 } from 'lucide-react';
 import { Patient } from '@/types';
+import { DbDoctor } from '@/types/database';
 import { AnimatedCounter } from '@/components/common/AnimatedCounter';
 import { AnimatedProgress } from '@/components/common/AnimatedProgress';
 import { staggerContainer, fadeScale } from '@/lib/constants';
@@ -29,8 +30,9 @@ import { RescheduleModal, ReallocateStrategy } from '@/components/reception/Resc
 import { CancelModal } from '@/components/reception/CancelModal';
 import { NumberedPagination } from '@/components/ui/pagination';
 import { formatPatientToken, getTodayIST } from '@/lib/utils';
-import { fetchPatientAppointmentsFromDb, fetchPavilionDashboardSummaryDb } from '@/lib/supabaseService';
+import { fetchPatientAppointmentsFromDb, fetchPavilionDashboardSummaryDb, getDoctors } from '@/lib/supabaseService';
 import { supabase } from '@/lib/supabaseClient';
+import EcgActionLoader from '@/components/loading/EcgActionLoader';
 
 interface DashboardViewProps {
   totalPatientsCount: number;
@@ -63,6 +65,7 @@ interface DashboardViewProps {
   locationId?: string;
   clinicId?: string;
   branchName?: string;
+  availableDoctors?: DbDoctor[];
 }
 
 export function DashboardView({
@@ -87,13 +90,17 @@ export function DashboardView({
   locationId,
   clinicId,
   branchName,
+  availableDoctors = [],
 }: DashboardViewProps) {
   const [selectedPatientForReschedule, setSelectedPatientForReschedule] = useState<Patient | null>(null);
   const [selectedPatientForCancel, setSelectedPatientForCancel] = useState<Patient | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [dbPatients, setDbPatients] = useState<Patient[] | null>(null);
+  const [dbDoctors, setDbDoctors] = useState<DbDoctor[]>([]);
   const [pavilionSummary, setPavilionSummary] = useState<any>(null);
-  const [activeTooltipIndex, setActiveTooltipIndex] = useState<number>(4);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [activeTooltipIndex, setActiveTooltipIndex] = useState<number>(6);
+  const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
 
   const itemsPerPage = 6;
 
@@ -104,8 +111,12 @@ export function DashboardView({
 
   const loadData = useCallback(
     async (silent: boolean = true) => {
+      if (!silent) {
+        setIsLoading(true);
+      }
+      const startTime = Date.now();
       try {
-        const [fetched, summary] = await Promise.all([
+        const [fetched, summary, docs] = await Promise.all([
           fetchPatientAppointmentsFromDb({
             date: getTodayIST(),
             status: 'All',
@@ -116,6 +127,7 @@ export function DashboardView({
             clinicId,
             locationId,
           }),
+          getDoctors(clinicId, locationId),
         ]);
         if (Array.isArray(fetched)) {
           setDbPatients(fetched);
@@ -126,18 +138,40 @@ export function DashboardView({
         if (summary) {
           setPavilionSummary(summary);
         }
+        if (Array.isArray(docs)) {
+          setDbDoctors(docs);
+        }
+        if (!silent) {
+          const elapsed = Date.now() - startTime;
+          if (elapsed < 350) {
+            await new Promise((r) => setTimeout(r, 350 - elapsed));
+          }
+        }
       } catch (err) {
         console.warn('Dashboard live queue fetch error:', err);
+      } finally {
+        if (!silent) {
+          setIsLoading(false);
+        }
       }
     },
     [locationId, clinicId]
   );
 
   useEffect(() => {
-    loadData(true);
+    setDbPatients(null);
+    setPavilionSummary(null);
+    setDbDoctors([]);
+    loadData(false);
 
+    let lastSyncTime = 0;
     const handleSync = () => {
-      loadData(true);
+      const now = Date.now();
+      // Throttle window focus refetch to at most once every 5 seconds
+      if (now - lastSyncTime > 5000) {
+        lastSyncTime = now;
+        loadData(true);
+      }
     };
 
     document.addEventListener('visibilitychange', handleSync);
@@ -205,7 +239,10 @@ export function DashboardView({
       ? activePatientsList.find((p) => p.status === 'Waiting')
       : nextWaitingPatient;
   const effectiveStockUnits =
-    pavilionSummary?.pharmacy_summary?.total_units ?? totalStockUnits;
+    pavilionSummary?.kpi?.pharmacy_stock ??
+    pavilionSummary?.clinical_activity?.pharmacy_stock ??
+    pavilionSummary?.pharmacy_summary?.total_units ??
+    totalStockUnits;
 
   const onlineAppointmentsCount = useMemo(() => {
     return activePatientsList.filter((p) => {
@@ -230,27 +267,176 @@ export function DashboardView({
     return effectiveQueue.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   }, [effectiveQueue, currentPage, itemsPerPage]);
 
-  const barChartValues = useMemo(() => [330, 140, 80, 220, 380, 150, 310, 170, 360], []);
+  // ── Left Card: Hourly Load (9 AM - 6 PM) ──
+  const hourlyBars = useMemo(() => {
+    const rpcBars = pavilionSummary?.clinical_activity?.bars;
+    if (Array.isArray(rpcBars) && rpcBars.length > 0) {
+      return rpcBars.map((b: any) => ({
+        label: b.hour || `${b.hour_num || 9}`,
+        shortLabel: String(b.hour || '')
+          .replace(' AM', 'a')
+          .replace(' PM', 'p')
+          .replace(/\s+/g, ''),
+        count: Number(b.count) || 0,
+      }));
+    }
 
-  const months = useMemo(() => ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], []);
-  const walkinData = useMemo(() => [510, 580, 550, 610, 640, 620, 690, 730, 780], []);
-  const whatsappData = useMemo(() => [340, 410, 430, 490, 530, 570, 640, 710, 790], []);
+    // Fallback computed directly from today's activePatientsList
+    const hours = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
+    const countsByHr = new Map<number, number>();
+    hours.forEach((h) => countsByHr.set(h, 0));
 
-  const lineChartXCoords = useMemo(() => [60, 129, 198, 266, 335, 404, 473, 541, 610], []);
+    activePatientsList.forEach((p) => {
+      let hr = -1;
+      const schedRaw = (p as any).scheduledTime;
+      if (schedRaw) {
+        const dt = new Date(schedRaw);
+        if (!Number.isNaN(dt.getTime())) {
+          const istStr = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Kolkata',
+            hour: 'numeric',
+            hour12: false,
+          }).format(dt);
+          hr = parseInt(istStr, 10);
+        }
+      }
+      if (hr < 0 && p.time) {
+        const m = p.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (m) {
+          hr = parseInt(m[1], 10);
+          if (m[3].toUpperCase() === 'PM' && hr < 12) hr += 12;
+          if (m[3].toUpperCase() === 'AM' && hr === 12) hr = 0;
+        }
+      }
+      if (hr >= 9 && hr <= 18) {
+        countsByHr.set(hr, (countsByHr.get(hr) || 0) + 1);
+      }
+    });
+
+    return hours.map((h) => ({
+      label: h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`,
+      shortLabel: h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`,
+      count: countsByHr.get(h) || 0,
+    }));
+  }, [pavilionSummary, activePatientsList]);
+
+  const barYMax = useMemo(() => {
+    const rawMax = Math.max(
+      Number(pavilionSummary?.clinical_activity?.max_hour_count) || 0,
+      ...hourlyBars.map((b) => b.count),
+      4
+    );
+    return Math.ceil(rawMax / 2) * 2;
+  }, [pavilionSummary, hourlyBars]);
+
+  const clinicalMetrics = useMemo(() => {
+    const ca = pavilionSummary?.clinical_activity;
+    const todayTotal = ca?.today_patients ?? effectiveTotalCount;
+    const dailyQuota = ca?.daily_quota ?? 40;
+    const quotaPct =
+      ca?.quota_used_pct ??
+      (dailyQuota > 0 ? Math.min(100, Math.round((todayTotal / dailyQuota) * 100)) : 0);
+    const whatsappPct =
+      ca?.whatsapp_rate_pct ??
+      (effectiveTotalCount > 0 ? Math.round((onlineAppointmentsCount / effectiveTotalCount) * 100) : 0);
+    const slotLabel = ca?.avg_slot_label ?? (ca?.slot_duration_mins ? `${ca.slot_duration_mins}m` : '15m');
+    const stockUnits = ca?.pharmacy_stock ?? effectiveStockUnits;
+
+    let subtitle = ca?.subtitle;
+    if (!subtitle) {
+      const peak = hourlyBars.reduce(
+        (best, cur) => (cur.count > best.count ? cur : best),
+        hourlyBars[0] || { label: '11 AM', count: 0 }
+      );
+      subtitle = `Peak: ${peak.label} (${peak.count} pts) • ${todayTotal}/${dailyQuota} daily quota (${quotaPct}%)`;
+    }
+
+    return {
+      todayTotal,
+      dailyQuota,
+      quotaPct,
+      whatsappPct,
+      slotLabel,
+      stockUnits,
+      subtitle,
+    };
+  }, [pavilionSummary, effectiveTotalCount, onlineAppointmentsCount, effectiveStockUnits, hourlyBars]);
+
+  // ── Right Card: 7-Day Daily Intake Trend (Walk-in vs WhatsApp) ──
+  const intakeSeries = useMemo(() => {
+    const rpcSeries = pavilionSummary?.intake_overview?.series;
+    if (Array.isArray(rpcSeries) && rpcSeries.length > 0) {
+      return rpcSeries.map((s: any) => ({
+        day: s.day || s.month || '',
+        dateStr: s.date_str || s.day || s.month || '',
+        walkIn: Number(s.walk_in) || 0,
+        whatsapp: Number(s.whatsapp) || 0,
+      }));
+    }
+
+    // Fallback: last 7 days with today's live Walk-in / WhatsApp counts
+    const todayWalkin = Math.max(0, effectiveTotalCount - onlineAppointmentsCount);
+    const result = [];
+    for (let offset = 6; offset >= 0; offset--) {
+      const d = new Date(Date.now() - offset * 86400000);
+      const day = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', weekday: 'short' }).format(d);
+      const dateStr = new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: 'short',
+      }).format(d);
+      result.push({
+        day,
+        dateStr,
+        walkIn: offset === 0 ? todayWalkin : 0,
+        whatsapp: offset === 0 ? onlineAppointmentsCount : 0,
+      });
+    }
+    return result;
+  }, [pavilionSummary, effectiveTotalCount, onlineAppointmentsCount]);
+
+  const intakeYMax = useMemo(() => {
+    const maxVal = Math.max(
+      4,
+      ...intakeSeries.map((s) => Math.max(s.walkIn, s.whatsapp))
+    );
+    return Math.ceil(maxVal / 4) * 4;
+  }, [intakeSeries]);
+
+  const intakeSubtitle = useMemo(() => {
+    if (pavilionSummary?.intake_overview?.growth_label) {
+      return pavilionSummary.intake_overview.growth_label;
+    }
+    const todayWalkin = Math.max(0, effectiveTotalCount - onlineAppointmentsCount);
+    return `Today: ${todayWalkin} Walk-in, ${onlineAppointmentsCount} WhatsApp`;
+  }, [pavilionSummary, effectiveTotalCount, onlineAppointmentsCount]);
+
+  const lineChartXCoords = useMemo(() => {
+    const n = intakeSeries.length;
+    if (n <= 1) return [335];
+    const startX = 65;
+    const endX = 605;
+    return intakeSeries.map((_, i) => startX + (i * (endX - startX)) / (n - 1));
+  }, [intakeSeries]);
+
+  const safeTooltipIdx = useMemo(() => {
+    if (intakeSeries.length === 0) return 0;
+    return Math.min(activeTooltipIndex ?? intakeSeries.length - 1, intakeSeries.length - 1);
+  }, [activeTooltipIndex, intakeSeries.length]);
 
   const pts1 = useMemo(() => {
     return lineChartXCoords.map((x, i) => ({
       x,
-      y: 220 - (walkinData[i] / 800) * 180,
+      y: 220 - ((intakeSeries[i]?.walkIn || 0) / intakeYMax) * 180,
     }));
-  }, [lineChartXCoords, walkinData]);
+  }, [lineChartXCoords, intakeSeries, intakeYMax]);
 
   const pts2 = useMemo(() => {
     return lineChartXCoords.map((x, i) => ({
       x,
-      y: 220 - (whatsappData[i] / 800) * 180,
+      y: 220 - ((intakeSeries[i]?.whatsapp || 0) / intakeYMax) * 180,
     }));
-  }, [lineChartXCoords, whatsappData]);
+  }, [lineChartXCoords, intakeSeries, intakeYMax]);
 
   const getCubicBezierPath = useCallback((points: { x: number; y: number }[]) => {
     if (points.length < 2) return '';
@@ -273,68 +459,58 @@ export function DashboardView({
 
   const splinePath1 = useMemo(() => getCubicBezierPath(pts1), [getCubicBezierPath, pts1]);
   const splineAreaPath1 = useMemo(() => {
-    if (!splinePath1) return '';
-    return `${splinePath1} L 610 220 L 60 220 Z`;
-  }, [splinePath1]);
+    if (!splinePath1 || pts1.length === 0) return '';
+    return `${splinePath1} L ${pts1[pts1.length - 1].x.toFixed(1)} 220 L ${pts1[0].x.toFixed(1)} 220 Z`;
+  }, [splinePath1, pts1]);
 
   const splinePath2 = useMemo(() => getCubicBezierPath(pts2), [getCubicBezierPath, pts2]);
 
-  const activityLog = useMemo(() => {
-    const items = [];
-    if (effectiveInChamber) {
-      items.push({
-        id: 'in-chamber',
-        title: `Token ${formatPatientToken(effectiveInChamber)} in Consultation`,
-        subtitle: `${effectiveInChamber.name} (${effectiveInChamber.age}y, ${effectiveInChamber.gender}) in Chamber`,
-        time: effectiveInChamber.time || 'Live Now',
-        icon: Stethoscope,
-        color: 'from-emerald-500 to-teal-400',
-      });
-    }
-
-    const recentlyCompleted = activePatientsList.filter((p) => p.status === 'Completed').slice(-1);
-    recentlyCompleted.forEach((p) => {
-      items.push({
-        id: `comp-${p.id}`,
-        title: `Token ${formatPatientToken(p)} Completed`,
-        subtitle: `Rx charting finalized for ${p.name}`,
-        time: p.time || 'Recent',
-        icon: CheckCircle2,
-        color: 'from-blue-600 to-indigo-500',
-      });
+  const branchDoctorsRoster = useMemo(() => {
+    const baseDocs = dbDoctors.length > 0 ? dbDoctors : availableDoctors;
+    const scopedDocs = baseDocs.filter((d) => {
+      if (d.is_active === false || d.is_deleted) return false;
+      if (!locationId) return true;
+      return !d.location_id || d.location_id === locationId || Boolean(d.is_admin_doctor);
     });
 
-    if (effectiveNextWaiting) {
-      items.push({
-        id: 'next-waiting',
-        title: `Token ${formatPatientToken(effectiveNextWaiting)} Next in Line`,
-        subtitle: `${effectiveNextWaiting.name} at Waiting Lounge`,
-        time: effectiveNextWaiting.time || 'Next Slot',
-        icon: Clock,
-        color: 'from-indigo-600 to-purple-500',
+    return scopedDocs.map((doc) => {
+      const stripped = (doc.full_name || 'Doctor')
+        .replace(/^(?:dr\.?|doctor)\s+/gi, '')
+        .replace(/^(?:dr\.?|doctor)\s+/gi, '')
+        .trim();
+      const displayName = `Dr. ${stripped}`;
+      const initials =
+        stripped
+          .split(' ')
+          .map((w) => w[0])
+          .filter(Boolean)
+          .slice(0, 2)
+          .join('')
+          .toUpperCase() || 'DR';
+
+      const docPatients = activePatientsList.filter((p) => {
+        if (p.doctorId && p.doctorId === doc.id) return true;
+        if (p.doctorName && p.doctorName.toLowerCase().includes(stripped.toLowerCase())) return true;
+        return false;
       });
-    }
+      const inProgressPatient = docPatients.find((p) => p.status === 'In Progress');
+      const waitingCount = docPatients.filter((p) => p.status === 'Waiting').length;
+      const completedCount = docPatients.filter((p) => p.status === 'Completed').length;
 
-    items.push({
-      id: 'pharmacy-stock',
-      title: 'Pharmacy Sync Online',
-      subtitle: `${totalStockUnits} units cataloged in stock`,
-      time: 'Synced',
-      icon: Pill,
-      color: 'from-amber-500 to-orange-400',
+      return {
+        id: doc.id,
+        displayName,
+        initials,
+        specialization: doc.specialization || 'General Medicine',
+        isAllBranches: Boolean(doc.is_admin_doctor || !doc.location_id),
+        dailyQuota: doc.daily_quota || 30,
+        inProgressPatient,
+        waitingCount,
+        completedCount,
+        totalToday: docPatients.length,
+      };
     });
-
-    items.push({
-      id: 'wa-channel',
-      title: 'WhatsApp Gateway Active',
-      subtitle: `${onlineAppointmentsCount} digital appointments verified`,
-      time: 'Ready',
-      icon: MessageSquare,
-      color: 'from-teal-600 to-emerald-500',
-    });
-
-    return items;
-  }, [effectiveInChamber, activePatientsList, effectiveNextWaiting, totalStockUnits, onlineAppointmentsCount]);
+  }, [dbDoctors, availableDoctors, locationId, activePatientsList]);
 
   return (
     <motion.div
@@ -343,8 +519,9 @@ export function DashboardView({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -12 }}
       transition={{ duration: 0.25 }}
-      className="space-y-5 sm:space-y-6 max-w-7xl mx-auto pb-4"
+      className="space-y-5 sm:space-y-6 max-w-7xl mx-auto pb-4 relative"
     >
+      <EcgActionLoader isLoading={isLoading} text="Syncing branch pavilion..." />
       <motion.section
         variants={staggerContainer}
         initial="hidden"
@@ -539,32 +716,65 @@ export function DashboardView({
         <div className="lg:col-span-5 bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0">
           <div>
             <div className="bg-[#181F38] rounded-xl p-4 text-white shadow-xs relative overflow-hidden">
-              <div className="h-40 w-full relative">
-                <svg className="w-full h-full" viewBox="0 0 360 160" preserveAspectRatio="none">
-                  <text x="32" y="28" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">400</text>
-                  <text x="32" y="78" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">200</text>
+              {hoveredBarIndex !== null && hourlyBars[hoveredBarIndex] && (
+                <div className="absolute top-2.5 right-3 z-10 bg-slate-900/90 border border-slate-700/70 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-white shadow-md">
+                  {hourlyBars[hoveredBarIndex].label}:{' '}
+                  <span className="text-sky-400 font-bold">
+                    {hourlyBars[hoveredBarIndex].count} {hourlyBars[hoveredBarIndex].count === 1 ? 'patient' : 'patients'}
+                  </span>
+                </div>
+              )}
+              <div className="h-44 w-full relative">
+                <svg className="w-full h-full" viewBox="0 0 360 165" preserveAspectRatio="none">
+                  <text x="32" y="28" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">{barYMax}</text>
+                  <text x="32" y="78" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">{Math.round(barYMax / 2)}</text>
                   <text x="32" y="128" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">0</text>
 
-                  <line x1="42" y1="28" x2="345" y2="28" stroke="rgba(255,255,255,0.12)" strokeDasharray="4 4" />
-                  <line x1="42" y1="78" x2="345" y2="78" stroke="rgba(255,255,255,0.12)" strokeDasharray="4 4" />
-                  <line x1="42" y1="128" x2="345" y2="128" stroke="rgba(255,255,255,0.15)" />
+                  <line x1="42" y1="28" x2="348" y2="28" stroke="rgba(255,255,255,0.12)" strokeDasharray="4 4" />
+                  <line x1="42" y1="78" x2="348" y2="78" stroke="rgba(255,255,255,0.12)" strokeDasharray="4 4" />
+                  <line x1="42" y1="128" x2="348" y2="128" stroke="rgba(255,255,255,0.15)" />
 
-                  {barChartValues.map((val, i) => {
-                    const x = 65 + i * 31;
-                    const h = (val / 400) * 100;
+                  {hourlyBars.map((bar, i) => {
+                    const step = hourlyBars.length > 1 ? 286 / (hourlyBars.length - 1) : 0;
+                    const x = 52 + i * step;
+                    const h = bar.count > 0 ? Math.max(8, (bar.count / barYMax) * 100) : 6;
                     const y = 128 - h;
+                    const isHovered = hoveredBarIndex === i;
 
                     return (
-                      <motion.rect
-                        key={`bar-${i}`}
-                        x={x}
-                        width="6"
-                        rx="3"
-                        fill="#FFFFFF"
-                        initial={{ height: 0, y: 128 }}
-                        animate={{ height: h, y: y }}
-                        transition={{ duration: 0.55, delay: i * 0.05, ease: 'easeOut' }}
-                      />
+                      <g
+                        key={`bar-${bar.label}-${i}`}
+                        className="cursor-pointer"
+                        onMouseEnter={() => setHoveredBarIndex(i)}
+                        onMouseLeave={() => setHoveredBarIndex(null)}
+                      >
+                        <rect
+                          x={x - 10}
+                          y={20}
+                          width="26"
+                          height="125"
+                          fill="transparent"
+                        />
+                        <motion.rect
+                          x={x}
+                          width="7"
+                          rx="3.5"
+                          fill={isHovered ? '#38BDF8' : bar.count > 0 ? '#FFFFFF' : 'rgba(255,255,255,0.22)'}
+                          initial={{ height: 0, y: 128 }}
+                          animate={{ height: h, y: y }}
+                          transition={{ duration: 0.45, delay: i * 0.04, ease: 'easeOut' }}
+                        />
+                        <text
+                          x={x + 3.5}
+                          y="148"
+                          textAnchor="middle"
+                          fill={isHovered ? '#38BDF8' : '#94A3B8'}
+                          fontSize="9.5"
+                          fontWeight={isHovered ? '700' : '500'}
+                        >
+                          {bar.shortLabel}
+                        </text>
+                      </g>
                     );
                   })}
                 </svg>
@@ -574,7 +784,7 @@ export function DashboardView({
             <div className="pt-4">
               <h3 className="text-sm sm:text-base font-bold text-[#16191E]">Clinical Activity</h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                <span className="font-bold text-emerald-600">(+21.4%)</span> annual growth in patient consultations
+                {clinicalMetrics.subtitle}
               </p>
             </div>
           </div>
@@ -587,9 +797,12 @@ export function DashboardView({
                 </div>
                 <span className="text-[11px] font-bold text-slate-500">Patients</span>
               </div>
-              <div className="text-base font-bold text-[#16191E] mt-1">11.8K</div>
+              <div className="text-base font-bold text-[#16191E] mt-1">{clinicalMetrics.todayTotal}</div>
               <div className="w-full h-1 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-[#7928CA] to-[#FF0080] rounded-full w-[65%]" />
+                <div
+                  className="h-full bg-gradient-to-r from-[#7928CA] to-[#FF0080] rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(100, Math.max(8, clinicalMetrics.quotaPct))}%` }}
+                />
               </div>
             </div>
 
@@ -600,9 +813,12 @@ export function DashboardView({
                 </div>
                 <span className="text-[11px] font-bold text-slate-500">WhatsApp</span>
               </div>
-              <div className="text-base font-bold text-[#16191E] mt-1">50.3%</div>
+              <div className="text-base font-bold text-[#16191E] mt-1">{clinicalMetrics.whatsappPct}%</div>
               <div className="w-full h-1 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-emerald-600 to-teal-400 rounded-full w-[78%]" />
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-600 to-teal-400 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(100, Math.max(8, clinicalMetrics.whatsappPct))}%` }}
+                />
               </div>
             </div>
 
@@ -611,11 +827,14 @@ export function DashboardView({
                 <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-[#2152ff] to-[#21d4fd] flex items-center justify-center text-white shadow-2xs">
                   <Clock className="w-2.5 h-2.5 stroke-[2.5]" />
                 </div>
-                <span className="text-[11px] font-bold text-slate-500">Avg Time</span>
+                <span className="text-[11px] font-bold text-slate-500">Slot Time</span>
               </div>
-              <div className="text-base font-bold text-[#16191E] mt-1">14m</div>
+              <div className="text-base font-bold text-[#16191E] mt-1">{clinicalMetrics.slotLabel}</div>
               <div className="w-full h-1 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-[#2152ff] to-[#21d4fd] rounded-full w-[55%]" />
+                <div
+                  className="h-full bg-gradient-to-r from-[#2152ff] to-[#21d4fd] rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(100, Math.max(15, completionRate || 50))}%` }}
+                />
               </div>
             </div>
 
@@ -626,9 +845,12 @@ export function DashboardView({
                 </div>
                 <span className="text-[11px] font-bold text-slate-500">Rx Stock</span>
               </div>
-              <div className="text-base font-bold text-[#16191E] mt-1">{totalStockUnits || 716}</div>
+              <div className="text-base font-bold text-[#16191E] mt-1">{clinicalMetrics.stockUnits}</div>
               <div className="w-full h-1 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-[#ea0606] to-[#ff667c] rounded-full w-[82%]" />
+                <div
+                  className="h-full bg-gradient-to-r from-[#ea0606] to-[#ff667c] rounded-full transition-all duration-300"
+                  style={{ width: clinicalMetrics.stockUnits > 0 ? '82%' : '12%' }}
+                />
               </div>
             </div>
           </div>
@@ -639,10 +861,7 @@ export function DashboardView({
             <div>
               <h3 className="text-sm sm:text-base font-bold text-[#16191E]">Patient Intake Overview</h3>
               <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                <span className="font-bold text-emerald-600 flex items-center">
-                  ↑ +21.4%
-                </span>
-                <span>annual growth in clinical consultations</span>
+                <span className="font-bold text-emerald-600">{intakeSubtitle}</span>
               </p>
             </div>
             <div className="flex items-center gap-3 self-start sm:self-auto">
@@ -666,10 +885,10 @@ export function DashboardView({
                 </linearGradient>
               </defs>
 
-              <text x="35" y="44" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">800</text>
-              <text x="35" y="89" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">600</text>
-              <text x="35" y="134" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">400</text>
-              <text x="35" y="179" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">200</text>
+              <text x="35" y="44" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">{intakeYMax}</text>
+              <text x="35" y="89" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">{Math.round(intakeYMax * 0.75)}</text>
+              <text x="35" y="134" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">{Math.round(intakeYMax * 0.5)}</text>
+              <text x="35" y="179" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">{Math.round(intakeYMax * 0.25)}</text>
               <text x="35" y="224" textAnchor="end" fill="#A0AEC0" fontSize="11" fontWeight="500">0</text>
 
               <line x1="45" y1="40" x2="630" y2="40" stroke="#EDF2F7" strokeDasharray="5 5" />
@@ -708,11 +927,11 @@ export function DashboardView({
                 transition={{ duration: 1.1, delay: 0.15, ease: 'easeOut' }}
               />
 
-              {activeTooltipIndex !== null && (
+              {pts1[safeTooltipIdx] && (
                 <line
-                  x1={pts1[activeTooltipIndex].x}
+                  x1={pts1[safeTooltipIdx].x}
                   y1="40"
-                  x2={pts1[activeTooltipIndex].x}
+                  x2={pts1[safeTooltipIdx].x}
                   y2="220"
                   stroke="#E2E8F0"
                   strokeWidth="1.5"
@@ -720,9 +939,9 @@ export function DashboardView({
                 />
               )}
 
-              {months.map((m, i) => (
+              {intakeSeries.map((item, i) => (
                 <text
-                  key={m}
+                  key={`${item.day}-${i}`}
                   x={lineChartXCoords[i]}
                   y="242"
                   textAnchor="middle"
@@ -730,16 +949,16 @@ export function DashboardView({
                   fontSize="11"
                   fontWeight="500"
                 >
-                  {m}
+                  {item.day}
                 </text>
               ))}
 
               {pts1.map((p, i) => (
                 <rect
                   key={`hit-${i}`}
-                  x={p.x - 25}
+                  x={p.x - 32}
                   y="20"
-                  width="50"
+                  width="64"
                   height="210"
                   fill="transparent"
                   className="cursor-pointer"
@@ -747,19 +966,19 @@ export function DashboardView({
                 />
               ))}
 
-              {activeTooltipIndex !== null && (
+              {pts1[safeTooltipIdx] && pts2[safeTooltipIdx] && (
                 <>
                   <circle
-                    cx={pts1[activeTooltipIndex].x}
-                    cy={pts1[activeTooltipIndex].y}
+                    cx={pts1[safeTooltipIdx].x}
+                    cy={pts1[safeTooltipIdx].y}
                     r="5"
                     fill="#17C1E8"
                     stroke="#FFFFFF"
                     strokeWidth="3"
                   />
                   <circle
-                    cx={pts2[activeTooltipIndex].x}
-                    cy={pts2[activeTooltipIndex].y}
+                    cx={pts2[safeTooltipIdx].x}
+                    cy={pts2[safeTooltipIdx].y}
                     r="5"
                     fill="#10B981"
                     stroke="#FFFFFF"
@@ -769,23 +988,25 @@ export function DashboardView({
               )}
             </svg>
 
-            {activeTooltipIndex !== null && (
+            {intakeSeries[safeTooltipIdx] && pts1[safeTooltipIdx] && (
               <div
                 className="absolute bg-[#1E293B] text-white text-[11px] rounded-xl px-3 py-2 shadow-xl border border-slate-700/50 pointer-events-none transition-all duration-150 z-20"
                 style={{
-                  left: `${(pts1[activeTooltipIndex].x / 650) * 100}%`,
+                  left: `${(pts1[safeTooltipIdx].x / 650) * 100}%`,
                   top: '18px',
                   transform: 'translateX(-50%)',
                 }}
               >
-                <div className="font-bold text-white mb-1">{months[activeTooltipIndex]}</div>
+                <div className="font-bold text-white mb-1">
+                  {intakeSeries[safeTooltipIdx].day} ({intakeSeries[safeTooltipIdx].dateStr})
+                </div>
                 <div className="flex items-center gap-1.5 text-slate-300">
                   <span className="w-2 h-2 rounded-xs bg-[#17C1E8]" />
-                  <span>Walk-in: {walkinData[activeTooltipIndex]}</span>
+                  <span>Walk-in: {intakeSeries[safeTooltipIdx].walkIn}</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-slate-300">
                   <span className="w-2 h-2 rounded-xs bg-[#10B981]" />
-                  <span>WhatsApp: {whatsappData[activeTooltipIndex]}</span>
+                  <span>WhatsApp: {intakeSeries[safeTooltipIdx].whatsapp}</span>
                 </div>
               </div>
             )}
@@ -968,40 +1189,78 @@ export function DashboardView({
 
         <div className="lg:col-span-4 bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0">
           <div>
-            <div className="pb-3 border-b border-slate-100">
-              <h3 className="text-sm sm:text-base font-bold text-[#16191E]">Activity Stream</h3>
-              <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                <span className="font-bold text-emerald-600">↑ 24%</span> this month
-              </p>
+            <div className="pb-3 border-b border-slate-100 flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-base font-bold text-[#16191E]">Doctors in Chamber</h3>
+                <p className="text-xs text-slate-500 mt-0.5 truncate">
+                  {branchName ? `Active at ${branchName}` : 'Active clinic roster'}
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#2563EB] border border-blue-100 flex-shrink-0">
+                <Stethoscope className="w-3 h-3" />
+                <span>{branchDoctorsRoster.length} {branchDoctorsRoster.length === 1 ? 'Doctor' : 'Doctors'}</span>
+              </span>
             </div>
 
-            <div className="relative pl-5 pt-4 space-y-4 before:content-[''] before:absolute before:left-[9px] before:top-5 before:bottom-2 before:w-[1.5px] before:bg-slate-100">
-              {activityLog.map((item) => {
-                const IconComponent = item.icon;
-                return (
-                  <div key={item.id} className="relative flex items-start justify-between gap-2.5">
+            {branchDoctorsRoster.length === 0 ? (
+              <div className="py-10 text-center">
+                <Stethoscope className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs font-semibold text-slate-600">No doctors assigned yet</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Add doctors for this branch in Doctor Management.
+                </p>
+              </div>
+            ) : (
+              <div className="pt-3.5 space-y-2.5">
+                {branchDoctorsRoster.slice(0, 5).map((doc) => {
+                  const isConsulting = Boolean(doc.inProgressPatient);
+                  return (
                     <div
-                      className={`absolute -left-5 top-0.5 w-5 h-5 rounded-full bg-gradient-to-tl ${item.color} flex items-center justify-center text-white shadow-xs`}
+                      key={doc.id}
+                      className="flex items-center justify-between gap-2.5 p-2.5 rounded-xl bg-slate-50/70 border border-slate-100 hover:border-slate-200 transition"
                     >
-                      <IconComponent className="w-2.5 h-2.5 stroke-[2.2]" />
-                    </div>
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div
+                          className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 relative ${
+                            isConsulting
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-blue-50 text-[#2563EB] border border-blue-100'
+                          }`}
+                        >
+                          {doc.initials}
+                          {isConsulting && (
+                            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white animate-pulse" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-xs font-bold text-slate-800 truncate">
+                            {doc.displayName}
+                          </h4>
+                          <p className="text-[11px] text-slate-500 truncate">
+                            {doc.specialization}
+                          </p>
+                        </div>
+                      </div>
 
-                    <div className="min-w-0 flex-1 pl-2">
-                      <h4 className="text-xs font-bold text-slate-800 leading-snug">
-                        {item.title}
-                      </h4>
-                      <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
-                        {item.subtitle}
-                      </p>
+                      <div className="text-right flex-shrink-0">
+                        {isConsulting && doc.inProgressPatient ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            In Chamber • {formatPatientToken(doc.inProgressPatient)}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white text-slate-600 border border-slate-200">
+                            {doc.waitingCount > 0 ? `${doc.waitingCount} waiting` : 'Available'}
+                          </span>
+                        )}
+                        <div className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                          {doc.isAllBranches ? 'All Branches' : (branchName || 'Branch')} • {doc.totalToday}/{doc.dailyQuota}
+                        </div>
+                      </div>
                     </div>
-
-                    <span className="text-[10px] font-semibold text-slate-400 flex-shrink-0 pt-0.5">
-                      {item.time}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="pt-4 mt-3 border-t border-slate-100">
