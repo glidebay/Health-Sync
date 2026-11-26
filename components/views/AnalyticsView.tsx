@@ -143,6 +143,7 @@ const PERIOD_OPTIONS: Array<{ id: PeriodDays; label: string }> = [
 
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const SERIES_PALETTE = ['#2563EB', '#10B981', '#F59E0B', '#6366F1', '#EC4899', '#14B8A6', '#94A3B8'];
+const CANCEL_PALETTE = ['#F43F5E', '#FB7185', '#F59E0B', '#6366F1', '#8B5CF6', '#94A3B8'];
 const DAY_MS = 86_400_000;
 const DOCTOR_TABLE_PAGE_SIZE = 5;
 
@@ -583,6 +584,7 @@ export function AnalyticsView({
   const [doctorSummaryPage, setDoctorSummaryPage] = useState<number>(1);
   const [doctorDailyPage, setDoctorDailyPage] = useState<number>(1);
   const [doctorLeavesPage, setDoctorLeavesPage] = useState<number>(1);
+  const [doctorQuotaPage, setDoctorQuotaPage] = useState<number>(1);
   const [overviewDateFilter, setOverviewDateFilter] = useState<string>('');
   const [overviewDoctorId, setOverviewDoctorId] = useState<string>('');
 
@@ -590,6 +592,7 @@ export function AnalyticsView({
     setDoctorSummaryPage(1);
     setDoctorDailyPage(1);
     setDoctorLeavesPage(1);
+    setDoctorQuotaPage(1);
   };
 
   useEffect(() => {
@@ -1710,6 +1713,11 @@ export function AnalyticsView({
     [doctorReport.leaves, doctorLeavesPage]
   );
 
+  const pagedDoctorQuota = useMemo(
+    () => getPaginatedSlice(queueMetrics.quotaRows, doctorQuotaPage, DOCTOR_TABLE_PAGE_SIZE),
+    [queueMetrics.quotaRows, doctorQuotaPage]
+  );
+
   const branchChartData: ChartConfiguration<'bar'>['data'] = useMemo(
     () => ({
       labels: branchComparisonRows.map((b) => b.name),
@@ -2025,12 +2033,58 @@ export function AnalyticsView({
         {
           label: 'Cancellations',
           data: queueMetrics.reasons.map((r) => r.count),
-          backgroundColor: 'rgba(244, 63, 94, 0.85)',
-          hoverBackgroundColor: '#E11D48',
+          backgroundColor: queueMetrics.reasons.map((_, i) => CANCEL_PALETTE[i % CANCEL_PALETTE.length]),
           borderRadius: 6,
-          barThickness: 20,
+          maxBarThickness: 36,
         },
       ],
+    }),
+    [queueMetrics.reasons]
+  );
+
+  const cancelReasonsBarOptions: ChartConfiguration<'bar'>['options'] = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 20 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1E293B',
+          padding: 10,
+          cornerRadius: 10,
+          callbacks: {
+            label: (item) => {
+              const count = Number(item.raw) || 0;
+              const total = queueMetrics.reasons.reduce((s, r) => s + r.count, 0);
+              const pct = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0';
+              return ` Cancellations: ${count} (${pct}%)`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          border: { display: false },
+          ticks: {
+            color: '#475569',
+            font: { size: 10, weight: 'bold' },
+            maxRotation: 0,
+            callback: function (_val, index) {
+              const label = queueMetrics.reasons[index]?.label || '';
+              return label.length > 18 ? `${label.slice(0, 16)}…` : label;
+            },
+          },
+        },
+        y: {
+          beginAtZero: true,
+          grace: '20%',
+          border: { display: false },
+          grid: { color: '#F1F5F9' },
+          ticks: { precision: 0, color: '#94A3B8', font: { size: 11 } },
+        },
+      },
     }),
     [queueMetrics.reasons]
   );
@@ -2531,33 +2585,38 @@ export function AnalyticsView({
                     <ChartCanvas type="bar" data={branchChartData} options={branchChartOptions} showValues={true} />
                   </div>
                 )}
-                <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80">
-                  {branchComparisonRows.map((row, index) => (
-                    <li
-                      key={row.id}
-                      className="py-4 grid grid-cols-1 sm:grid-cols-[2rem_1.3fr_1fr_auto] gap-3 sm:gap-5 items-center text-xs"
-                    >
-                      <span className="text-xs font-medium text-slate-400 tabular-nums">
-                        {String(index + 1).padStart(2, '0')}
-                      </span>
-                      <span className="text-sm font-medium text-[#16191E] truncate">{row.name}</span>
-                      <div className="flex flex-wrap items-center gap-3 text-slate-500">
-                        <span>
-                          Visits: <strong className="font-semibold text-[#16191E] tabular-nums">{row.total.toLocaleString('en-IN')}</strong>
-                        </span>
-                        <span className="text-slate-300">•</span>
-                        <span>
-                          Avg Consult: <strong className="font-medium text-slate-700 tabular-nums">{row.avgMins !== null ? `${row.avgMins.toFixed(1)} min` : 'N/A'}</strong>
-                        </span>
-                      </div>
-                      <div className="flex items-center sm:justify-end">
-                        <span className="rounded-full border border-emerald-200/70 bg-emerald-50 px-3 py-0.5 text-[11px] font-medium text-emerald-700 tabular-nums">
-                          {row.whatsappShare.toFixed(1)}% WhatsApp
-                        </span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-t border-slate-200/80 pt-1">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200/80 text-[10px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                        <th className="py-2.5 pr-2 w-8">#</th>
+                        <th className="py-2.5 px-2">Branch</th>
+                        <th className="py-2.5 px-2 text-right">Visits</th>
+                        <th className="py-2.5 px-2 text-right">Avg Consult</th>
+                        <th className="py-2.5 pl-2 text-right">WhatsApp Share</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {branchComparisonRows.map((row, index) => (
+                        <tr key={row.id} className="hover:bg-slate-50/80 transition-colors whitespace-nowrap">
+                          <td className="py-3 pr-2 text-xs font-medium text-slate-400 tabular-nums">
+                            {String(index + 1).padStart(2, '0')}
+                          </td>
+                          <td className="py-3 px-2 font-medium text-[#16191E]">{row.name}</td>
+                          <td className="py-3 px-2 text-right font-semibold text-[#16191E] tabular-nums">
+                            {row.total.toLocaleString('en-IN')}
+                          </td>
+                          <td className="py-3 px-2 text-right font-medium text-slate-600 tabular-nums">
+                            {row.avgMins !== null ? `${row.avgMins.toFixed(1)} min` : 'N/A'}
+                          </td>
+                          <td className="py-3 pl-2 text-right font-medium text-emerald-600 tabular-nums">
+                            {row.whatsappShare.toFixed(1)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </>
             )}
           </div>
@@ -3140,16 +3199,62 @@ export function AnalyticsView({
                 </div>
               </div>
 
-              <div className="relative w-full h-[250px]">
-                {queueMetrics.reasons.length > 0 ? (
-                  <ChartCanvas type="bar" data={cancelReasonsChartData} options={horizontalBarOptions} showValues={true} />
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
-                    <CalendarX className="w-8 h-8 text-slate-300 mb-2" />
-                    <p className="text-xs font-medium text-slate-600">No cancellations recorded in this period</p>
+              {queueMetrics.reasons.length > 0 ? (
+                <div className="space-y-4 flex-1 flex flex-col justify-between">
+                  <div className="relative w-full h-[170px]">
+                    <ChartCanvas
+                      type="bar"
+                      data={cancelReasonsChartData}
+                      options={cancelReasonsBarOptions}
+                      showValues={true}
+                    />
                   </div>
-                )}
-              </div>
+                  <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-t border-slate-200/80 pt-1">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200/80 text-[10px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                          <th className="py-2 pr-2">Reason</th>
+                          <th className="py-2 px-2 text-right">Cancelled</th>
+                          <th className="py-2 pl-2 text-right">Share</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {queueMetrics.reasons.map((r, idx) => {
+                          const totalReasons = queueMetrics.reasons.reduce((s, item) => s + item.count, 0);
+                          const pct = totalReasons > 0 ? ((r.count / totalReasons) * 100).toFixed(1) : '0.0';
+                          return (
+                            <tr key={r.label} className="hover:bg-slate-50/80 transition-colors whitespace-nowrap">
+                              <td className="py-2.5 pr-2 font-medium text-slate-700">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                    style={{ backgroundColor: CANCEL_PALETTE[idx % CANCEL_PALETTE.length] }}
+                                    aria-hidden="true"
+                                  />
+                                  <span className="truncate max-w-[220px]" title={r.label}>
+                                    {r.label}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-2 text-right font-semibold text-[#16191E] tabular-nums">
+                                {r.count.toLocaleString('en-IN')}
+                              </td>
+                              <td className="py-2.5 pl-2 text-right font-medium text-rose-600 tabular-nums">
+                                {pct}%
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-[250px] flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
+                  <CalendarX className="w-8 h-8 text-slate-300 mb-2" />
+                  <p className="text-xs font-medium text-slate-600">No cancellations recorded in this period</p>
+                </div>
+              )}
             </div>
 
             <div className="lg:col-span-6 bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0 space-y-5">
@@ -3233,13 +3338,13 @@ export function AnalyticsView({
                   <ChartCanvas type="bar" data={doctorQuotaChartData} options={branchChartOptions} showValues={true} />
                 </div>
                 <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80">
-                  {queueMetrics.quotaRows.map((q, idx) => (
+                  {pagedDoctorQuota.rows.map((q, idx) => (
                     <li
                       key={q.id}
                       className="py-4 grid grid-cols-1 sm:grid-cols-[2rem_1.3fr_1fr_auto] gap-3 sm:gap-5 items-center text-xs"
                     >
                       <span className="text-xs font-medium text-slate-400 tabular-nums">
-                        {String(idx + 1).padStart(2, '0')}
+                        {String(pagedDoctorQuota.startIndex + idx).padStart(2, '0')}
                       </span>
                       <span className="text-sm font-medium text-[#16191E] truncate">{q.name}</span>
                       <div className="flex flex-wrap items-center gap-3 text-slate-500">
@@ -3259,6 +3364,16 @@ export function AnalyticsView({
                     </li>
                   ))}
                 </ul>
+
+                <DoctorTablePagination
+                  currentPage={pagedDoctorQuota.currentPage}
+                  totalPages={pagedDoctorQuota.totalPages}
+                  totalItems={queueMetrics.quotaRows.length}
+                  startIndex={pagedDoctorQuota.startIndex}
+                  endIndex={pagedDoctorQuota.endIndex}
+                  itemName="doctors"
+                  onPageChange={setDoctorQuotaPage}
+                />
               </>
             )}
           </div>
@@ -3297,51 +3412,63 @@ export function AnalyticsView({
                   />
                 </div>
 
-                <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80">
-                  {pagedDoctorSummary.rows.map((d, idx) => (
-                    <li
-                      key={d.id}
-                      className="py-4 grid grid-cols-1 lg:grid-cols-[2rem_1.2fr_1.6fr_auto] gap-3 sm:gap-5 items-start lg:items-center text-xs"
-                    >
-                      <span className="text-xs font-medium text-slate-400 tabular-nums">
-                        {String(pagedDoctorSummary.startIndex + idx).padStart(2, '0')}
-                      </span>
-
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: d.color }}
-                          aria-hidden="true"
-                        />
-                        <span className="text-sm font-medium text-[#16191E] truncate">{d.name}</span>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-500">
-                        <span>
-                          Consulted: <strong className="font-medium text-slate-800 tabular-nums">{d.consulted.toLocaleString('en-IN')}</strong>
-                        </span>
-                        {doctorReport.branchNames.map((bn, bIdx) => (
-                          <span key={`${d.id}-br-${bIdx}`}>
-                            • {formatCompactBranchHeader(bn, doctorReport.branchNames)}:{' '}
-                            <strong className="font-medium text-slate-700 tabular-nums">{(d.byBranch[bIdx] ?? 0).toLocaleString('en-IN')}</strong>
-                          </span>
+                <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-t border-slate-200/80 pt-1">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200/80 text-[10px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                        <th className="py-2.5 pr-2 w-8">#</th>
+                        <th className="py-2.5 px-2">Doctor</th>
+                        <th className="py-2.5 px-2 text-right">Consulted</th>
+                        {doctorReport.branchNames.map((bn) => (
+                          <th key={bn} title={bn} className="py-2.5 px-2 text-right">
+                            <span className="inline-block max-w-[115px] truncate align-bottom">
+                              {formatCompactBranchHeader(bn, doctorReport.branchNames)}
+                            </span>
+                          </th>
                         ))}
-                        <span>
-                          • Total Time: <strong className="font-medium text-slate-700 tabular-nums">{d.totalMins !== null ? formatHoursMins(d.totalMins) : 'N/A'}</strong>
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2 lg:justify-end flex-wrap">
-                        <span className="rounded-full border border-blue-200/70 bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-[#2563EB] tabular-nums">
-                          {d.avgMins !== null ? `${d.avgMins.toFixed(1)} min avg` : 'No avg'}
-                        </span>
-                        <span className="rounded-full border border-amber-200/70 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700 tabular-nums">
-                          {d.leaveDays} {d.leaveDays === 1 ? 'leave' : 'leaves'}
-                        </span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                        <th className="py-2.5 px-2 text-right">Total Time</th>
+                        <th className="py-2.5 px-2 text-right">Avg / Patient</th>
+                        <th className="py-2.5 pl-2 text-right">Leaves</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {pagedDoctorSummary.rows.map((d, idx) => (
+                        <tr key={d.id} className="hover:bg-slate-50/80 transition-colors whitespace-nowrap">
+                          <td className="py-3 pr-2 text-xs font-medium text-slate-400 tabular-nums">
+                            {String(pagedDoctorSummary.startIndex + idx).padStart(2, '0')}
+                          </td>
+                          <td className="py-3 px-2 font-medium text-[#16191E]">
+                            <div className="flex items-center gap-2.5">
+                              <span
+                                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: d.color }}
+                                aria-hidden="true"
+                              />
+                              <span>{d.name}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-2 text-right font-semibold text-slate-800 tabular-nums">
+                            {d.consulted.toLocaleString('en-IN')}
+                          </td>
+                          {d.byBranch.map((cnt, bIdx) => (
+                            <td key={`${d.id}-br-${bIdx}`} className="py-3 px-2 text-right text-slate-600 tabular-nums">
+                              {cnt.toLocaleString('en-IN')}
+                            </td>
+                          ))}
+                          <td className="py-3 px-2 text-right text-slate-600 tabular-nums">
+                            {d.totalMins !== null ? formatHoursMins(d.totalMins) : 'N/A'}
+                          </td>
+                          <td className="py-3 px-2 text-right font-medium text-[#2563EB] tabular-nums">
+                            {d.avgMins !== null ? `${d.avgMins.toFixed(1)} min` : 'N/A'}
+                          </td>
+                          <td className="py-3 pl-2 text-right font-medium text-amber-600 tabular-nums">
+                            {d.leaveDays}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
                 <DoctorTablePagination
                   currentPage={pagedDoctorSummary.currentPage}
