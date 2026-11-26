@@ -73,7 +73,7 @@ import { NavigationDock } from '@/components/layout/NavigationDock';
 import { DoctorAuthModal } from '@/components/auth/DoctorAuthModal';
 import { WalkinRegisterModal } from '@/components/modals/WalkinRegisterModal';
 import { DoctorProfileEditModal } from '@/components/modals/DoctorProfileEditModal';
-import { PrescriptionPrintModal } from '@/components/modals/PrescriptionPrintModal';
+import { PrescriptionPrintModal, type PrescriptionPrintRecord } from '@/components/modals/PrescriptionPrintModal';
 import { NotificationModal, NotificationState } from '@/components/modals/NotificationModal';
 import { FloatingChatButton } from '@/components/chat/FloatingChatButton';
 import { DoctorChatModal } from '@/components/chat/DoctorChatModal';
@@ -156,7 +156,7 @@ const sortQueueWithCompletedAtEnd = (patients: Patient[]): Patient[] => {
 };
 
 function DashboardContent() {
-  const { isLoading, config, logoutDoctor } = useClinic();
+  const { isLoading, config, refreshConfig, logoutDoctor } = useClinic();
   const isMobile = useIsMobile();
   const [portalMode, setPortalMode] = useState<PortalMode>(() => {
     if (typeof window !== 'undefined') {
@@ -382,6 +382,7 @@ function DashboardContent() {
           fetchQueueFromDb(undefined, undefined, targetLocationId, targetClinicId),
           fetchInventoryFromDb(targetClinicId, targetLocationId),
           getDoctors(targetClinicId, adminFlag ? undefined : targetLocationId),
+          refreshConfig(targetClinicId, targetLocationId),
         ]);
 
         if (dbQueue && Array.isArray(dbQueue)) {
@@ -499,6 +500,7 @@ function DashboardContent() {
             setWalkinDoctorId((prev) => (freshDocs.some((d) => d.id === prev) ? prev : freshDocs[0].id));
           }
         }),
+        refreshConfig(activeClinic, loc.id),
       ]);
 
       const elapsed = Date.now() - startTime;
@@ -660,18 +662,8 @@ function DashboardContent() {
   const [rxDosage, setRxDosage] = useState('');
 
   const [showPrintModal, setShowPrintModal] = useState(false);
-  const [printRecord, setPrintRecord] = useState<{
-    date: string;
-    patientName: string;
-    patientPhone?: string;
-    demographics: string;
-    diagnostics: string;
-    items: PrescriptionItem[];
-    patientAge?: number | string;
-    patientGender?: string;
-    tokenNumber?: string | number;
-    nextVisitDate?: string;
-  } | null>(null);
+  const [returnToQueueOnPrintClose, setReturnToQueueOnPrintClose] = useState(false);
+  const [printRecord, setPrintRecord] = useState<PrescriptionPrintRecord | null>(null);
 
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
@@ -1158,7 +1150,13 @@ function DashboardContent() {
       });
 
       if (res && res.success) {
-        setQueue((prev) => sortQueueWithCompletedAtEnd([...prev, { ...res, visitType: 'Walk-in', locationId: currentLocation?.id }]));
+        const entry = { ...res, visitType: 'Walk-in', locationId: currentLocation?.id };
+        setQueue((prev) =>
+          sortQueueWithCompletedAtEnd([
+            ...prev.filter((p) => p.id !== entry.id),
+            entry,
+          ])
+        );
         fetchQueueFromDb(undefined, undefined, currentLocation?.id).then((fresh) => {
           if (fresh && fresh.length > 0) {
             setQueue(sortQueueWithCompletedAtEnd(fresh));
@@ -1170,6 +1168,24 @@ function DashboardContent() {
         setWalkinGender('Male');
         setWalkinPriority('Normal');
         setShowWalkinModal(false);
+
+        if (res.alreadyInQueue || res.matchType === 'already_waiting') {
+          const dupMsg =
+            res.message ||
+            `Patient ${res.name} is already waiting in queue today with Token ${res.tokenNumber}.`;
+          showNotification({
+            type: 'warning',
+            title: 'Patient Already in Queue',
+            message: dupMsg,
+          });
+          showToast('warning', 'Already in Queue', dupMsg);
+        } else {
+          showToast(
+            'success',
+            res.isReturningPatient ? 'Returning Patient Checked In' : 'Walk-in Registered',
+            res.message || `${res.name} checked in with Token ${res.tokenNumber}.`
+          );
+        }
       } else {
         const msg = res?.message || 'Could not register walk-in patient.';
         const isQuotaReached = msg.toLowerCase().includes('quota');
@@ -1662,6 +1678,11 @@ function DashboardContent() {
     });
 
     setPrintRecord({
+      appointmentId: activePatient.id,
+      clinicId: currentClinicId || currentLocation?.clinic_id || undefined,
+      locationId: activePatient.locationId || currentLocation?.id || undefined,
+      patientId: activePatient.patientDbId,
+      branchName: currentLocation?.branch_name || undefined,
       date: dateStr,
       patientName: activePatient.name,
       patientPhone: activePatient.phone,
@@ -1676,8 +1697,12 @@ function DashboardContent() {
       diagnostics: diagnosticNotes || 'Clinical examination normal. Prescription issued.',
       items: [...currentPrescription],
       nextVisitDate,
+      doctorName: doctorProfile.name,
+      doctorTitle: doctorProfile.title,
+      autoSaveToBackend: true,
     });
 
+    setReturnToQueueOnPrintClose(true);
     setShowPrintModal(true);
     setActivePatient(null);
   };
@@ -2336,18 +2361,39 @@ function DashboardContent() {
                         startConsultation(patientId);
                         setActiveSection('consult');
                       }}
-                      onPrintRecord={(patient) => {
+                      onPrintRecord={(patient, details) => {
+                        const mappedItems: PrescriptionItem[] = (details?.prescriptions || []).map((rx, idx) => ({
+                          med: {
+                            id: `visit-log-${idx}`,
+                            brand: rx.brandName,
+                            generic: rx.genericName || '',
+                            stock: rx.qty || 1,
+                          },
+                          qty: rx.qty || 1,
+                          dosage: rx.dosage && rx.dosage !== 'Standard' ? rx.dosage : undefined,
+                        }));
+
                         setPrintRecord({
+                          appointmentId: patient.id,
+                          clinicId: currentClinicId || currentLocation?.clinic_id || undefined,
+                          locationId: patient.locationId || currentLocation?.id || undefined,
+                          patientId: patient.patientDbId,
+                          branchName: currentLocation?.branch_name || undefined,
                           date: patient.appointmentDate || getTodayIST(),
                           patientName: patient.name,
                           patientPhone: patient.phone,
                           demographics: `${patient.age} Yrs / ${patient.gender}`,
-                          diagnostics: patient.cancellationReason || 'Consultation verified',
-                          items: [],
+                          diagnostics: details?.clinicalNotes || patient.cancellationReason || 'Consultation verified',
+                          items: mappedItems,
                           patientAge: patient.age,
                           patientGender: patient.gender,
                           tokenNumber: patient.tokenNumber || patient.displayId || '',
+                          doctorName: details?.doctorName || patient.doctorName || doctorProfile.name,
+                          doctorTitle: details?.doctorSpecialization || doctorProfile.title,
+                          nextVisitDate: details?.nextVisitDate,
+                          prescriptionPdfUrl: details?.prescriptionPdfUrl,
                         });
+                        setReturnToQueueOnPrintClose(false);
                         setShowPrintModal(true);
                       }}
                     />
@@ -2438,6 +2484,7 @@ function DashboardContent() {
                   ) : (
                     <ConsultationView
                       activePatient={activePatient}
+                      clinicId={currentClinicId || currentLocation?.clinic_id || undefined}
                       diagnosticNotes={diagnosticNotes}
                       setDiagnosticNotes={setDiagnosticNotes}
                       selectedMedId={selectedMedId}
@@ -2451,6 +2498,11 @@ function DashboardContent() {
                       onAddMedicineToRx={addMedicineToRx}
                       onRemoveRx={removeRx}
                       onCompleteConsultation={completeConsultation}
+                      onViewRxModal={(record) => {
+                        setPrintRecord(record);
+                        setReturnToQueueOnPrintClose(false);
+                        setShowPrintModal(true);
+                      }}
                       onGoToQueue={() => setActiveSection('queue')}
                     />
                   )
@@ -2652,7 +2704,10 @@ function DashboardContent() {
             isOpen={showPrintModal}
             onClose={() => {
               setShowPrintModal(false);
-              setActiveSection('queue');
+              if (returnToQueueOnPrintClose) {
+                setReturnToQueueOnPrintClose(false);
+                setActiveSection('queue');
+              }
             }}
             printRecord={printRecord}
             doctorProfile={doctorProfile}

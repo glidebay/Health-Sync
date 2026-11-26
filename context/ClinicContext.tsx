@@ -59,6 +59,7 @@ interface ClinicContextType {
   logoutDoctor: () => void;
   updateConfig: <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => Promise<boolean>;
   updateAllConfigs: (newConfig: Partial<AppConfig>) => Promise<boolean>;
+  refreshConfig: (clinicId?: string, locationId?: string) => Promise<void>;
   resetConfigToDefaults: () => Promise<void>;
   
   registerPatient: (
@@ -487,6 +488,17 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     return res.success;
   };
 
+  const refreshConfig = React.useCallback(async (clinicId?: string, locationId?: string): Promise<void> => {
+    try {
+      const dbConfig = await fetchAppConfigDb(clinicId, locationId);
+      if (dbConfig) {
+        setConfig(dbConfig);
+      }
+    } catch (err) {
+      console.warn('refreshConfig error:', err);
+    }
+  }, []);
+
   const resetConfigToDefaults = async (): Promise<void> => {
     setConfig(DEFAULT_APP_CONFIG);
     await resetAppConfigDb();
@@ -523,6 +535,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
         logoutDoctor,
         updateConfig,
         updateAllConfigs,
+        refreshConfig,
         resetConfigToDefaults,
         registerPatient,
         updatePatientStatus,

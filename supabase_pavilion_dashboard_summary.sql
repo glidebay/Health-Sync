@@ -81,6 +81,7 @@ DECLARE
   -- Queue & Feed
   v_queue_list JSONB := '[]'::jsonb;
   v_activity_list JSONB := '[]'::jsonb;
+  v_doctors_in_chamber JSONB := '[]'::jsonb;
 BEGIN
   -- 1. Determine Scope
   v_eff_clinic_id := NULLIF(TRIM(COALESCE(p_clinic_id, '')), '');
@@ -356,6 +357,54 @@ BEGIN
     LIMIT 10
   ) act;
 
+  -- 9b. Doctors in Chamber (Branch-Scoped Roster + Live Counts)
+  SELECT COALESCE(jsonb_agg(row_to_json(dic)), '[]'::jsonb) INTO v_doctors_in_chamber
+  FROM (
+    SELECT
+      d.id::text AS doctor_id,
+      d.full_name AS doctor_name,
+      COALESCE(d.specialization, 'General Medicine') AS specialization,
+      CASE
+        WHEN COALESCE(d.is_admin_doctor, false) OR d.location_id IS NULL THEN 'All Branches'
+        ELSE COALESCE(loc.branch_name, 'Assigned Branch')
+      END AS assigned_branch,
+      COALESCE(COUNT(a.id) FILTER (WHERE LOWER(a.status) NOT IN ('cancelled', 'reallocated')), 0)::int AS today_patients,
+      COALESCE(d.daily_quota, 30)::int AS daily_quota,
+      ROUND(
+        LEAST(
+          100.0,
+          (COALESCE(COUNT(a.id) FILTER (WHERE LOWER(a.status) NOT IN ('cancelled', 'reallocated')), 0)::numeric / GREATEST(COALESCE(d.daily_quota, 30), 1)) * 100.0
+        ),
+        1
+      ) AS quota_pct,
+      COALESCE(BOOL_OR(LOWER(a.status) = 'in progress'), false) AS in_chamber,
+      COALESCE(COUNT(a.id) FILTER (WHERE LOWER(a.status) = 'waiting'), 0)::int AS waiting_count,
+      CASE
+        WHEN COALESCE(BOOL_OR(LOWER(a.status) = 'in progress'), false) THEN 'In Chamber'
+        WHEN COALESCE(COUNT(a.id) FILTER (WHERE LOWER(a.status) = 'waiting'), 0) = 1 THEN '1 patient waiting'
+        WHEN COALESCE(COUNT(a.id) FILTER (WHERE LOWER(a.status) = 'waiting'), 0) > 1 THEN format('%s patients waiting', COUNT(a.id) FILTER (WHERE LOWER(a.status) = 'waiting'))
+        ELSE 'Available'
+      END AS status_label
+    FROM public.doctors d
+    LEFT JOIN public.clinic_locations loc ON loc.id::text = d.location_id::text
+    LEFT JOIN public.appointments a
+      ON a.doctor_id = d.id
+     AND (a.scheduled_time AT TIME ZONE 'Asia/Kolkata')::date = v_today
+     AND (v_eff_location_id IS NULL OR a.location_id::text = v_eff_location_id)
+    WHERE (v_eff_clinic_id IS NULL OR d.clinic_id::text = v_eff_clinic_id)
+      AND COALESCE(d.is_active, true) = true
+      AND COALESCE(d.is_deleted, false) = false
+      AND (
+        v_eff_location_id IS NULL
+        OR d.location_id::text = v_eff_location_id
+        OR d.location_id IS NULL
+        OR COALESCE(d.is_admin_doctor, false) = true
+      )
+      AND (v_eff_doctor_id IS NULL OR d.id = v_eff_doctor_id)
+    GROUP BY d.id, d.full_name, d.specialization, d.location_id, d.is_admin_doctor, d.daily_quota, loc.branch_name
+    ORDER BY in_chamber DESC, waiting_count DESC, d.full_name ASC
+  ) dic;
+
   -- 10. Return Structured Dashboard Output
   RETURN jsonb_build_object(
     'success', true,
@@ -386,13 +435,22 @@ BEGIN
       'whatsapp_rate_pct', v_today_whatsapp_pct,
       'slot_duration_mins', v_slot_duration,
       'avg_slot_label', v_slot_duration || 'm',
-      'pharmacy_stock', v_pharmacy_stock
+      'pharmacy_stock', v_pharmacy_stock,
+      'metrics', jsonb_build_object(
+        'patients', v_today_patients,
+        'quota_pct', v_quota_used_pct,
+        'whatsapp_pct', v_today_whatsapp_pct,
+        'completion_rate', v_completion_rate,
+        'avg_time', v_slot_duration || 'm',
+        'pharmacy_stock', v_pharmacy_stock
+      )
     ),
     'intake_overview', jsonb_build_object(
       'growth_label', v_intake_growth_label,
       'max_daily_intake', v_max_daily_intake,
       'series', v_intake_series
     ),
+    'doctors_in_chamber', v_doctors_in_chamber,
     'projects_queue', v_queue_list,
     'orders_overview', v_activity_list
   );

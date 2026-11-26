@@ -4,6 +4,22 @@
 -- deductions execute inside one ACID transaction (no partial updates).
 -- ════════════════════════════════════════════════════════════════════════════
 
+-- Ensure prescribed_medications accepts both medicines.id and inventory.id without broken FK errors
+ALTER TABLE public.prescribed_medications
+  DROP CONSTRAINT IF EXISTS prescribed_medications_inventory_id_fkey CASCADE;
+
+ALTER TABLE public.prescribed_medications
+  ALTER COLUMN inventory_id DROP NOT NULL;
+
+ALTER TABLE public.prescribed_medications
+  ADD COLUMN IF NOT EXISTS medicine_id uuid,
+  ADD COLUMN IF NOT EXISTS medicine_name text,
+  ADD COLUMN IF NOT EXISTS dosage text,
+  ADD COLUMN IF NOT EXISTS frequency text,
+  ADD COLUMN IF NOT EXISTS duration text,
+  ADD COLUMN IF NOT EXISTS instructions text,
+  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+
 CREATE OR REPLACE FUNCTION public.complete_consultation_transaction(
   p_appointment_id uuid,
   p_notes text DEFAULT NULL,
@@ -60,6 +76,7 @@ BEGIN
         INSERT INTO public.prescribed_medications (
           appointment_id,
           inventory_id,
+          medicine_id,
           dispensed_quantity,
           medicine_name,
           dosage,
@@ -69,7 +86,8 @@ BEGIN
           created_at
         ) VALUES (
           p_appointment_id,
-          v_inv_id,
+          CASE WHEN v_inv_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN v_inv_id::uuid ELSE NULL END,
+          CASE WHEN v_inv_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN v_inv_id::uuid ELSE NULL END,
           v_qty,
           NULLIF(TRIM(COALESCE(v_rx->>'medicine_name', '')), ''),
           NULLIF(TRIM(COALESCE(v_rx->>'dosage', '')), ''),

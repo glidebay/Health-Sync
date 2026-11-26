@@ -95,6 +95,7 @@ export function DashboardView({
   const [selectedPatientForReschedule, setSelectedPatientForReschedule] = useState<Patient | null>(null);
   const [selectedPatientForCancel, setSelectedPatientForCancel] = useState<Patient | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [doctorsPage, setDoctorsPage] = useState<number>(1);
   const [dbPatients, setDbPatients] = useState<Patient[] | null>(null);
   const [dbDoctors, setDbDoctors] = useState<DbDoctor[]>([]);
   const [pavilionSummary, setPavilionSummary] = useState<any>(null);
@@ -102,7 +103,8 @@ export function DashboardView({
   const [activeTooltipIndex, setActiveTooltipIndex] = useState<number>(6);
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
 
-  const itemsPerPage = 6;
+  const itemsPerPage = 5;
+  const doctorsPerPage = 5;
 
   const onQueueUpdatedRef = useRef(onQueueUpdated);
   useEffect(() => {
@@ -331,16 +333,22 @@ export function DashboardView({
 
   const clinicalMetrics = useMemo(() => {
     const ca = pavilionSummary?.clinical_activity;
-    const todayTotal = ca?.today_patients ?? effectiveTotalCount;
+    const nestedMetrics = ca?.metrics;
+    const todayTotal = nestedMetrics?.patients ?? ca?.today_patients ?? effectiveTotalCount;
     const dailyQuota = ca?.daily_quota ?? 40;
     const quotaPct =
+      nestedMetrics?.quota_pct ??
       ca?.quota_used_pct ??
       (dailyQuota > 0 ? Math.min(100, Math.round((todayTotal / dailyQuota) * 100)) : 0);
     const whatsappPct =
+      nestedMetrics?.whatsapp_pct ??
       ca?.whatsapp_rate_pct ??
       (effectiveTotalCount > 0 ? Math.round((onlineAppointmentsCount / effectiveTotalCount) * 100) : 0);
-    const slotLabel = ca?.avg_slot_label ?? (ca?.slot_duration_mins ? `${ca.slot_duration_mins}m` : '15m');
-    const stockUnits = ca?.pharmacy_stock ?? effectiveStockUnits;
+    const slotLabel =
+      nestedMetrics?.avg_time ??
+      ca?.avg_slot_label ??
+      (ca?.slot_duration_mins ? `${ca.slot_duration_mins}m` : '15m');
+    const stockUnits = nestedMetrics?.pharmacy_stock ?? ca?.pharmacy_stock ?? effectiveStockUnits;
 
     let subtitle = ca?.subtitle;
     if (!subtitle) {
@@ -466,15 +474,8 @@ export function DashboardView({
   const splinePath2 = useMemo(() => getCubicBezierPath(pts2), [getCubicBezierPath, pts2]);
 
   const branchDoctorsRoster = useMemo(() => {
-    const baseDocs = dbDoctors.length > 0 ? dbDoctors : availableDoctors;
-    const scopedDocs = baseDocs.filter((d) => {
-      if (d.is_active === false || d.is_deleted) return false;
-      if (!locationId) return true;
-      return !d.location_id || d.location_id === locationId || Boolean(d.is_admin_doctor);
-    });
-
-    return scopedDocs.map((doc) => {
-      const stripped = (doc.full_name || 'Doctor')
+    const formatDocNameAndInitials = (rawName?: string) => {
+      const stripped = (rawName || 'Doctor')
         .replace(/^(?:dr\.?|doctor)\s+/gi, '')
         .replace(/^(?:dr\.?|doctor)\s+/gi, '')
         .trim();
@@ -487,6 +488,48 @@ export function DashboardView({
           .slice(0, 2)
           .join('')
           .toUpperCase() || 'DR';
+      return { stripped, displayName, initials };
+    };
+
+    const rpcDoctors = pavilionSummary?.doctors_in_chamber;
+    if (Array.isArray(rpcDoctors) && rpcDoctors.length > 0) {
+      return rpcDoctors.map((doc) => {
+        const { stripped, displayName, initials } = formatDocNameAndInitials(doc.doctor_name);
+        const inProgressPatient = activePatientsList.find(
+          (p) =>
+            p.status === 'In Progress' &&
+            ((p.doctorId && p.doctorId === doc.doctor_id) ||
+              (p.doctorName && p.doctorName.toLowerCase().includes(stripped.toLowerCase())))
+        );
+        const waitingCount = Number(doc.waiting_count) || 0;
+        const isInChamber = Boolean(doc.in_chamber || inProgressPatient);
+        return {
+          id: doc.doctor_id,
+          displayName,
+          initials,
+          specialization: doc.specialization || 'General Medicine',
+          isAllBranches: Boolean(doc.assigned_branch && doc.assigned_branch.toLowerCase().includes('all')),
+          assignedBranchLabel: doc.assigned_branch || null,
+          dailyQuota: Number(doc.daily_quota) || 30,
+          inProgressPatient,
+          isInChamber,
+          waitingCount,
+          completedCount: 0,
+          totalToday: Number(doc.today_patients) || 0,
+          statusLabel: doc.status_label || null,
+        };
+      });
+    }
+
+    const baseDocs = dbDoctors.length > 0 ? dbDoctors : availableDoctors;
+    const scopedDocs = baseDocs.filter((d) => {
+      if (d.is_active === false || d.is_deleted) return false;
+      if (!locationId) return true;
+      return !d.location_id || d.location_id === locationId || Boolean(d.is_admin_doctor);
+    });
+
+    return scopedDocs.map((doc) => {
+      const { stripped, displayName, initials } = formatDocNameAndInitials(doc.full_name);
 
       const docPatients = activePatientsList.filter((p) => {
         if (p.doctorId && p.doctorId === doc.id) return true;
@@ -503,14 +546,29 @@ export function DashboardView({
         initials,
         specialization: doc.specialization || 'General Medicine',
         isAllBranches: Boolean(doc.is_admin_doctor || !doc.location_id),
+        assignedBranchLabel: null as string | null,
         dailyQuota: doc.daily_quota || 30,
         inProgressPatient,
+        isInChamber: Boolean(inProgressPatient),
         waitingCount,
         completedCount,
         totalToday: docPatients.length,
+        statusLabel: null as string | null,
       };
     });
-  }, [dbDoctors, availableDoctors, locationId, activePatientsList]);
+  }, [pavilionSummary, dbDoctors, availableDoctors, locationId, activePatientsList]);
+
+  const totalDoctorPages = Math.max(1, Math.ceil(branchDoctorsRoster.length / doctorsPerPage));
+
+  useEffect(() => {
+    if (doctorsPage > totalDoctorPages) {
+      setDoctorsPage(totalDoctorPages);
+    }
+  }, [doctorsPage, totalDoctorPages]);
+
+  const paginatedDoctors = useMemo(() => {
+    return branchDoctorsRoster.slice((doctorsPage - 1) * doctorsPerPage, doctorsPage * doctorsPerPage);
+  }, [branchDoctorsRoster, doctorsPage, doctorsPerPage]);
 
   return (
     <motion.div
@@ -522,6 +580,8 @@ export function DashboardView({
       className="space-y-5 sm:space-y-6 max-w-7xl mx-auto pb-4 relative"
     >
       <EcgActionLoader isLoading={isLoading} text="Syncing branch pavilion..." />
+
+      {/* Editorial KPI Stat Strip */}
       <motion.section
         variants={staggerContainer}
         initial="hidden"
@@ -530,137 +590,128 @@ export function DashboardView({
       >
         <motion.div
           variants={fadeScale}
-          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">
               Today&apos;s Patients
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-[#16191E] tracking-tight">
+              <span className="text-xl sm:text-2xl font-semibold text-[#16191E] tabular-nums">
                 <AnimatedCounter target={effectiveTotalCount} />
               </span>
-              <span className="inline-flex items-center text-xs font-semibold text-emerald-600">
+              <span className="inline-flex items-center text-xs font-medium text-emerald-600">
                 +12% <span className="text-slate-400 font-normal text-[11px] ml-1">today</span>
               </span>
             </div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-blue-700 to-blue-500 shadow-md shadow-blue-500/25 flex items-center justify-center text-white flex-shrink-0">
-            <Users className="w-5 h-5 stroke-[2.2]" />
+          <div className="w-10 h-10 rounded-full border border-blue-100 bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+            <Users className="w-4 h-4 stroke-[1.9]" />
           </div>
         </motion.div>
 
         <motion.div
           variants={fadeScale}
-          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">
               Completed Consults
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-[#16191E] tracking-tight">
+              <span className="text-xl sm:text-2xl font-semibold text-[#16191E] tabular-nums">
                 <AnimatedCounter target={effectiveCompletedCount} />
               </span>
-              <span className="inline-flex items-center text-xs font-semibold text-emerald-600">
+              <span className="inline-flex items-center text-xs font-medium text-emerald-600">
                 {completionRate}% <span className="text-slate-400 font-normal text-[11px] ml-1">rate</span>
               </span>
             </div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-emerald-600 to-teal-400 shadow-md shadow-emerald-500/25 flex items-center justify-center text-white flex-shrink-0">
-            <CheckCircle2 className="w-5 h-5 stroke-[2.2]" />
+          <div className="w-10 h-10 rounded-full border border-emerald-100 bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+            <CheckCircle2 className="w-4 h-4 stroke-[1.9]" />
           </div>
         </motion.div>
 
         <motion.div
           variants={fadeScale}
-          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">
               Waiting in Queue
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-[#16191E] tracking-tight">
+              <span className="text-xl sm:text-2xl font-semibold text-[#16191E] tabular-nums">
                 <AnimatedCounter target={effectiveWaitingCount} />
               </span>
-              <span className="inline-flex items-center text-xs font-semibold text-blue-600">
+              <span className="inline-flex items-center text-xs font-medium text-blue-600">
                 Active <span className="text-slate-400 font-normal text-[11px] ml-1">queue</span>
               </span>
             </div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-indigo-600 to-blue-500 shadow-md shadow-indigo-500/25 flex items-center justify-center text-white flex-shrink-0">
-            <Clock className="w-5 h-5 stroke-[2.2]" />
+          <div className="w-10 h-10 rounded-full border border-slate-200 bg-slate-50 text-slate-700 flex items-center justify-center flex-shrink-0">
+            <Clock className="w-4 h-4 stroke-[1.9]" />
           </div>
         </motion.div>
 
         <motion.div
           variants={fadeScale}
-          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+          className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
         >
           <div className="min-w-0 pr-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+            <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">
               Pharmacy Stock
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-[#16191E] tracking-tight">
+              <span className="text-xl sm:text-2xl font-semibold text-[#16191E] tabular-nums">
                 <AnimatedCounter target={effectiveStockUnits} />
               </span>
-              <span className="inline-flex items-center text-xs font-semibold text-emerald-600">
+              <span className="inline-flex items-center text-xs font-medium text-emerald-600">
                 <ShieldCheck className="w-3 h-3 mr-0.5" />
                 Synced <span className="text-slate-400 font-normal text-[11px] ml-1">units</span>
               </span>
             </div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-amber-500 to-orange-400 shadow-md shadow-amber-500/25 flex items-center justify-center text-white flex-shrink-0">
-            <Boxes className="w-5 h-5 stroke-[2.2]" />
+          <div className="w-10 h-10 rounded-full border border-amber-100 bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
+            <Boxes className="w-4 h-4 stroke-[1.9]" />
           </div>
         </motion.div>
       </motion.section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        <div className="lg:col-span-7 bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs min-w-0">
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
+        <div className="lg:col-span-7 bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs min-w-0">
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-5 items-stretch h-full">
             <div className="sm:col-span-7 flex flex-col justify-between py-1 space-y-4">
               <div className="space-y-1.5">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  HEALTHSYNC • CLINIC OPS
+                <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">
+                  Clinic Operations
                 </span>
-                <h2 className="text-base sm:text-lg font-bold text-[#16191E] tracking-tight flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-semibold text-[#16191E] flex items-center gap-2 flex-wrap">
                   <span>Smart Patient Flow &amp; Chamber Triage</span>
                   {branchName && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                    <span className="rounded-full border border-blue-200/70 bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-blue-700">
                       {branchName}
                     </span>
                   )}
                 </h2>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Direct token sequencing, automated WhatsApp reminders, and real-time consultation coordination with zero waiting congestion.
+                  Direct token sequencing, automated WhatsApp reminders, and real-time consultation coordination.
                 </p>
               </div>
 
-              <div className="pt-2 flex items-center gap-2.5">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+              <div className="pt-2 flex items-center gap-2.5 flex-wrap">
+                <button
+                  type="button"
                   onClick={onRegisterWalkin}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-medium transition shadow-2xs cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Register Walk-in</span>
-                </motion.button>
+                </button>
                 <button
                   type="button"
                   onClick={onViewAllQueue}
-                  className="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold text-slate-600 hover:text-[#2563EB] transition cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-slate-200 bg-white hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] text-xs font-medium text-slate-700 transition-colors cursor-pointer"
                 >
                   <span>Full Queue</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -668,7 +719,7 @@ export function DashboardView({
               </div>
             </div>
 
-            <div className="sm:col-span-5 h-full min-h-[170px] sm:min-h-[190px] rounded-xl overflow-hidden relative shadow-xs border border-slate-100 bg-[#EBF4FF] flex items-center justify-center">
+            <div className="sm:col-span-5 h-full min-h-[170px] sm:min-h-[190px] rounded-xl overflow-hidden relative shadow-2xs border border-slate-100 bg-[#EBF4FF] flex items-center justify-center">
               <img
                 src="/images/medical-rocket.jpg"
                 alt="HealthSync Clinical Ops"
@@ -678,20 +729,20 @@ export function DashboardView({
           </div>
         </div>
 
-        <div className="lg:col-span-5 bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs min-w-0 flex flex-col">
+        <div className="lg:col-span-5 bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs min-w-0 flex flex-col">
           <div
-            className="relative h-full min-h-[190px] rounded-xl overflow-hidden p-5 text-white shadow-xs border border-slate-800/20 flex flex-col items-end text-right"
+            className="relative h-full min-h-[190px] rounded-xl overflow-hidden p-5 text-white shadow-2xs border border-slate-800/20 flex flex-col items-end text-right"
             style={{
               backgroundImage: "linear-gradient(135deg, rgba(15, 23, 42, 0.35) 0%, rgba(10, 18, 38, 0.75) 100%), url('/images/doctor-telemetry-bg.jpg')",
               backgroundSize: 'cover',
               backgroundPosition: 'center',
             }}
           >
-            <div className="relative z-10 flex flex-col items-end text-right space-y-1.5">
-              <span className="text-xs font-bold uppercase tracking-wider text-blue-300 drop-shadow-xs">
-                CHAMBER TELEMETRY
+            <div className="relative z-10 flex flex-col items-end text-right space-y-2">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-blue-200">
+                Chamber Telemetry
               </span>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-white/20 border border-white/30 text-white font-bold text-xs tracking-wide shadow-xs backdrop-blur-xs">
+              <span className="inline-flex items-center px-3 py-1 rounded-full bg-white/20 border border-white/30 text-white font-medium text-xs backdrop-blur-xs">
                 {pavilionSummary?.telemetry?.active_token
                   ? `Token ${pavilionSummary.telemetry.active_token}`
                   : effectiveInChamber
@@ -700,7 +751,7 @@ export function DashboardView({
                       ? `Token ${formatPatientToken(effectiveNextWaiting)}`
                       : 'Token --'}
               </span>
-              <h3 className="text-base sm:text-lg font-bold text-white tracking-tight truncate max-w-[260px] drop-shadow-xs">
+              <h3 className="text-base sm:text-lg font-semibold text-white truncate max-w-[260px]">
                 {effectiveInChamber
                   ? effectiveInChamber.name
                   : effectiveNextWaiting
@@ -1014,167 +1065,133 @@ export function DashboardView({
         </div>
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        <div className="lg:col-span-8 bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-2xs space-y-3.5">
-          <div className="pb-3 border-b border-slate-100">
-            <h3 className="text-sm sm:text-base font-bold text-[#16191E]">Patient Queue</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Real-time patient queue and consultation triage
-            </p>
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
+        <div className="lg:col-span-8 bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs space-y-5">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                Live Roster • {effectiveQueue.length} {effectiveQueue.length === 1 ? 'Patient' : 'Patients'}
+              </span>
+              <h3 className="mt-1 text-base font-semibold text-[#16191E]">Patient Queue</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Today&apos;s waiting and active consultation sequence.
+              </p>
+            </div>
           </div>
 
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <table className="w-full text-left border-collapse min-w-[580px]">
-              <thead>
-                <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="pb-2.5 pl-4 sm:pl-0">Patient / Token</th>
-                  <th className="pb-2.5 px-3">Type</th>
-                  <th className="pb-2.5 px-3">Slot</th>
-                  <th className="pb-2.5 px-3">Status</th>
-                  <th className="pb-2.5 pr-4 sm:pr-0 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {paginatedQueue.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-8 text-center text-xs text-slate-400">
-                      No appointments in queue.
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedQueue.map((p) => {
-                    const isWaiting = p.status === 'Waiting';
-                    const isInProgress = p.status === 'In Progress';
-                    const isCompleted = p.status === 'Completed';
-                    const tokenDisplay = formatPatientToken(p);
-                    const isOnline =
-                      Boolean(p.visitType) &&
-                      (Boolean(p.visitType?.toLowerCase().includes('whatsapp')) || Boolean(p.visitType?.toLowerCase().includes('online')));
+          {paginatedQueue.length === 0 ? (
+            <div className="border-y border-slate-200/80 py-10 text-center text-xs text-slate-400">
+              No appointments in queue.
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80">
+              {paginatedQueue.map((p, index) => {
+                const isWaiting = p.status === 'Waiting';
+                const isInProgress = p.status === 'In Progress';
+                const isCompleted = p.status === 'Completed';
+                const tokenDisplay = formatPatientToken(p);
+                const rowNumber = String((currentPage - 1) * itemsPerPage + index + 1).padStart(2, '0');
+                const isOnline =
+                  Boolean(p.visitType) &&
+                  (Boolean(p.visitType?.toLowerCase().includes('whatsapp')) || Boolean(p.visitType?.toLowerCase().includes('online')));
 
-                    return (
-                      <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="py-3 pl-4 sm:pl-0">
-                          <div className="flex items-center gap-2.5">
-                            <div
-                              className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${isInProgress
-                                ? 'bg-gradient-to-tl from-emerald-600 to-teal-400'
-                                : isCompleted
-                                  ? 'bg-slate-400'
-                                  : 'bg-gradient-to-tl from-blue-700 to-blue-500'
-                                }`}
-                            >
-                              {tokenDisplay}
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-xs font-bold text-slate-800 block truncate max-w-[130px]">
-                                {p.name}
-                              </span>
-                              <span className="text-[11px] text-slate-400 block">
-                                {p.age}y • {p.gender}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
+                return (
+                  <li key={p.id}>
+                    <div
+                      className={`grid grid-cols-1 gap-3 py-4 sm:grid-cols-[2rem_1fr_auto] sm:gap-5 items-start sm:items-center ${
+                        isCompleted ? 'opacity-55' : ''
+                      }`}
+                    >
+                      <span className="text-xs font-medium text-slate-400 tabular-nums sm:pt-0.5">
+                        {rowNumber}
+                      </span>
 
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-1">
-                            <span
-                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${isOnline
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : 'bg-slate-100 text-slate-600'
-                                }`}
-                            >
-                              {isOnline ? 'Online WA' : 'Walk-in'}
-                            </span>
-                            {p.priority === 'Urgent' && (
-                              <span className="inline-flex items-center gap-0.5 bg-rose-50 text-rose-700 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
-                                <Flame className="w-2.5 h-2.5 fill-rose-500 text-rose-500" />
-                                Urgent
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        <td className="py-3 px-3">
-                          <div className="text-xs text-slate-700 font-semibold flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-[#2563EB]" />
-                            <span>{p.time}</span>
-                          </div>
-                        </td>
-
-                        <td className="py-3 px-3">
+                      <div className="min-w-0 space-y-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-sm font-semibold text-[#16191E] truncate">
+                            {p.name}
+                          </h4>
+                          <span className="text-xs text-slate-500">
+                            Token {tokenDisplay} • Slot: {p.time}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                          <span className="text-slate-500 mr-1">
+                            {p.age} yrs, {p.gender}
+                          </span>
+                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-slate-600">
+                            {isOnline ? 'Online (WhatsApp)' : 'Walk-in'}
+                          </span>
                           <span
-                            className={`inline-flex items-center gap-1 text-[11px] font-semibold ${isInProgress
-                              ? 'text-emerald-600'
-                              : isCompleted
-                                ? 'text-slate-400'
-                                : 'text-blue-600'
-                              }`}
-                          >
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full ${isInProgress
-                                ? 'bg-emerald-500 animate-pulse'
+                            className={`rounded-full px-2.5 py-0.5 font-medium ${
+                              isInProgress
+                                ? 'bg-emerald-50 text-emerald-700'
                                 : isCompleted
-                                  ? 'bg-slate-300'
-                                  : 'bg-blue-500'
-                                }`}
-                            />
+                                  ? 'bg-slate-100 text-slate-500'
+                                  : 'bg-blue-50 text-blue-700'
+                            }`}
+                          >
                             {p.status}
                           </span>
-                        </td>
+                          {p.priority === 'Urgent' && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200/70 px-2.5 py-0.5 font-medium">
+                              <Flame className="w-2.5 h-2.5 fill-rose-500 text-rose-500" />
+                              Urgent
+                            </span>
+                          )}
+                        </div>
+                      </div>
 
-                        <td className="py-3 pr-4 sm:pr-0 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {isWaiting && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedPatientForCancel(p)}
-                                  className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedPatientForReschedule(p)}
-                                  className="px-2.5 py-1 text-xs font-semibold text-[#2563EB] hover:bg-blue-50 rounded-lg transition cursor-pointer"
-                                >
-                                  Reschedule
-                                </button>
-                              </>
-                            )}
+                      <div className="flex items-center justify-end gap-2 sm:col-start-3">
+                        {isWaiting && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedPatientForCancel(p)}
+                              className="rounded-full border border-rose-200/80 bg-white px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-colors cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedPatientForReschedule(p)}
+                              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] transition-colors cursor-pointer"
+                            >
+                              Reschedule
+                            </button>
+                          </>
+                        )}
 
-                            {isInProgress && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (isLoggedIn) onStartConsultation(p.id);
-                                  else onRequireLogin();
-                                }}
-                                className="px-3 py-1 text-xs font-bold bg-[#2563EB] hover:bg-blue-700 text-white rounded-lg transition cursor-pointer flex items-center gap-1"
-                              >
-                                <span>Resume</span>
-                                <ArrowRight className="w-3.5 h-3.5" />
-                              </button>
-                            )}
+                        {isInProgress && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isLoggedIn) onStartConsultation(p.id);
+                              else onRequireLogin();
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-[#2563EB] hover:bg-blue-700 px-3.5 py-1.5 text-xs font-medium text-white transition-colors cursor-pointer"
+                          >
+                            <span>Resume Consult</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
 
-                            {isCompleted && (
-                              <span className="inline-flex items-center text-xs text-emerald-600 font-semibold">
-                                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                        {isCompleted && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-400">
+                            <Check className="w-3 h-3" />
+                            Done
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
 
           {effectiveQueue.length > itemsPerPage && (
-            <div className="pt-2 border-t border-slate-100">
+            <div className="pt-2">
               <NumberedPagination
                 currentPage={currentPage}
                 totalPages={totalPages}
@@ -1187,44 +1204,47 @@ export function DashboardView({
           )}
         </div>
 
-        <div className="lg:col-span-4 bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0">
-          <div>
-            <div className="pb-3 border-b border-slate-100 flex items-start justify-between gap-2">
+        <div className="lg:col-span-4 bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0 space-y-5">
+          <div className="space-y-5">
+            <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <h3 className="text-sm sm:text-base font-bold text-[#16191E]">Doctors in Chamber</h3>
+                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                  Physician Roster
+                </span>
+                <h3 className="mt-1 text-base font-semibold text-[#16191E]">Doctors in Chamber</h3>
                 <p className="text-xs text-slate-500 mt-0.5 truncate">
                   {branchName ? `Active at ${branchName}` : 'Active clinic roster'}
                 </p>
               </div>
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#2563EB] border border-blue-100 flex-shrink-0">
-                <Stethoscope className="w-3 h-3" />
-                <span>{branchDoctorsRoster.length} {branchDoctorsRoster.length === 1 ? 'Doctor' : 'Doctors'}</span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-slate-50 text-slate-700 border border-slate-200 flex-shrink-0">
+                <Stethoscope className="w-3 h-3 text-slate-500" />
+                <span>{branchDoctorsRoster.length}</span>
               </span>
             </div>
 
             {branchDoctorsRoster.length === 0 ? (
-              <div className="py-10 text-center">
-                <Stethoscope className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-xs font-semibold text-slate-600">No doctors assigned yet</p>
+              <div className="py-10 border-y border-slate-200/80 text-center">
+                <Stethoscope className="w-7 h-7 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs font-medium text-slate-600">No doctors assigned yet</p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   Add doctors for this branch in Doctor Management.
                 </p>
               </div>
             ) : (
-              <div className="pt-3.5 space-y-2.5">
-                {branchDoctorsRoster.slice(0, 5).map((doc) => {
-                  const isConsulting = Boolean(doc.inProgressPatient);
+              <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80">
+                {paginatedDoctors.map((doc) => {
+                  const isConsulting = Boolean(doc.isInChamber || doc.inProgressPatient);
                   return (
-                    <div
+                    <li
                       key={doc.id}
-                      className="flex items-center justify-between gap-2.5 p-2.5 rounded-xl bg-slate-50/70 border border-slate-100 hover:border-slate-200 transition"
+                      className="py-3.5 flex items-center justify-between gap-3"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         <div
-                          className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 relative ${
+                          className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 relative border ${
                             isConsulting
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-blue-50 text-[#2563EB] border border-blue-100'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-50 text-slate-700 border-slate-200'
                           }`}
                         >
                           {doc.initials}
@@ -1233,7 +1253,7 @@ export function DashboardView({
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h4 className="text-xs font-bold text-slate-800 truncate">
+                          <h4 className="text-xs sm:text-sm font-medium text-[#16191E] truncate">
                             {doc.displayName}
                           </h4>
                           <p className="text-[11px] text-slate-500 truncate">
@@ -1243,36 +1263,52 @@ export function DashboardView({
                       </div>
 
                       <div className="text-right flex-shrink-0">
-                        {isConsulting && doc.inProgressPatient ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            In Chamber • {formatPatientToken(doc.inProgressPatient)}
+                        {isConsulting ? (
+                          <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/70">
+                            {doc.inProgressPatient
+                              ? `Chamber • ${formatPatientToken(doc.inProgressPatient)}`
+                              : doc.statusLabel || 'In Chamber'}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white text-slate-600 border border-slate-200">
-                            {doc.waitingCount > 0 ? `${doc.waitingCount} waiting` : 'Available'}
+                          <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium bg-slate-50 text-slate-600 border border-slate-200">
+                            {doc.statusLabel ||
+                              (doc.waitingCount > 0
+                                ? `${doc.waitingCount} waiting`
+                                : 'Available')}
                           </span>
                         )}
-                        <div className="text-[10px] text-slate-400 mt-0.5 font-medium">
-                          {doc.isAllBranches ? 'All Branches' : (branchName || 'Branch')} • {doc.totalToday}/{doc.dailyQuota}
+                        <div className="text-[10px] text-slate-400 mt-1 tabular-nums">
+                          {doc.totalToday}/{doc.dailyQuota} today
                         </div>
                       </div>
-                    </div>
+                    </li>
                   );
                 })}
+              </ul>
+            )}
+
+            {branchDoctorsRoster.length > doctorsPerPage && (
+              <div className="pt-1">
+                <NumberedPagination
+                  currentPage={doctorsPage}
+                  totalPages={totalDoctorPages}
+                  onPageChange={setDoctorsPage}
+                  totalItems={branchDoctorsRoster.length}
+                  itemsPerPage={doctorsPerPage}
+                  itemName="doctors"
+                />
               </div>
             )}
           </div>
 
-          <div className="pt-4 mt-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onViewAllQueue}
-              className="w-full py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer border border-slate-200/60"
-            >
-              <span>View Full Chamber Board</span>
-              <ArrowRight className="w-3.5 h-3.5 text-[#2563EB]" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onViewAllQueue}
+            className="w-full py-2.5 px-4 rounded-full border border-slate-200 bg-white hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] text-slate-700 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <span>View Full Chamber Board</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       </section>
 
