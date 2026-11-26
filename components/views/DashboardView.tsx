@@ -458,7 +458,7 @@ export function DashboardView({
                   HEALTHSYNC • CLINIC OPS
                 </span>
                 <h2 className="text-base sm:text-lg font-bold text-[#16191E] tracking-tight flex items-center gap-2 flex-wrap">
-                  <span>Smart Patient Flow &amp; Chamber Triage</span>
+                  <span>Manage Patients</span>
                   {branchName && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                       {branchName}
@@ -466,8 +466,7 @@ export function DashboardView({
                   )}
                 </h2>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Direct token sequencing, automated WhatsApp reminders, and real-time consultation coordination with zero waiting congestion.
-                </p>
+                  Manage appointments with simple registration, rescheduling, and reallocation.</p>
               </div>
 
               <div className="pt-2 flex items-center gap-2.5">

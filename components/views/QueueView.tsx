@@ -175,10 +175,7 @@ export function QueueView({
   }, [dbPatients, queue]);
 
   const currentPatients = useMemo(() => {
-    const active = rawPatients.filter((p) => p.status !== 'Cancelled');
-    const notCompleted = active.filter((p) => p.status !== 'Completed');
-    const completed = active.filter((p) => p.status === 'Completed');
-    return [...notCompleted, ...completed];
+    return rawPatients.filter((p) => p.status !== 'Cancelled' && p.status !== 'Completed');
   }, [rawPatients]);
 
   const totalPages = Math.max(1, Math.ceil(currentPatients.length / itemsPerPage));

@@ -2204,7 +2204,7 @@ function DashboardContent() {
 
                 {activeSection === 'assistant' && (
                   <AssistantView
-                    queue={queue}
+                    queue={queue.filter((p) => p.status !== 'Completed' && p.status !== 'Cancelled')}
                     locationId={currentLocation?.id}
                     clinicId={currentClinicId || currentLocation?.clinic_id || undefined}
                     branchName={currentLocation?.branch_name || undefined}
@@ -2221,6 +2221,7 @@ function DashboardContent() {
                     queue={queue.filter(
                       (p) =>
                         p.status !== 'Cancelled' &&
+                        p.status !== 'Completed' &&
                         (!p.appointmentDate || p.appointmentDate === getTodayIST())
                     )}
                     locationId={currentLocation?.id}
