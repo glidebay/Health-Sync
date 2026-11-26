@@ -1,33 +1,39 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
+import Chart, { ChartConfiguration, ChartType, Plugin, ScriptableContext } from 'chart.js/auto';
 import {
   Users,
-  TrendingUp,
-  MessageSquare,
-  CheckCircle2,
-  CalendarX,
-  Pill,
-
   Clock,
-  ArrowUpRight,
-  ArrowDownRight,
+  MessageSquare,
+  TrendingUp,
+  TrendingDown,
+  BarChart3,
+  AlertCircle,
+  Sparkles,
+  Calendar,
   Activity,
-
+  Building2,
+  Pill,
+  IndianRupee,
+  Boxes,
+  RefreshCw,
+  Stethoscope,
+  UserPlus,
+  CalendarX,
+  UserX,
+  Link2,
+  Gauge,
+  X,
 } from 'lucide-react';
-import { ChartLine } from '@/components/ui/chart-line';
-import { RankBarChart, type RankBarItem } from '@/components/ui/rank-bars';
 import { Patient } from '@/types';
-import { formatPatientToken } from '@/lib/utils';
 import { AnimatedCounter } from '@/components/common/AnimatedCounter';
 import { NumberedPagination } from '@/components/ui/pagination';
 import { staggerContainer, fadeScale } from '@/lib/constants';
-import {
-  enterpriseCLMSService,
-  CasemixAndValuationReport,
-} from '@/lib/enterpriseCLMSService';
 import { fetchFullAnalyticsDashboardDb } from '@/lib/supabaseService';
+import { supabase } from '@/lib/supabaseClient';
+import { getTodayIST } from '@/lib/utils';
 import { EcgActionLoader } from '@/components/loading/EcgActionLoader';
 
 interface AnalyticsViewProps {
@@ -41,22 +47,511 @@ interface AnalyticsViewProps {
   branchName?: string;
 }
 
-type PeriodType = 'today' | 'week' | 'month' | 'year';
+type AnalyticsTab = 'footfall' | 'clinical' | 'queue' | 'doctors';
+type PeriodDays = 7 | 30 | 180;
 
-const PERIOD_OPTIONS = [
-  { id: 'today' as const, label: 'Today' },
-  { id: 'week' as const, label: 'This Week' },
-  { id: 'month' as const, label: 'This Month' },
-  { id: 'year' as const, label: 'Yearly' },
+interface SelectOption {
+  id: string;
+  name: string;
+}
+
+interface DoctorOption extends SelectOption {
+  dailyQuota: number;
+}
+
+interface NormalizedAppointment {
+  id: string;
+  patientId: string;
+  patientName: string;
+  phone: string;
+  branchId: string;
+  doctorId: string;
+  status: string;
+  isCompleted: boolean;
+  isCancelled: boolean;
+  isNoShow: boolean;
+  cancellationReason: string | null;
+  channel: 'walkin' | 'whatsapp';
+  year: number;
+  month: number;
+  day: number;
+  monthKey: string;
+  dateKey: string;
+  hour: number | null;
+  durationMins: number | null;
+  durationSource: 'measured' | 'recorded' | null;
+  diagnosis: string | null;
+  isLate: boolean;
+}
+
+interface PharmacySaleEvent {
+  dateKey: string;
+  branchId: string;
+  doctorId: string;
+  molecule: string;
+  qty: number;
+  revenue: number | null;
+  cost: number | null;
+}
+
+interface PharmacyStockRow {
+  branchId: string;
+  molecule: string;
+  unitsOnHand: number;
+  stockValue: number | null;
+}
+
+interface WaLinkRecord {
+  dateKey: string;
+  branchId: string;
+  booked: boolean;
+}
+
+interface LeaveRecord {
+  dateKey: string;
+  doctorId: string;
+  doctorName: string;
+  type: string;
+  upcoming: boolean;
+}
+
+interface MonthlyBucket {
+  monthKey: string;
+  shortLabel: string;
+  fullLabel: string;
+  walkin: number;
+  whatsapp: number;
+  total: number;
+  whatsappSharePct: number;
+  momGrowthPct: number | null;
+}
+
+interface HourlyBucket {
+  hour: number;
+  label: string;
+  shortLabel: string;
+  walkin: number;
+  whatsapp: number;
+  total: number;
+}
+
+const PERIOD_OPTIONS: Array<{ id: PeriodDays; label: string }> = [
+  { id: 7, label: 'Last 7 Days' },
+  { id: 30, label: 'Last 30 Days' },
+  { id: 180, label: 'Last 6 Months' },
 ];
 
-const CANCELLED_PER_PAGE = 5;
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const SERIES_PALETTE = ['#2563EB', '#10B981', '#F59E0B', '#6366F1', '#EC4899', '#14B8A6', '#94A3B8'];
+const DAY_MS = 86_400_000;
+const DOCTOR_TABLE_PAGE_SIZE = 5;
 
-function getInitials(name: string): string {
-  if (!name) return 'PT';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+function getPaginatedSlice<T>(rows: T[], currentPage: number, pageSize: number) {
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const start = (safePage - 1) * pageSize;
+  return {
+    rows: rows.slice(start, start + pageSize),
+    currentPage: safePage,
+    totalPages,
+    startIndex: rows.length === 0 ? 0 : start + 1,
+    endIndex: Math.min(start + pageSize, rows.length),
+  };
+}
+
+function DoctorTablePagination({
+  currentPage,
+  totalPages,
+  totalItems,
+  startIndex,
+  endIndex,
+  itemName,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  startIndex: number;
+  endIndex: number;
+  itemName: string;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalItems <= DOCTOR_TABLE_PAGE_SIZE) return null;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pt-3 border-t border-slate-100">
+      <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">
+        Showing {startIndex}–{endIndex} of {totalItems} {itemName}
+      </span>
+      <NumberedPagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        itemsPerPage={DOCTOR_TABLE_PAGE_SIZE}
+        itemName={itemName}
+        onPageChange={onPageChange}
+        className="mt-0 pt-0 border-t-0 w-auto sm:mx-0 justify-end"
+      />
+    </div>
+  );
+}
+
+function formatMonthKey(year: number, month1To12: number): string {
+  return `${year}-${String(month1To12).padStart(2, '0')}`;
+}
+
+function formatINR(value: number): string {
+  return `₹${Math.round(value).toLocaleString('en-IN')}`;
+}
+
+function formatHoursMins(totalMinutes: number): string {
+  const mins = Math.max(0, Math.round(totalMinutes));
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+function formatCompactBranchHeader(name: string, allNames: string[]): string {
+  const splitParts = allNames.map((n) => {
+    const idx = n.search(/\s[-–—]\s/);
+    return idx > 0 ? { prefix: n.slice(0, idx).trim().toLowerCase(), short: n.slice(idx + 3).trim() } : null;
+  });
+  const firstPrefix = splitParts[0]?.prefix;
+  if (firstPrefix && splitParts.every((p) => p && p.prefix === firstPrefix && p.short.length > 0)) {
+    const idx = name.search(/\s[-–—]\s/);
+    if (idx > 0) return name.slice(idx + 3).trim();
+  }
+  return name;
+}
+
+function ageInDays(anchorYmd: string, targetYmd: string): number {
+  const a = Date.parse(`${anchorYmd}T00:00:00Z`);
+  const b = Date.parse(`${targetYmd}T00:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return 9999;
+  return Math.round((a - b) / DAY_MS);
+}
+
+function shiftDateYmd(anchorYmd: string, deltaDays: number): string {
+  const ms = Date.parse(`${anchorYmd}T00:00:00Z`);
+  if (Number.isNaN(ms)) return anchorYmd;
+  return new Date(ms + deltaDays * DAY_MS).toISOString().slice(0, 10);
+}
+
+function getTrailingMonths(
+  anchorYmd: string,
+  count: number
+): Array<{ year: number; month: number; monthKey: string; shortLabel: string; fullLabel: string }> {
+  const [yStr, mStr] = anchorYmd.split('-');
+  const anchorYear = Number(yStr) || new Date().getFullYear();
+  const anchorMonth = Number(mStr) || new Date().getMonth() + 1;
+
+  const list: Array<{ year: number; month: number; monthKey: string; shortLabel: string; fullLabel: string }> = [];
+  for (let offset = count - 1; offset >= 0; offset--) {
+    const d = new Date(Date.UTC(anchorYear, anchorMonth - 1 - offset, 1));
+    const y = d.getUTCFullYear();
+    const m = d.getUTCMonth() + 1;
+    const monthName = MONTH_SHORT[m - 1] || 'M';
+    list.push({
+      year: y,
+      month: m,
+      monthKey: formatMonthKey(y, m),
+      shortLabel: monthName,
+      fullLabel: `${monthName} ${y}`,
+    });
+  }
+  return list;
+}
+
+function getSixMonthsStartIso(anchorYmd: string): string {
+  const [yStr, mStr] = anchorYmd.split('-');
+  const anchorYear = Number(yStr) || new Date().getFullYear();
+  const anchorMonth = Number(mStr) || new Date().getMonth() + 1;
+  const start = new Date(Date.UTC(anchorYear, anchorMonth - 6, 1));
+  const y = start.getUTCFullYear();
+  const m = String(start.getUTCMonth() + 1).padStart(2, '0');
+  return `${y}-${m}-01T00:00:00+05:30`;
+}
+
+function parseISTDateAndHour(isoStr?: string | null): { year: number; month: number; day: number; hour: number | null } | null {
+  if (!isoStr) return null;
+  const dateObj = new Date(isoStr);
+  if (Number.isNaN(dateObj.getTime())) return null;
+
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      hour12: false,
+    }).formatToParts(dateObj);
+
+    const getPart = (t: string) => parts.find((p) => p.type === t)?.value || '';
+    const year = Number(getPart('year'));
+    const month = Number(getPart('month'));
+    const day = Number(getPart('day'));
+    let hour = Number(getPart('hour'));
+    if (hour === 24) hour = 0;
+
+    if (!year || !month || !day) return null;
+    return { year, month, day, hour: Number.isFinite(hour) ? hour : null };
+  } catch {
+    return null;
+  }
+}
+
+function parseSlotTimeHour(slotStr?: string): number | null {
+  if (!slotStr) return null;
+  const match = slotStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!match) return null;
+  let hour = Number(match[1]);
+  const meridiem = match[3]?.toUpperCase();
+  if (meridiem === 'PM' && hour < 12) hour += 12;
+  if (meridiem === 'AM' && hour === 12) hour = 0;
+  return hour >= 0 && hour <= 23 ? hour : null;
+}
+
+function formatHourLabel(hour: number, compact = false): string {
+  const h = ((hour % 24) + 24) % 24;
+  if (h === 0) return compact ? '12a' : '12 AM';
+  if (h < 12) return compact ? `${h}a` : `${h} AM`;
+  if (h === 12) return compact ? '12p' : '12 PM';
+  return compact ? `${h - 12}p` : `${h - 12} PM`;
+}
+
+function isWhatsAppChannel(rawVisitType?: string | null, rawBookingChannel?: string | null): boolean {
+  const combined = `${rawVisitType || ''} ${rawBookingChannel || ''}`.toLowerCase();
+  return combined.includes('whatsapp') || combined.includes('online');
+}
+
+function classifyDiagnosis(notes?: string | null): string | null {
+  const clean = (notes || '').trim().toLowerCase();
+  if (!clean) return null;
+  if (/(fever|cold|cough|uri|flu|throat|viral|asthma|respiratory|sinus|bronch)/.test(clean)) {
+    return 'Viral / Respiratory';
+  }
+  if (/(diabetes|sugar|thyroid|hba1c|insulin|metformin|endocrine|glycem)/.test(clean)) {
+    return 'Endocrine / Diabetes';
+  }
+  if (/(hypertension|bp|cardiac|heart|cholest|ecg|amlodipine|cardio)/.test(clean)) {
+    return 'Cardiovascular';
+  }
+  if (/(gastric|acidity|pain|abdom|ulcer|diarrhea|reflux|gerd|stomach)/.test(clean)) {
+    return 'Gastrointestinal';
+  }
+  return 'General Consultation';
+}
+
+const barValuesPlugin: Plugin<'bar'> = {
+  id: 'barValues',
+  afterDatasetsDraw(chart) {
+    const { ctx, data } = chart;
+    if ((data.labels?.length ?? 0) * data.datasets.length > 24) return;
+    const isHorizontal = chart.options.indexAxis === 'y';
+    ctx.save();
+    ctx.fillStyle = '#475569';
+    ctx.font = '600 10px Inter, system-ui, sans-serif';
+    ctx.textAlign = isHorizontal ? 'left' : 'center';
+    ctx.textBaseline = isHorizontal ? 'middle' : 'bottom';
+    data.datasets.forEach((set, i) => {
+      const meta = chart.getDatasetMeta(i);
+      if (meta.hidden) return;
+      meta.data.forEach((bar, j) => {
+        const val = Number(set.data[j]);
+        if (!Number.isFinite(val) || val === 0) return;
+        const text = val.toLocaleString('en-IN', { maximumFractionDigits: 1 });
+        ctx.fillText(text, bar.x + (isHorizontal ? 6 : 0), bar.y - (isHorizontal ? 0 : 4));
+      });
+    });
+    ctx.restore();
+  },
+};
+
+function ChartCanvas<T extends ChartType>({
+  type,
+  data,
+  options,
+  showValues = false,
+}: {
+  type: T;
+  data: ChartConfiguration<T>['data'];
+  options: ChartConfiguration<T>['options'];
+  showValues?: boolean;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const chartRef = useRef<Chart<T> | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if (chartRef.current) {
+      chartRef.current.destroy();
+      chartRef.current = null;
+    }
+
+    const plugins = showValues && type === 'bar' ? [barValuesPlugin as unknown as Plugin<T>] : [];
+    chartRef.current = new Chart(canvas, {
+      type,
+      data,
+      options,
+      plugins,
+    });
+
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.destroy();
+        chartRef.current = null;
+      }
+    };
+  }, [type, data, options, showValues]);
+
+  return <canvas ref={canvasRef} />;
+}
+
+function buildSampleDataset(anchorYmd: string): {
+  branches: SelectOption[];
+  doctors: DoctorOption[];
+  appointments: NormalizedAppointment[];
+  sales: PharmacySaleEvent[];
+  stock: PharmacyStockRow[];
+  waLinks: WaLinkRecord[];
+  leaves: LeaveRecord[];
+} {
+  const branches: SelectOption[] = [
+    { id: 'sample-b1', name: 'Main Clinic Branch' },
+    { id: 'sample-b2', name: 'City Center Annex' },
+  ];
+  const doctors: DoctorOption[] = [
+    { id: 'sample-d1', name: 'Dr. Ananya Ramesh', dailyQuota: 28 },
+    { id: 'sample-d2', name: 'Dr. Karthik Menon', dailyQuota: 22 },
+  ];
+
+  const leaves: LeaveRecord[] = [
+    { dateKey: shiftDateYmd(anchorYmd, -3), doctorId: 'sample-d1', doctorName: 'Dr. Ananya Ramesh', type: 'Casual', upcoming: false },
+    { dateKey: shiftDateYmd(anchorYmd, -14), doctorId: 'sample-d2', doctorName: 'Dr. Karthik Menon', type: 'Sick', upcoming: false },
+    { dateKey: shiftDateYmd(anchorYmd, 7), doctorId: 'sample-d1', doctorName: 'Dr. Ananya Ramesh', type: 'Planned', upcoming: true },
+  ];
+
+  const months = getTrailingMonths(anchorYmd, 6);
+  const distribution = [
+    { walkin: 92, whatsapp: 38, duration: 14 },
+    { walkin: 104, whatsapp: 52, duration: 13 },
+    { walkin: 98, whatsapp: 64, duration: 14 },
+    { walkin: 112, whatsapp: 79, duration: 12 },
+    { walkin: 118, whatsapp: 94, duration: 13 },
+    { walkin: 124, whatsapp: 116, duration: 12 },
+  ];
+  const hourWeights = [
+    { hour: 9, weight: 8 },
+    { hour: 10, weight: 14 },
+    { hour: 11, weight: 18 },
+    { hour: 12, weight: 11 },
+    { hour: 13, weight: 4 },
+    { hour: 14, weight: 7 },
+    { hour: 15, weight: 10 },
+    { hour: 16, weight: 13 },
+    { hour: 17, weight: 16 },
+    { hour: 18, weight: 12 },
+    { hour: 19, weight: 6 },
+  ];
+  const totalWeight = hourWeights.reduce((acc, item) => acc + item.weight, 0);
+  const pickHour = (idx: number) => {
+    let cursor = idx % totalWeight;
+    for (const hw of hourWeights) {
+      if (cursor < hw.weight) return hw.hour;
+      cursor -= hw.weight;
+    }
+    return 11;
+  };
+
+  const diagnoses = [
+    'Viral / Respiratory',
+    'Endocrine / Diabetes',
+    'Cardiovascular',
+    'Gastrointestinal',
+    'General Consultation',
+  ];
+  const cancelReasons = ['Personal Schedule', 'Doctor Delayed', 'Recovered', 'Rescheduled', 'Other'];
+  const meds = [
+    { name: 'Paracetamol 650mg', price: 24, cost: 16, stockVal: 18400 },
+    { name: 'Amoxicillin + Clav 625mg', price: 95, cost: 64, stockVal: 26800 },
+    { name: 'Pantoprazole 40mg', price: 52, cost: 34, stockVal: 14200 },
+    { name: 'Metformin 500mg', price: 38, cost: 25, stockVal: 19500 },
+    { name: 'Cetirizine 10mg', price: 18, cost: 11, stockVal: 9600 },
+  ];
+
+  const appointments: NormalizedAppointment[] = [];
+  const sales: PharmacySaleEvent[] = [];
+  const waLinks: WaLinkRecord[] = [];
+  const [, , dStr] = anchorYmd.split('-');
+  const todayDay = Number(dStr) || 15;
+
+  months.forEach((mInfo, mIdx) => {
+    const cfg = distribution[mIdx] || distribution[distribution.length - 1];
+    const totalInMonth = cfg.walkin + cfg.whatsapp;
+    for (let i = 0; i < totalInMonth; i++) {
+      const isWa = i >= cfg.walkin;
+      const dayNum = mIdx === months.length - 1 ? Math.max(1, todayDay - (i % 14)) : (i % 27) + 1;
+      const dateKey = `${mInfo.monthKey}-${String(dayNum).padStart(2, '0')}`;
+      const branchId = i % 5 < 3 ? branches[0].id : branches[1].id;
+      const doctorId = i % 2 === 0 ? doctors[0].id : doctors[1].id;
+      const isCancelled = i % 19 === 4;
+      const isNoShow = !isCancelled && i % 23 === 7;
+      const isCompleted = !isCancelled && !isNoShow;
+
+      appointments.push({
+        id: `sample-${mInfo.monthKey}-${i}`,
+        patientId: `sample-pt-${i % 140}`,
+        patientName: `Sample Patient ${i + 1}`,
+        phone: '',
+        branchId,
+        doctorId,
+        status: isCancelled ? 'Cancelled' : isNoShow ? 'Waiting' : 'Completed',
+        isCompleted,
+        isCancelled,
+        isNoShow,
+        cancellationReason: isCancelled ? cancelReasons[i % cancelReasons.length] : null,
+        channel: isWa ? 'whatsapp' : 'walkin',
+        year: mInfo.year,
+        month: mInfo.month,
+        day: dayNum,
+        monthKey: mInfo.monthKey,
+        dateKey,
+        hour: pickHour(i + mIdx * 3),
+        durationMins: isCompleted ? cfg.duration + (i % 3 === 0 ? 2 : i % 3 === 1 ? -1 : 0) : null,
+        durationSource: isCompleted ? 'measured' : null,
+        diagnosis: isCompleted ? diagnoses[i % diagnoses.length] : null,
+        isLate: isCompleted && i % 9 === 2,
+      });
+
+      if (isWa) {
+        waLinks.push({ dateKey, branchId, booked: i % 4 !== 0 });
+      }
+
+      if (isCompleted) {
+        const med = meds[(i + mIdx) % meds.length];
+        const qty = 2 + (i % 4);
+        sales.push({
+          dateKey,
+          branchId,
+          doctorId,
+          molecule: med.name,
+          qty,
+          revenue: qty * med.price,
+          cost: qty * med.cost,
+        });
+      }
+    }
+  });
+
+  const stock: PharmacyStockRow[] = branches.flatMap((b, bi) =>
+    meds.map((m) => ({
+      branchId: b.id,
+      molecule: m.name,
+      unitsOnHand: bi === 0 ? 420 : 280,
+      stockValue: Math.round(m.stockVal * (bi === 0 ? 1.15 : 0.85)),
+    }))
+  );
+
+  return { branches, doctors, appointments, sales, stock, waLinks, leaves };
 }
 
 export function AnalyticsView({
@@ -69,751 +564,3099 @@ export function AnalyticsView({
   branchName,
 }: AnalyticsViewProps) {
   const cleanQuery = searchQuery.trim().toLowerCase();
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('month');
-  const [cancelledPage, setCancelledPage] = useState(1);
-  const [report, setReport] = useState<CasemixAndValuationReport | null>(null);
-  const [scopedAnalytics, setScopedAnalytics] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<AnalyticsTab>('footfall');
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodDays>(30);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
+
+  const [branches, setBranches] = useState<SelectOption[]>([]);
+  const [doctors, setDoctors] = useState<DoctorOption[]>([]);
+  const [dbAppointments, setDbAppointments] = useState<NormalizedAppointment[]>([]);
+  const [dbSales, setDbSales] = useState<PharmacySaleEvent[]>([]);
+  const [dbStock, setDbStock] = useState<PharmacyStockRow[]>([]);
+  const [dbWaLinks, setDbWaLinks] = useState<WaLinkRecord[]>([]);
+  const [dbLeaves, setDbLeaves] = useState<LeaveRecord[]>([]);
+  const [rpcAvgDuration, setRpcAvgDuration] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [showSamplePreview, setShowSamplePreview] = useState<boolean>(false);
+  const [doctorSummaryPage, setDoctorSummaryPage] = useState<number>(1);
+  const [doctorDailyPage, setDoctorDailyPage] = useState<number>(1);
+  const [doctorLeavesPage, setDoctorLeavesPage] = useState<number>(1);
+  const [overviewDateFilter, setOverviewDateFilter] = useState<string>('');
+  const [overviewDoctorId, setOverviewDoctorId] = useState<string>('');
+
+  const resetDoctorPages = () => {
+    setDoctorSummaryPage(1);
+    setDoctorDailyPage(1);
+    setDoctorLeavesPage(1);
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    window.scrollTo(0, 0);
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window.scrollY > 0 || window.scrollX > 0)) {
+      window.scrollTo(0, 0);
+    }
+  }, [activeTab]);
+
+  const todayIST = useMemo(() => getTodayIST(), []);
 
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
     const startTime = Date.now();
+    const sixMonthsStartIso = getSixMonthsStartIso(todayIST);
 
-    Promise.all([
-      enterpriseCLMSService
-        .getCasemixAndPharmacyValuation()
-        .then((data) => {
-          if (isMounted && data) setReport(data);
-        })
-        .catch((err) => console.warn('Casemix report load notice:', err)),
-      fetchFullAnalyticsDashboardDb({ clinicId, locationId })
-        .then((data) => {
-          if (isMounted && data) setScopedAnalytics(data);
-        })
-        .catch((err) => console.warn('Scoped analytics load notice:', err)),
-    ]).finally(async () => {
-      const elapsed = Date.now() - startTime;
-      if (elapsed < 450) {
-        await new Promise((r) => setTimeout(r, 450 - elapsed));
+    const loadAllAnalyticsData = async () => {
+      await Promise.resolve();
+      if (!isMounted) return;
+      setIsLoading(true);
+      setFetchError(null);
+
+      try {
+        let locQuery = supabase
+          .from('clinic_locations')
+          .select('id, branch_name, clinic_id, is_active')
+          .neq('is_active', false);
+        if (clinicId) {
+          locQuery = locQuery.eq('clinic_id', clinicId);
+        } else if (locationId) {
+          locQuery = locQuery.eq('id', locationId);
+        }
+
+        let docQuery = supabase
+          .from('doctors')
+          .select('id, full_name, daily_quota, clinic_id, location_id')
+          .neq('is_deleted', true);
+        if (clinicId) {
+          docQuery = docQuery.eq('clinic_id', clinicId);
+        } else if (locationId) {
+          docQuery = docQuery.eq('location_id', locationId);
+        }
+
+        let apptQuery = supabase
+          .from('appointments')
+          .select('*')
+          .gte('scheduled_time', sixMonthsStartIso)
+          .order('scheduled_time', { ascending: true })
+          .limit(5000);
+        if (clinicId) {
+          apptQuery = apptQuery.eq('clinic_id', clinicId);
+        } else if (locationId) {
+          apptQuery = apptQuery.eq('location_id', locationId);
+        }
+
+        let waQuery = supabase
+          .from('whatsapp_requests')
+          .select('*')
+          .gte('created_at', sixMonthsStartIso)
+          .limit(3000);
+        if (locationId) {
+          waQuery = waQuery.eq('location_id', locationId);
+        }
+
+        const [
+          locRes,
+          docRes,
+          apptRes,
+          rpcRes,
+          rxRes,
+          invRes,
+          medRes,
+          batchRes,
+          movRes,
+          logsRes,
+          waRes,
+        ] = await Promise.allSettled([
+          locQuery,
+          docQuery,
+          apptQuery,
+          fetchFullAnalyticsDashboardDb({ clinicId, locationId }),
+          supabase.from('prescribed_medications').select('appointment_id, inventory_id, dispensed_quantity, medicine_name, created_at').limit(5000),
+          supabase.from('inventory').select('*').limit(2000),
+          supabase.from('medicines').select('id, brand_name, generic_name, clinic_id').limit(2000),
+          supabase.from('medicine_batches').select('id, medicine_id, available_quantity, purchase_price, selling_price, clinic_id, location_id').limit(3000),
+          supabase
+            .from('stock_movements')
+            .select('medicine_id, batch_id, movement_type, quantity, date')
+            .eq('movement_type', 'Dispensing')
+            .gte('date', sixMonthsStartIso)
+            .limit(5000),
+          supabase.from('appointment_logs').select('appointment_id, reason, action, logged_at').limit(3000),
+          waQuery,
+        ]);
+
+        if (!isMounted) return;
+
+        if (locRes.status === 'fulfilled' && !locRes.value.error && Array.isArray(locRes.value.data)) {
+          setBranches(
+            locRes.value.data.map((b: Record<string, unknown>) => ({
+              id: String(b.id),
+              name: String(b.branch_name || 'Main Branch'),
+            }))
+          );
+        } else if (locationId) {
+          setBranches([{ id: locationId, name: branchName || 'Current Branch' }]);
+        }
+
+        const docList: DoctorOption[] = [];
+        const docNameMap = new Map<string, string>();
+        if (docRes.status === 'fulfilled' && !docRes.value.error && Array.isArray(docRes.value.data)) {
+          for (const d of docRes.value.data) {
+            const id = String(d.id);
+            const name = String(d.full_name || 'Doctor');
+            const quota = typeof d.daily_quota === 'number' && d.daily_quota > 0 ? d.daily_quota : 30;
+            docList.push({ id, name, dailyQuota: quota });
+            docNameMap.set(id, name);
+          }
+        }
+        setDoctors(docList);
+
+        if (rpcRes.status === 'fulfilled' && rpcRes.value && typeof rpcRes.value.avg_consultation_duration_mins === 'number' && rpcRes.value.avg_consultation_duration_mins > 0) {
+          setRpcAvgDuration(Math.round(rpcRes.value.avg_consultation_duration_mins));
+        } else {
+          setRpcAvgDuration(null);
+        }
+
+        const lateApptIds = new Set<string>();
+        const leaveEvents: LeaveRecord[] = [];
+        const seenLeaveKeys = new Set<string>();
+
+        if (logsRes.status === 'fulfilled' && !logsRes.value.error && Array.isArray(logsRes.value.data)) {
+          for (const log of logsRes.value.data) {
+            const reasonStr = String(log.reason || '').toLowerCase();
+            if (reasonStr.includes('late') && log.appointment_id) {
+              lateApptIds.add(String(log.appointment_id));
+            }
+          }
+        }
+
+        const normalizedAppts: NormalizedAppointment[] = [];
+        const apptMetaById = new Map<string, NormalizedAppointment>();
+
+        if (apptRes.status === 'fulfilled') {
+          if (apptRes.value.error) {
+            setFetchError(apptRes.value.error.message);
+          } else {
+            for (const row of apptRes.value.data || []) {
+              const status = String(row.status || 'Waiting');
+              const lowerStatus = status.toLowerCase();
+              const ist = parseISTDateAndHour(row.scheduled_time || row.created_at);
+              if (!ist) continue;
+
+              const dateKey = `${formatMonthKey(ist.year, ist.month)}-${String(ist.day).padStart(2, '0')}`;
+              const isCancelled = lowerStatus === 'cancelled' || lowerStatus === 'reallocated';
+              const isCompleted = lowerStatus === 'completed';
+              const isPastWaiting = (lowerStatus === 'waiting' || lowerStatus === 'confirmed') && dateKey < todayIST;
+              const isNoShow = lowerStatus === 'no_show' || lowerStatus === 'no show' || isPastWaiting;
+
+              let durationMins: number | null = null;
+              let durationSource: 'measured' | 'recorded' | null = null;
+              if (row.started_at && row.completed_at) {
+                const startMs = new Date(row.started_at).getTime();
+                const endMs = new Date(row.completed_at).getTime();
+                if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs > startMs) {
+                  const diffMins = Math.round((endMs - startMs) / 60000);
+                  if (diffMins >= 1 && diffMins <= 180) {
+                    durationMins = diffMins;
+                    durationSource = 'measured';
+                  }
+                }
+              }
+              if (durationMins === null && isCompleted && typeof row.consultation_duration_mins === 'number' && row.consultation_duration_mins > 0) {
+                durationMins = row.consultation_duration_mins;
+                durationSource = 'recorded';
+              }
+
+              const apptId = String(row.id);
+              const cancelReason = isCancelled
+                ? String(row.cancellation_reason || 'Unspecified Reason').trim()
+                : null;
+
+              const apptObj: NormalizedAppointment = {
+                id: apptId,
+                patientId: String(row.patient_id || ''),
+                patientName: '',
+                phone: '',
+                branchId: String(row.location_id || locationId || ''),
+                doctorId: String(row.doctor_id || ''),
+                status,
+                isCompleted,
+                isCancelled,
+                isNoShow,
+                cancellationReason: cancelReason,
+                channel: isWhatsAppChannel(row.visit_type, row.booking_channel) ? 'whatsapp' : 'walkin',
+                year: ist.year,
+                month: ist.month,
+                day: ist.day,
+                monthKey: formatMonthKey(ist.year, ist.month),
+                dateKey,
+                hour: ist.hour,
+                durationMins,
+                durationSource,
+                diagnosis: isCompleted ? classifyDiagnosis(row.clinical_notes) : null,
+                isLate: lateApptIds.has(apptId),
+              };
+              normalizedAppts.push(apptObj);
+              apptMetaById.set(apptId, apptObj);
+            }
+          }
+        }
+        setDbAppointments(normalizedAppts);
+
+        if (logsRes.status === 'fulfilled' && !logsRes.value.error && Array.isArray(logsRes.value.data)) {
+          for (const log of logsRes.value.data) {
+            const actionStr = String(log.action || '').toLowerCase();
+            const reasonStr = String(log.reason || '').toLowerCase();
+            if (reasonStr.includes('leave') || actionStr.includes('reassigned')) {
+              const linked = log.appointment_id ? apptMetaById.get(String(log.appointment_id)) : undefined;
+              const ist = parseISTDateAndHour(log.logged_at);
+              const dKey = linked?.dateKey || (ist ? `${formatMonthKey(ist.year, ist.month)}-${String(ist.day).padStart(2, '0')}` : '');
+              const docId = linked?.doctorId || '';
+              if (dKey && docId && docNameMap.has(docId)) {
+                const key = `${docId}-${dKey}`;
+                if (!seenLeaveKeys.has(key)) {
+                  seenLeaveKeys.add(key);
+                  leaveEvents.push({
+                    dateKey: dKey,
+                    doctorId: docId,
+                    doctorName: docNameMap.get(docId) || 'Doctor',
+                    type: 'Reallocated / Leave',
+                    upcoming: dKey > todayIST,
+                  });
+                }
+              }
+            }
+          }
+        }
+        setDbLeaves(leaveEvents);
+
+        const waRecords: WaLinkRecord[] = [];
+        if (waRes.status === 'fulfilled' && !waRes.value.error && Array.isArray(waRes.value.data)) {
+          for (const wr of waRes.value.data) {
+            const ist = parseISTDateAndHour(wr.created_at);
+            const dKey = ist
+              ? `${formatMonthKey(ist.year, ist.month)}-${String(ist.day).padStart(2, '0')}`
+              : String(wr.preferred_date || todayIST);
+            const st = String(wr.status || '').toLowerCase();
+            const booked = st === 'confirmed' || st === 'completed' || st === 'booked';
+            waRecords.push({
+              dateKey: dKey,
+              branchId: String(wr.location_id || ''),
+              booked,
+            });
+          }
+        }
+        setDbWaLinks(waRecords);
+
+        const invPriceById = new Map<string, { name: string; sell: number | null; cost: number | null }>();
+        const stockRows: PharmacyStockRow[] = [];
+
+        if (invRes.status === 'fulfilled' && !invRes.value.error && Array.isArray(invRes.value.data)) {
+          for (const inv of invRes.value.data) {
+            if (clinicId && inv.clinic_id && String(inv.clinic_id) !== clinicId) continue;
+            const label = String(inv.brand_name || inv.generic_name || 'Medicine');
+            const qty = Number(inv.stock_quantity) || 0;
+            const sell = typeof inv.unit_price === 'number' && inv.unit_price > 0 ? inv.unit_price : null;
+            const cost = typeof inv.purchase_price === 'number' && inv.purchase_price > 0 ? inv.purchase_price : sell;
+            invPriceById.set(String(inv.id), { name: label, sell, cost });
+            stockRows.push({
+              branchId: String(inv.location_id || ''),
+              molecule: label,
+              unitsOnHand: qty,
+              stockValue: cost !== null ? qty * cost : null,
+            });
+          }
+        }
+
+        const medNameById = new Map<string, string>();
+        if (medRes.status === 'fulfilled' && !medRes.value.error && Array.isArray(medRes.value.data)) {
+          for (const m of medRes.value.data) {
+            if (clinicId && m.clinic_id && String(m.clinic_id) !== clinicId) continue;
+            medNameById.set(String(m.id), String(m.brand_name || m.generic_name || 'Medicine'));
+          }
+        }
+
+        const batchPriceById = new Map<string, { sell: number | null; cost: number | null }>();
+        if (batchRes.status === 'fulfilled' && !batchRes.value.error && Array.isArray(batchRes.value.data)) {
+          for (const b of batchRes.value.data) {
+            if (clinicId && b.clinic_id && String(b.clinic_id) !== clinicId) continue;
+            const sell = typeof b.selling_price === 'number' && b.selling_price > 0 ? b.selling_price : null;
+            const cost = typeof b.purchase_price === 'number' && b.purchase_price > 0 ? b.purchase_price : null;
+            batchPriceById.set(String(b.id), { sell, cost });
+
+            const qty = Number(b.available_quantity) || 0;
+            const medName = medNameById.get(String(b.medicine_id));
+            if (medName && qty >= 0) {
+              stockRows.push({
+                branchId: String(b.location_id || ''),
+                molecule: medName,
+                unitsOnHand: qty,
+                stockValue: cost !== null ? qty * cost : null,
+              });
+            }
+          }
+        }
+        setDbStock(stockRows);
+
+        const salesList: PharmacySaleEvent[] = [];
+        if (rxRes.status === 'fulfilled' && !rxRes.value.error && Array.isArray(rxRes.value.data)) {
+          for (const rx of rxRes.value.data) {
+            const qty = Number(rx.dispensed_quantity) || 0;
+            if (qty <= 0) continue;
+            const linkedAppt = rx.appointment_id ? apptMetaById.get(String(rx.appointment_id)) : undefined;
+            const ist = linkedAppt ? null : parseISTDateAndHour(rx.created_at);
+            const dateKey = linkedAppt
+              ? linkedAppt.dateKey
+              : ist
+              ? `${formatMonthKey(ist.year, ist.month)}-${String(ist.day).padStart(2, '0')}`
+              : todayIST;
+
+            const invInfo = rx.inventory_id ? invPriceById.get(String(rx.inventory_id)) : undefined;
+            const molecule = String(rx.medicine_name || invInfo?.name || 'Prescribed Medicine').trim();
+
+            salesList.push({
+              dateKey,
+              branchId: linkedAppt?.branchId || '',
+              doctorId: linkedAppt?.doctorId || '',
+              molecule,
+              qty,
+              revenue: invInfo?.sell ? qty * invInfo.sell : null,
+              cost: invInfo?.cost ? qty * invInfo.cost : null,
+            });
+          }
+        }
+
+        if (salesList.length === 0 && movRes.status === 'fulfilled' && !movRes.value.error && Array.isArray(movRes.value.data)) {
+          for (const mv of movRes.value.data) {
+            const qty = Number(mv.quantity) || 0;
+            if (qty <= 0) continue;
+            const ist = parseISTDateAndHour(mv.date);
+            if (!ist) continue;
+            const dateKey = `${formatMonthKey(ist.year, ist.month)}-${String(ist.day).padStart(2, '0')}`;
+            const molecule = medNameById.get(String(mv.medicine_id)) || 'Dispensed Medicine';
+            const bPrice = mv.batch_id ? batchPriceById.get(String(mv.batch_id)) : undefined;
+
+            salesList.push({
+              dateKey,
+              branchId: '',
+              doctorId: '',
+              molecule,
+              qty,
+              revenue: bPrice?.sell ? qty * bPrice.sell : null,
+              cost: bPrice?.cost ? qty * bPrice.cost : null,
+            });
+          }
+        }
+        setDbSales(salesList);
+      } catch (err: unknown) {
+        if (isMounted) {
+          setFetchError(err instanceof Error ? err.message : 'Unable to load clinic analytics');
+        }
+      } finally {
+        const elapsed = Date.now() - startTime;
+        if (elapsed < 350) {
+          await new Promise((r) => setTimeout(r, 350 - elapsed));
+        }
+        if (isMounted) setIsLoading(false);
       }
-      if (isMounted) setIsLoading(false);
-    });
+    };
+
+    void loadAllAnalyticsData();
 
     return () => {
       isMounted = false;
     };
-  }, [clinicId, locationId]);
-  const cancelledList = useMemo(() => {
-    if (cancelledAppointments !== undefined) {
-      return cancelledAppointments;
+  }, [clinicId, locationId, branchName, todayIST]);
+
+  const realAppointments = useMemo(() => {
+    const byId = new Map<string, NormalizedAppointment>();
+    for (const row of dbAppointments) {
+      byId.set(row.id, row);
     }
-    return queue ? queue.filter((p) => p.status === 'Cancelled') : [];
-  }, [cancelledAppointments, queue]);
 
-  const cancelledCount = cancelledList.length;
-  const activeCount = totalPatientsCount;
-  const totalBookingsToday = activeCount + cancelledCount;
-  const cancellationRate =
-    totalBookingsToday > 0
-      ? ((cancelledCount / totalBookingsToday) * 100).toFixed(1)
-      : '0.0';
+    const [tY, tM, tD] = todayIST.split('-').map(Number);
 
-  const walkinList = useMemo(() => {
-    if (!queue) return [];
-    return queue.filter((p) => {
-      if (p.status === 'Cancelled') return false;
-      const vt = (p.visitType || '').toLowerCase();
-      return !vt.includes('whatsapp') && !vt.includes('online');
+    const mergeQueueItem = (qItem: Patient) => {
+      const lowerStatus = (qItem.status || '').toLowerCase();
+      const isCancelled = lowerStatus === 'cancelled' || lowerStatus === 'reallocated';
+      const isCompleted = lowerStatus === 'completed';
+
+      const existing = byId.get(qItem.id);
+      if (existing) {
+        byId.set(qItem.id, {
+          ...existing,
+          patientId: qItem.patientDbId || existing.patientId,
+          patientName: qItem.name || existing.patientName,
+          phone: qItem.phone || existing.phone,
+          status: qItem.status || existing.status,
+          isCancelled,
+          isCompleted,
+          cancellationReason: isCancelled
+            ? qItem.cancellationReason || existing.cancellationReason || 'Unspecified Reason'
+            : null,
+          branchId: qItem.locationId || existing.branchId,
+          doctorId: qItem.doctorId || existing.doctorId,
+        });
+        return;
+      }
+
+      const dateStr = qItem.appointmentDate || todayIST;
+      const [yPart, mPart, dPart] = dateStr.split('-').map(Number);
+      const y = yPart || tY;
+      const m = mPart || tM;
+      const d = dPart || tD;
+      const dateKey = `${formatMonthKey(y, m)}-${String(d).padStart(2, '0')}`;
+      const hr = parseSlotTimeHour(qItem.time);
+
+      byId.set(qItem.id, {
+        id: qItem.id,
+        patientId: qItem.patientDbId || '',
+        patientName: qItem.name || '',
+        phone: qItem.phone || '',
+        branchId: qItem.locationId || locationId || '',
+        doctorId: qItem.doctorId || '',
+        status: qItem.status || 'Waiting',
+        isCancelled,
+        isCompleted,
+        isNoShow: !isCancelled && !isCompleted && dateKey < todayIST,
+        cancellationReason: isCancelled ? qItem.cancellationReason || 'Unspecified Reason' : null,
+        channel: isWhatsAppChannel(qItem.visitType, null) ? 'whatsapp' : 'walkin',
+        year: y,
+        month: m,
+        day: d,
+        monthKey: formatMonthKey(y, m),
+        dateKey,
+        hour: hr,
+        durationMins: null,
+        durationSource: null,
+        diagnosis: isCompleted ? classifyDiagnosis(qItem.notes) : null,
+        isLate: false,
+      });
+    };
+
+    for (const qItem of queue || []) mergeQueueItem(qItem);
+    for (const cItem of cancelledAppointments || []) mergeQueueItem(cItem);
+
+    return Array.from(byId.values());
+  }, [dbAppointments, queue, cancelledAppointments, todayIST, locationId]);
+
+  const samplePack = useMemo(() => buildSampleDataset(todayIST), [todayIST]);
+  const isSampleMode = showSamplePreview && realAppointments.length === 0;
+
+  const activeBranches = useMemo(
+    () => (isSampleMode ? samplePack.branches : branches),
+    [isSampleMode, samplePack.branches, branches]
+  );
+
+  const activeDoctors = useMemo(
+    () => (isSampleMode ? samplePack.doctors : doctors),
+    [isSampleMode, samplePack.doctors, doctors]
+  );
+
+  const allScopedWithCancelled = useMemo(() => {
+    const source = isSampleMode ? samplePack.appointments : realAppointments;
+    return source.filter((item) => {
+      if (selectedDoctorId && item.doctorId !== selectedDoctorId) return false;
+      if (cleanQuery) {
+        const channelLabel = item.channel === 'whatsapp' ? 'whatsapp online' : 'walk-in walkin';
+        const monthLabel = `${MONTH_SHORT[item.month - 1] || ''} ${item.year}`.toLowerCase();
+        const diagLabel = (item.diagnosis || '').toLowerCase();
+        const cancelLabel = (item.cancellationReason || '').toLowerCase();
+        const match =
+          item.patientName.toLowerCase().includes(cleanQuery) ||
+          item.phone.toLowerCase().includes(cleanQuery) ||
+          channelLabel.includes(cleanQuery) ||
+          monthLabel.includes(cleanQuery) ||
+          diagLabel.includes(cleanQuery) ||
+          cancelLabel.includes(cleanQuery);
+        if (!match) return false;
+      }
+      return true;
     });
-  }, [queue]);
-  const walkinCount = walkinList.length;
+  }, [isSampleMode, samplePack.appointments, realAppointments, selectedDoctorId, cleanQuery]);
 
-  const whatsappList = useMemo(() => {
-    if (!queue) return [];
-    return queue.filter((p) => {
-      if (p.status === 'Cancelled') return false;
-      const vt = (p.visitType || '').toLowerCase();
-      return vt.includes('whatsapp') || vt.includes('online');
-    });
-  }, [queue]);
-  const whatsappCount = whatsappList.length;
+  const activeFootfallOnly = useMemo(
+    () => allScopedWithCancelled.filter((a) => !a.isCancelled),
+    [allScopedWithCancelled]
+  );
 
-  const completedList = useMemo(() => {
-    if (!queue) return [];
-    return queue.filter((p) => p.status === 'Completed');
-  }, [queue]);
-  const completedCount = completedList.length;
-
-  const todayData = [
-    { time: '09 AM', walkins: 8, whatsapp: 5 },
-    { time: '10 AM', walkins: 14, whatsapp: 11 },
-    { time: '11 AM', walkins: 19, whatsapp: 16 },
-    { time: '12 PM', walkins: 12, whatsapp: 9 },
-    { time: '01 PM', walkins: 6, whatsapp: 4 },
-    { time: '02 PM', walkins: 15, whatsapp: 12 },
-    { time: '03 PM', walkins: 18, whatsapp: 14 },
-    { time: '04 PM', walkins: 16, whatsapp: 15 },
-    { time: '05 PM', walkins: 21, whatsapp: 18 },
-    { time: '06 PM', walkins: 17, whatsapp: 13 },
-  ];
-
-  const weekData = [
-    { time: 'Mon', walkins: 42, whatsapp: 28 },
-    { time: 'Tue', walkins: 55, whatsapp: 39 },
-    { time: 'Wed', walkins: 48, whatsapp: 34 },
-    { time: 'Thu', walkins: 62, whatsapp: 45 },
-    { time: 'Fri', walkins: 58, whatsapp: 44 },
-    { time: 'Sat', walkins: 71, whatsapp: 52 },
-    { time: 'Sun', walkins: 32, whatsapp: 20 },
-  ];
-
-  const monthData = [
-    { time: 'Week 1', walkins: 180, whatsapp: 120 },
-    { time: 'Week 2', walkins: 210, whatsapp: 155 },
-    { time: 'Week 3', walkins: 195, whatsapp: 170 },
-    { time: 'Week 4', walkins: 240, whatsapp: 210 },
-  ];
-
-  const yearData = [
-    { time: 'Jan', walkins: 420, whatsapp: 180 },
-    { time: 'Feb', walkins: 460, whatsapp: 230 },
-    { time: 'Mar', walkins: 440, whatsapp: 280 },
-    { time: 'Apr', walkins: 510, whatsapp: 340 },
-    { time: 'May', walkins: 580, whatsapp: 410 },
-    { time: 'Jun', walkins: 550, whatsapp: 430 },
-    { time: 'Jul', walkins: 610, whatsapp: 490 },
-    { time: 'Aug', walkins: 640, whatsapp: 530 },
-    { time: 'Sep', walkins: 620, whatsapp: 570 },
-    { time: 'Oct', walkins: 690, whatsapp: 640 },
-    { time: 'Nov', walkins: 730, whatsapp: 710 },
-    { time: 'Dec', walkins: 780, whatsapp: 790 },
-  ];
-
-  const chartMeta = useMemo(() => {
-    switch (selectedPeriod) {
-      case 'today':
-        return {
-          data: todayData,
-          title: "Today's Hourly Consultation & Booking Influx",
-          description: 'Live hourly breakdown of walk-in registrations vs WhatsApp appointments',
-        };
-      case 'week':
-        return {
-          data: weekData,
-          title: 'Weekly Patient Traffic & Channel Distribution',
-          description: 'Day-by-day comparison of Walk-ins vs WhatsApp self-service for the current week',
-        };
-      case 'month':
-        return {
-          data: monthData,
-          title: 'Monthly Consultation Trajectory (By Week)',
-          description: 'Weekly aggregate volume of walk-in registrations and WhatsApp reservations',
-        };
-      case 'year':
-      default:
-        return {
-          data: yearData,
-          title: 'Patient Footfall & Booking Channel Trends',
-          description: 'Comparison of Walk-in Registrations vs WhatsApp Self-Service Appointments',
-        };
+  const firstVisitByPatient = useMemo(() => {
+    const firstDateMap = new Map<string, string>();
+    for (const a of activeFootfallOnly) {
+      if (!a.patientId) continue;
+      const existing = firstDateMap.get(a.patientId);
+      if (!existing || a.dateKey < existing) {
+        firstDateMap.set(a.patientId, a.dateKey);
+      }
     }
+    return firstDateMap;
+  }, [activeFootfallOnly]);
+
+  const periodFilteredAllBranches = useMemo(() => {
+    return activeFootfallOnly.filter((a) => {
+      const diff = ageInDays(todayIST, a.dateKey);
+      return diff >= 0 && diff < selectedPeriod;
+    });
+  }, [activeFootfallOnly, todayIST, selectedPeriod]);
+
+  const periodFilteredAppointments = useMemo(() => {
+    if (!selectedBranchId) return periodFilteredAllBranches;
+    return periodFilteredAllBranches.filter((a) => a.branchId === selectedBranchId);
+  }, [periodFilteredAllBranches, selectedBranchId]);
+
+  const periodAllWithCancelled = useMemo(() => {
+    return allScopedWithCancelled.filter((a) => {
+      const diff = ageInDays(todayIST, a.dateKey);
+      if (diff < 0 || diff >= selectedPeriod) return false;
+      if (selectedBranchId && a.branchId !== selectedBranchId) return false;
+      return true;
+    });
+  }, [allScopedWithCancelled, todayIST, selectedPeriod, selectedBranchId]);
+
+  const trailingSixMonths = useMemo(() => getTrailingMonths(todayIST, 6), [todayIST]);
+
+  const monthlyBuckets: MonthlyBucket[] = useMemo(() => {
+    const countsByMonth = new Map<string, { walkin: number; whatsapp: number }>();
+    for (const m of trailingSixMonths) {
+      countsByMonth.set(m.monthKey, { walkin: 0, whatsapp: 0 });
+    }
+
+    const branchFiltered = selectedBranchId
+      ? activeFootfallOnly.filter((a) => a.branchId === selectedBranchId)
+      : activeFootfallOnly;
+
+    for (const appt of branchFiltered) {
+      const bucket = countsByMonth.get(appt.monthKey);
+      if (!bucket) continue;
+      if (appt.channel === 'whatsapp') bucket.whatsapp += 1;
+      else bucket.walkin += 1;
+    }
+
+    const result: MonthlyBucket[] = [];
+    for (let i = 0; i < trailingSixMonths.length; i++) {
+      const m = trailingSixMonths[i];
+      const counts = countsByMonth.get(m.monthKey) || { walkin: 0, whatsapp: 0 };
+      const total = counts.walkin + counts.whatsapp;
+      const whatsappSharePct = total > 0 ? Number(((counts.whatsapp / total) * 100).toFixed(1)) : 0;
+
+      let momGrowthPct: number | null = null;
+      if (i > 0) {
+        const prevTotal = result[i - 1].total;
+        if (prevTotal > 0) {
+          momGrowthPct = Number((((total - prevTotal) / prevTotal) * 100).toFixed(1));
+        }
+      }
+
+      result.push({
+        monthKey: m.monthKey,
+        shortLabel: m.shortLabel,
+        fullLabel: m.fullLabel,
+        walkin: counts.walkin,
+        whatsapp: counts.whatsapp,
+        total,
+        whatsappSharePct,
+        momGrowthPct,
+      });
+    }
+    return result;
+  }, [activeFootfallOnly, trailingSixMonths, selectedBranchId]);
+
+  const branchComparisonRows = useMemo(() => {
+    return activeBranches.map((branch) => {
+      const rows = periodFilteredAllBranches.filter((a) => a.branchId === branch.id);
+      const total = rows.length;
+      const wa = rows.filter((a) => a.channel === 'whatsapp').length;
+      const durations = rows
+        .map((a) => a.durationMins)
+        .filter((d): d is number => typeof d === 'number' && d > 0);
+      const avgMins =
+        durations.length > 0
+          ? Number((durations.reduce((s, d) => s + d, 0) / durations.length).toFixed(1))
+          : null;
+      const share = total > 0 ? Number(((wa / total) * 100).toFixed(1)) : 0;
+      return {
+        id: branch.id,
+        name: branch.name,
+        total,
+        avgMins,
+        whatsappShare: share,
+      };
+    });
+  }, [activeBranches, periodFilteredAllBranches]);
+
+  const kpiMetrics = useMemo(() => {
+    let totalPatients = periodFilteredAppointments.length;
+    let walkinCount = 0;
+    let whatsappCount = 0;
+    let newPatientVisits = 0;
+    let hasPatientIds = false;
+    const measuredDurations: number[] = [];
+    const recordedDurations: number[] = [];
+
+    for (const appt of periodFilteredAppointments) {
+      if (appt.channel === 'whatsapp') whatsappCount += 1;
+      else walkinCount += 1;
+
+      if (appt.patientId) {
+        hasPatientIds = true;
+        if (firstVisitByPatient.get(appt.patientId) === appt.dateKey) {
+          newPatientVisits += 1;
+        }
+      }
+
+      if (appt.durationMins !== null) {
+        if (appt.durationSource === 'measured') measuredDurations.push(appt.durationMins);
+        else recordedDurations.push(appt.durationMins);
+      }
+    }
+
+    if (!isSampleMode && !cleanQuery && !selectedBranchId && !selectedDoctorId && totalPatients === 0 && totalPatientsCount > 0) {
+      totalPatients = totalPatientsCount;
+    }
+
+    const whatsappSharePct =
+      walkinCount + whatsappCount > 0
+        ? Number(((whatsappCount / (walkinCount + whatsappCount)) * 100).toFixed(1))
+        : 0;
+
+    let avgDurationMins: number | null = null;
+    let durationLabel = 'Duration data unavailable';
+    if (measuredDurations.length > 0) {
+      avgDurationMins = Number(
+        (measuredDurations.reduce((a, b) => a + b, 0) / measuredDurations.length).toFixed(1)
+      );
+      durationLabel = `Measured across ${measuredDurations.length} completed visits`;
+    } else if (recordedDurations.length > 0) {
+      avgDurationMins = Number(
+        (recordedDurations.reduce((a, b) => a + b, 0) / recordedDurations.length).toFixed(1)
+      );
+      durationLabel = `Recorded slot avg (${recordedDurations.length} completed)`;
+    } else if (rpcAvgDuration && !isSampleMode && !selectedBranchId && !selectedDoctorId) {
+      avgDurationMins = rpcAvgDuration;
+      durationLabel = 'Clinic consultation average';
+    } else if (isSampleMode) {
+      avgDurationMins = 13.0;
+      durationLabel = 'Sample consultation average';
+    }
+
+    const latestMonth = monthlyBuckets[monthlyBuckets.length - 1];
+    const latestMomGrowth = latestMonth ? latestMonth.momGrowthPct : null;
+
+    return {
+      totalPatients,
+      walkinCount,
+      whatsappCount,
+      whatsappSharePct,
+      newPatientVisits: hasPatientIds ? newPatientVisits : null,
+      avgDurationMins,
+      durationLabel,
+      latestMomGrowth,
+    };
+  }, [
+    periodFilteredAppointments,
+    firstVisitByPatient,
+    isSampleMode,
+    cleanQuery,
+    selectedBranchId,
+    selectedDoctorId,
+    totalPatientsCount,
+    rpcAvgDuration,
+    monthlyBuckets,
+  ]);
+
+  const hourlyData: { buckets: HourlyBucket[]; peakHours: HourlyBucket[]; maxHourTotal: number } = useMemo(() => {
+    const hourMap = new Map<number, { walkin: number; whatsapp: number }>();
+    let minHour = 9;
+    let maxHour = 19;
+
+    for (const appt of periodFilteredAppointments) {
+      if (appt.hour === null) continue;
+      if (appt.hour < minHour) minHour = appt.hour;
+      if (appt.hour > maxHour) maxHour = appt.hour;
+      const curr = hourMap.get(appt.hour) || { walkin: 0, whatsapp: 0 };
+      if (appt.channel === 'whatsapp') curr.whatsapp += 1;
+      else curr.walkin += 1;
+      hourMap.set(appt.hour, curr);
+    }
+
+    minHour = Math.max(6, minHour);
+    maxHour = Math.min(22, maxHour);
+
+    const buckets: HourlyBucket[] = [];
+    let maxTotal = 0;
+    for (let h = minHour; h <= maxHour; h++) {
+      const entry = hourMap.get(h) || { walkin: 0, whatsapp: 0 };
+      const total = entry.walkin + entry.whatsapp;
+      if (total > maxTotal) maxTotal = total;
+      buckets.push({
+        hour: h,
+        label: formatHourLabel(h, false),
+        shortLabel: formatHourLabel(h, true),
+        walkin: entry.walkin,
+        whatsapp: entry.whatsapp,
+        total,
+      });
+    }
+
+    const peakHours = maxTotal > 0 ? buckets.filter((b) => b.total === maxTotal) : [];
+    return { buckets, peakHours, maxHourTotal: maxTotal };
+  }, [periodFilteredAppointments]);
+
+  const clinicalAndPharmacy = useMemo(() => {
+    const diagCounts = new Map<string, number>();
+    for (const appt of periodFilteredAppointments) {
+      if (!appt.diagnosis) continue;
+      diagCounts.set(appt.diagnosis, (diagCounts.get(appt.diagnosis) || 0) + 1);
+    }
+    const sortedDiag = Array.from(diagCounts.entries())
+      .filter(([, cnt]) => cnt > 0)
+      .sort((a, b) => b[1] - a[1]);
+    const topDiag = sortedDiag.slice(0, 4).map(([label, count]) => ({ label, count }));
+    const restCount = sortedDiag.slice(4).reduce((s, [, cnt]) => s + cnt, 0);
+    const caseMix = restCount > 0 ? [...topDiag, { label: 'Other', count: restCount }] : topDiag;
+
+    const salesSource = isSampleMode ? samplePack.sales : dbSales;
+    const filteredSales = salesSource.filter((s) => {
+      const diff = ageInDays(todayIST, s.dateKey);
+      if (diff < 0 || diff >= selectedPeriod) return false;
+      if (selectedBranchId && s.branchId && s.branchId !== selectedBranchId) return false;
+      if (selectedDoctorId && s.doctorId && s.doctorId !== selectedDoctorId) return false;
+      if (cleanQuery && !s.molecule.toLowerCase().includes(cleanQuery)) return false;
+      return true;
+    });
+
+    const stockSource = isSampleMode ? samplePack.stock : dbStock;
+    const filteredStock = stockSource.filter((st) => {
+      if (selectedBranchId && st.branchId && st.branchId !== selectedBranchId) return false;
+      if (cleanQuery && !st.molecule.toLowerCase().includes(cleanQuery)) return false;
+      return true;
+    });
+
+    const moleculeMap = new Map<
+      string,
+      { name: string; unitsSold: number; revenue: number; hasRevenue: boolean; cost: number; stockValue: number; hasStockValue: boolean }
+    >();
+
+    let totalRevenue = 0;
+    let hasAnyRevenue = false;
+    let totalCost = 0;
+    let hasAnyCost = false;
+
+    for (const s of filteredSales) {
+      const curr = moleculeMap.get(s.molecule) || {
+        name: s.molecule,
+        unitsSold: 0,
+        revenue: 0,
+        hasRevenue: false,
+        cost: 0,
+        stockValue: 0,
+        hasStockValue: false,
+      };
+      curr.unitsSold += s.qty;
+      if (s.revenue !== null) {
+        curr.revenue += s.revenue;
+        curr.hasRevenue = true;
+        totalRevenue += s.revenue;
+        hasAnyRevenue = true;
+      }
+      if (s.cost !== null) {
+        curr.cost += s.cost;
+        totalCost += s.cost;
+        hasAnyCost = true;
+      }
+      moleculeMap.set(s.molecule, curr);
+    }
+
+    let totalStockValue = 0;
+    let hasAnyStockValue = false;
+
+    for (const st of filteredStock) {
+      const curr = moleculeMap.get(st.molecule) || {
+        name: st.molecule,
+        unitsSold: 0,
+        revenue: 0,
+        hasRevenue: false,
+        cost: 0,
+        stockValue: 0,
+        hasStockValue: false,
+      };
+      if (st.stockValue !== null) {
+        curr.stockValue += st.stockValue;
+        curr.hasStockValue = true;
+        totalStockValue += st.stockValue;
+        hasAnyStockValue = true;
+      }
+      moleculeMap.set(st.molecule, curr);
+    }
+
+    const molecules = Array.from(moleculeMap.values()).sort(
+      (a, b) => b.unitsSold - a.unitsSold || b.stockValue - a.stockValue
+    );
+
+    const fastMoving = molecules.filter((m) => m.unitsSold > 0).slice(0, 7);
+    const topRevenueMolecules = molecules.filter((m) => m.hasRevenue && m.revenue > 0).slice(0, 7);
+
+    const stockTurnover =
+      hasAnyCost && totalCost > 0 && hasAnyStockValue && totalStockValue > 0
+        ? Number(((totalCost * (365 / selectedPeriod)) / totalStockValue).toFixed(1))
+        : null;
+
+    return {
+      caseMix,
+      molecules,
+      fastMoving,
+      topRevenueMolecules,
+      totalRevenue: hasAnyRevenue ? totalRevenue : null,
+      totalStockValue: hasAnyStockValue ? totalStockValue : null,
+      stockTurnover,
+    };
+  }, [
+    periodFilteredAppointments,
+    isSampleMode,
+    samplePack.sales,
+    samplePack.stock,
+    dbSales,
+    dbStock,
+    todayIST,
+    selectedPeriod,
+    selectedBranchId,
+    selectedDoctorId,
+    cleanQuery,
+  ]);
+
+  const queueMetrics = useMemo(() => {
+    const totalBookings = periodAllWithCancelled.length;
+    const cancelledList = periodAllWithCancelled.filter((a) => a.isCancelled);
+    const noShowList = periodAllWithCancelled.filter((a) => !a.isCancelled && a.isNoShow);
+    const arrivedList = periodAllWithCancelled.filter((a) => !a.isCancelled && !a.isNoShow);
+    const lateArrivedCount = arrivedList.filter((a) => a.isLate).length;
+
+    const cancelRate = totalBookings > 0 ? Number(((cancelledList.length / totalBookings) * 100).toFixed(1)) : 0;
+    const noShowRate = totalBookings > 0 ? Number(((noShowList.length / totalBookings) * 100).toFixed(1)) : 0;
+    const lateRate = arrivedList.length > 0 ? Number(((lateArrivedCount / arrivedList.length) * 100).toFixed(1)) : 0;
+
+    const reasonMap = new Map<string, number>();
+    for (const c of cancelledList) {
+      const rLabel = c.cancellationReason || 'Unspecified Reason';
+      reasonMap.set(rLabel, (reasonMap.get(rLabel) || 0) + 1);
+    }
+    const reasons = Array.from(reasonMap.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6);
+
+    const waLinkSource = isSampleMode ? samplePack.waLinks : dbWaLinks;
+    const scopedWaLinks = waLinkSource.filter((w) => {
+      const diff = ageInDays(todayIST, w.dateKey);
+      if (diff < 0 || diff >= selectedPeriod) return false;
+      if (selectedBranchId && w.branchId && w.branchId !== selectedBranchId) return false;
+      return true;
+    });
+    const linksSent = scopedWaLinks.length;
+    const linkBookings = scopedWaLinks.filter((w) => w.booked).length;
+    const waConversion = linksSent > 0 ? Number(((linkBookings / linksSent) * 100).toFixed(1)) : 0;
+
+    const leavesSource = isSampleMode ? samplePack.leaves : dbLeaves;
+    const openDays = new Set(periodAllWithCancelled.filter((a) => !a.isCancelled).map((a) => a.dateKey)).size;
+
+    const quotaDoctors = activeDoctors.filter((d) => !selectedDoctorId || d.id === selectedDoctorId);
+    const quotaRows = quotaDoctors.map((doc) => {
+      const docAppts = allScopedWithCancelled.filter((a) => {
+        const diff = ageInDays(todayIST, a.dateKey);
+        if (diff < 0 || diff >= selectedPeriod) return false;
+        return a.doctorId === doc.id && !a.isCancelled;
+      });
+      const leaveDaysCount = leavesSource.filter((l) => {
+        const diff = ageInDays(todayIST, l.dateKey);
+        return diff >= 0 && diff < selectedPeriod && l.doctorId === doc.id;
+      }).length;
+      const workDays = Math.max(openDays - leaveDaysCount, docAppts.length > 0 ? 1 : 0);
+      const perDay = workDays > 0 ? docAppts.length / workDays : 0;
+      const usedPct = doc.dailyQuota > 0 ? Number(((perDay / doc.dailyQuota) * 100).toFixed(1)) : 0;
+      return {
+        id: doc.id,
+        name: doc.name,
+        dailyQuota: doc.dailyQuota,
+        perDay,
+        usedPct,
+      };
+    });
+
+    const completedCount = periodAllWithCancelled.filter((a) => a.isCompleted).length;
+    const inProgressCount = periodAllWithCancelled.filter(
+      (a) => !a.isCancelled && !a.isCompleted && a.status.toLowerCase().includes('progress')
+    ).length;
+    const waitingCount = periodAllWithCancelled.filter(
+      (a) => !a.isCancelled && !a.isCompleted && !a.isNoShow && !a.status.toLowerCase().includes('progress')
+    ).length;
+    const todayRows = allScopedWithCancelled.filter((a) => a.dateKey === todayIST);
+    const todayWaiting = todayRows.filter(
+      (a) => !a.isCancelled && !a.isCompleted && !a.isNoShow && !a.status.toLowerCase().includes('progress')
+    ).length;
+    const todayInProgress = todayRows.filter(
+      (a) => !a.isCancelled && !a.isCompleted && a.status.toLowerCase().includes('progress')
+    ).length;
+
+    const statusBreakdown = [
+      {
+        label: 'Waiting',
+        count: waitingCount,
+        pct: totalBookings > 0 ? Number(((waitingCount / totalBookings) * 100).toFixed(1)) : 0,
+        color: '#F59E0B',
+        barColor: 'rgba(245, 158, 11, 0.88)',
+        badgeClass: 'bg-amber-50 text-amber-700 border-amber-200/80',
+        note: todayWaiting > 0 ? `${todayWaiting} waiting today` : 'Active queue',
+      },
+      {
+        label: 'In Progress',
+        count: inProgressCount,
+        pct: totalBookings > 0 ? Number(((inProgressCount / totalBookings) * 100).toFixed(1)) : 0,
+        color: '#2563EB',
+        barColor: 'rgba(37, 99, 235, 0.9)',
+        badgeClass: 'bg-blue-50 text-[#2563EB] border-blue-200/80',
+        note: todayInProgress > 0 ? `${todayInProgress} in chamber` : 'Consulting',
+      },
+      {
+        label: 'Completed',
+        count: completedCount,
+        pct: totalBookings > 0 ? Number(((completedCount / totalBookings) * 100).toFixed(1)) : 0,
+        color: '#10B981',
+        barColor: 'rgba(16, 185, 129, 0.88)',
+        badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
+        note: 'Consultations finished',
+      },
+      {
+        label: 'Cancelled',
+        count: cancelledList.length,
+        pct: cancelRate,
+        color: '#F43F5E',
+        barColor: 'rgba(244, 63, 94, 0.85)',
+        badgeClass: 'bg-rose-50 text-rose-700 border-rose-200/80',
+        note: noShowList.length > 0 ? `${noShowList.length} no-show` : 'Cancelled / reallocated',
+      },
+    ];
+
+    return {
+      totalBookings,
+      cancellations: cancelledList.length,
+      noShows: noShowList.length,
+      arrivedCount: arrivedList.length,
+      lateArrivedCount,
+      cancelRate,
+      noShowRate,
+      lateRate,
+      reasons,
+      linksSent,
+      linkBookings,
+      waConversion,
+      quotaRows,
+      statusBreakdown,
+      todayWaiting,
+      todayInProgress,
+    };
+  }, [
+    periodAllWithCancelled,
+    allScopedWithCancelled,
+    isSampleMode,
+    samplePack.waLinks,
+    samplePack.leaves,
+    dbWaLinks,
+    dbLeaves,
+    todayIST,
+    selectedPeriod,
+    selectedBranchId,
+    selectedDoctorId,
+    activeDoctors,
+  ]);
+
+  const doctorColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    activeDoctors.forEach((doc, idx) => {
+      map.set(doc.id, SERIES_PALETTE[idx % SERIES_PALETTE.length]);
+    });
+    return map;
+  }, [activeDoctors]);
+
+  const doctorReport = useMemo(() => {
+    const shownDoctors = activeDoctors.filter((d) => !selectedDoctorId || d.id === selectedDoctorId);
+    const shownBranches = activeBranches.filter((b) => !selectedBranchId || b.id === selectedBranchId);
+    const leavesSource = isSampleMode ? samplePack.leaves : dbLeaves;
+
+    const summariseDocRows = (rows: NormalizedAppointment[]) => {
+      const consultedRows = rows.filter((r) => r.isCompleted);
+      const baseRows = consultedRows.length > 0 ? consultedRows : rows.filter((r) => !r.isCancelled);
+      const byBranch = shownBranches.map((b) => baseRows.filter((r) => r.branchId === b.id).length);
+      const validDurations = baseRows
+        .map((r) => r.durationMins)
+        .filter((d): d is number => typeof d === 'number' && d > 0);
+      const totalMins = validDurations.reduce((s, d) => s + d, 0);
+      const avgMins = validDurations.length > 0 ? totalMins / validDurations.length : null;
+      return {
+        consulted: consultedRows.length,
+        totalVisits: baseRows.length,
+        byBranch,
+        totalMins: validDurations.length > 0 ? totalMins : null,
+        avgMins,
+      };
+    };
+
+    const summary = shownDoctors.map((doc) => {
+      const docRows = periodFilteredAppointments.filter((a) => a.doctorId === doc.id);
+      const leaveDays = leavesSource.filter((l) => {
+        const diff = ageInDays(todayIST, l.dateKey);
+        return diff >= 0 && diff < selectedPeriod && l.doctorId === doc.id;
+      }).length;
+      return {
+        id: doc.id,
+        name: doc.name,
+        color: doctorColorMap.get(doc.id) || SERIES_PALETTE[0],
+        ...summariseDocRows(docRows),
+        leaveDays,
+      };
+    });
+
+    const trailing7Dates: string[] = [];
+    for (let i = 6; i >= 0; i--) {
+      trailing7Dates.push(shiftDateYmd(todayIST, -i));
+    }
+
+    const overviewDates = overviewDateFilter ? [overviewDateFilter] : trailing7Dates;
+    const overviewDoctors = activeDoctors.filter((d) => !overviewDoctorId || d.id === overviewDoctorId);
+
+    const dailyRows = overviewDates
+      .slice()
+      .reverse()
+      .flatMap((dateKey) =>
+        overviewDoctors.map((doc) => {
+          const allForDay = allScopedWithCancelled.filter(
+            (a) =>
+              a.dateKey === dateKey &&
+              a.doctorId === doc.id &&
+              (!selectedBranchId || a.branchId === selectedBranchId)
+          );
+          const nonCancelled = allForDay.filter((a) => !a.isCancelled);
+          const onLeave = leavesSource.some((l) => l.dateKey === dateKey && l.doctorId === doc.id);
+          return {
+            date: dateKey,
+            doctorId: doc.id,
+            name: doc.name,
+            color: doctorColorMap.get(doc.id) || SERIES_PALETTE[0],
+            booked: allForDay.length,
+            ...summariseDocRows(nonCancelled),
+            onLeave,
+          };
+        })
+      )
+      .sort((a, b) => b.date.localeCompare(a.date) || b.booked - a.booked || b.consulted - a.consulted);
+
+    const leaves = leavesSource
+      .filter((l) => ageInDays(todayIST, l.dateKey) < selectedPeriod && shownDoctors.some((d) => d.id === l.doctorId))
+      .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
+      .map((l) => ({
+        ...l,
+        color: doctorColorMap.get(l.doctorId) || SERIES_PALETTE[0],
+      }));
+
+    return {
+      branchNames: shownBranches.map((b) => b.name),
+      summary,
+      dayLabels: overviewDates,
+      dailyRows,
+      leaves,
+    };
+  }, [
+    activeDoctors,
+    activeBranches,
+    doctorColorMap,
+    selectedDoctorId,
+    overviewDoctorId,
+    selectedBranchId,
+    isSampleMode,
+    samplePack.leaves,
+    dbLeaves,
+    periodFilteredAppointments,
+    allScopedWithCancelled,
+    todayIST,
+    selectedPeriod,
+    overviewDateFilter,
+  ]);
+
+  const pagedDoctorSummary = useMemo(
+    () => getPaginatedSlice(doctorReport.summary, doctorSummaryPage, DOCTOR_TABLE_PAGE_SIZE),
+    [doctorReport.summary, doctorSummaryPage]
+  );
+
+  const pagedDoctorDaily = useMemo(
+    () => getPaginatedSlice(doctorReport.dailyRows, doctorDailyPage, DOCTOR_TABLE_PAGE_SIZE),
+    [doctorReport.dailyRows, doctorDailyPage]
+  );
+
+  const pagedDoctorLeaves = useMemo(
+    () => getPaginatedSlice(doctorReport.leaves, doctorLeavesPage, DOCTOR_TABLE_PAGE_SIZE),
+    [doctorReport.leaves, doctorLeavesPage]
+  );
+
+  const branchChartData: ChartConfiguration<'bar'>['data'] = useMemo(
+    () => ({
+      labels: branchComparisonRows.map((b) => b.name),
+      datasets: [
+        {
+          label: 'Visits',
+          data: branchComparisonRows.map((b) => b.total),
+          backgroundColor: 'rgba(37, 99, 235, 0.9)',
+          hoverBackgroundColor: '#1D4ED8',
+          borderRadius: 6,
+          maxBarThickness: 40,
+        },
+      ],
+    }),
+    [branchComparisonRows]
+  );
+
+  const branchChartOptions: ChartConfiguration<'bar'>['options'] = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 20 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1E293B',
+          padding: 10,
+          cornerRadius: 10,
+        },
+      },
+      scales: {
+        x: { grid: { display: false }, border: { display: false }, ticks: { color: '#475569', font: { size: 11, weight: 'bold' } } },
+        y: { beginAtZero: true, grace: '18%', border: { display: false }, grid: { color: '#F1F5F9' }, ticks: { precision: 0, color: '#94A3B8', font: { size: 11 } } },
+      },
+    }),
+    []
+  );
+
+  const footfallColumnChartData: ChartConfiguration<'bar'>['data'] = useMemo(
+    () => ({
+      labels: monthlyBuckets.map((m) => m.shortLabel),
+      datasets: [
+        {
+          label: 'Walk-in Patients',
+          data: monthlyBuckets.map((m) => m.walkin),
+          backgroundColor: 'rgba(37, 99, 235, 0.9)',
+          hoverBackgroundColor: '#1D4ED8',
+          borderRadius: 6,
+          borderSkipped: false,
+          barPercentage: 0.72,
+          categoryPercentage: 0.68,
+        },
+        {
+          label: 'WhatsApp Bookings',
+          data: monthlyBuckets.map((m) => m.whatsapp),
+          backgroundColor: 'rgba(16, 185, 129, 0.88)',
+          hoverBackgroundColor: '#059669',
+          borderRadius: 6,
+          borderSkipped: false,
+          barPercentage: 0.72,
+          categoryPercentage: 0.68,
+        },
+      ],
+    }),
+    [monthlyBuckets]
+  );
+
+  const footfallColumnChartOptions: ChartConfiguration<'bar'>['options'] = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'top',
+          align: 'end',
+          labels: {
+            usePointStyle: true,
+            pointStyle: 'circle',
+            boxWidth: 8,
+            boxHeight: 8,
+            padding: 16,
+            color: '#475569',
+            font: { size: 11, weight: 'bold', family: 'Inter, system-ui, sans-serif' },
+          },
+        },
+        tooltip: {
+          backgroundColor: '#1E293B',
+          titleColor: '#F8FAFC',
+          bodyColor: '#CBD5E1',
+          borderColor: 'rgba(148, 163, 184, 0.25)',
+          borderWidth: 1,
+          padding: 12,
+          cornerRadius: 10,
+          callbacks: {
+            title: (items) => monthlyBuckets[items[0]?.dataIndex ?? 0]?.fullLabel || '',
+            afterBody: (items) => {
+              const bucket = monthlyBuckets[items[0]?.dataIndex ?? 0];
+              if (!bucket) return '';
+              const growthTxt =
+                bucket.momGrowthPct !== null
+                  ? ` (${bucket.momGrowthPct >= 0 ? '+' : ''}${bucket.momGrowthPct}% MoM)`
+                  : '';
+              return `\nTotal Intake: ${bucket.total} patients${growthTxt}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { grid: { display: false }, border: { display: false }, ticks: { color: '#64748B', font: { size: 11, weight: 'bold' } } },
+        y: { beginAtZero: true, border: { display: false }, grid: { color: '#F1F5F9' }, ticks: { precision: 0, color: '#94A3B8', font: { size: 11 } } },
+      },
+    }),
+    [monthlyBuckets]
+  );
+
+  const monthlyTrendChartData: ChartConfiguration<'line'>['data'] = useMemo(
+    () => ({
+      labels: monthlyBuckets.map((m) => m.shortLabel),
+      datasets: [
+        {
+          label: 'Total Monthly Footfall',
+          data: monthlyBuckets.map((m) => m.total),
+          borderColor: '#2563EB',
+          backgroundColor: (context: ScriptableContext<'line'>) => {
+            const chart = context.chart;
+            const { ctx, chartArea } = chart;
+            if (!chartArea) return 'rgba(37, 99, 235, 0.14)';
+            const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            gradient.addColorStop(0, 'rgba(37, 99, 235, 0.24)');
+            gradient.addColorStop(1, 'rgba(37, 99, 235, 0.01)');
+            return gradient;
+          },
+          fill: true,
+          tension: 0.36,
+          borderWidth: 2.5,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          pointBackgroundColor: '#FFFFFF',
+          pointBorderColor: '#2563EB',
+          pointBorderWidth: 2.5,
+        },
+      ],
+    }),
+    [monthlyBuckets]
+  );
+
+  const monthlyTrendChartOptions: ChartConfiguration<'line'>['options'] = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1E293B',
+          padding: 12,
+          cornerRadius: 10,
+          callbacks: {
+            title: (items) => monthlyBuckets[items[0]?.dataIndex ?? 0]?.fullLabel || '',
+            label: (item) => {
+              const bucket = monthlyBuckets[item.dataIndex];
+              return bucket ? ` Total Footfall: ${bucket.total} patients` : '';
+            },
+            afterLabel: (item) => {
+              const bucket = monthlyBuckets[item.dataIndex];
+              if (!bucket) return '';
+              const momLine =
+                bucket.momGrowthPct !== null
+                  ? ` Intake Growth: ${bucket.momGrowthPct >= 0 ? '+' : ''}${bucket.momGrowthPct}% vs prev month`
+                  : ' Intake Growth: Baseline month';
+              return [` Walk-in: ${bucket.walkin} · WhatsApp: ${bucket.whatsapp}`, momLine];
+            },
+          },
+        },
+      },
+      scales: {
+        x: { grid: { display: false }, border: { display: false }, ticks: { color: '#64748B', font: { size: 11, weight: 'bold' } } },
+        y: { beginAtZero: true, border: { display: false }, grid: { color: '#F1F5F9' }, ticks: { precision: 0, color: '#94A3B8', font: { size: 11 } } },
+      },
+    }),
+    [monthlyBuckets]
+  );
+
+  const peakHoursChartData: ChartConfiguration<'bar'>['data'] = useMemo(() => {
+    const { buckets, maxHourTotal } = hourlyData;
+    const barColors = buckets.map((b) => {
+      if (maxHourTotal === 0 || b.total === 0) return 'rgba(226, 232, 240, 0.7)';
+      if (b.total === maxHourTotal) return '#2563EB';
+      if (b.total >= maxHourTotal * 0.75) return '#3B82F6';
+      if (b.total >= maxHourTotal * 0.45) return '#60A5FA';
+      return '#BFDBFE';
+    });
+
+    return {
+      labels: buckets.map((b) => b.label),
+      datasets: [
+        {
+          label: 'Arrivals',
+          data: buckets.map((b) => b.total),
+          backgroundColor: barColors,
+          hoverBackgroundColor: '#1D4ED8',
+          borderRadius: 6,
+          borderSkipped: false,
+          barPercentage: 0.68,
+        },
+      ],
+    };
+  }, [hourlyData]);
+
+  const peakHoursChartOptions: ChartConfiguration<'bar'>['options'] = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1E293B',
+          padding: 12,
+          cornerRadius: 10,
+          callbacks: {
+            title: (items) => {
+              const b = hourlyData.buckets[items[0]?.dataIndex ?? 0];
+              return b ? `${b.label} Arrival Window` : '';
+            },
+            label: (item) => {
+              const b = hourlyData.buckets[item.dataIndex];
+              return b ? ` Total Arrivals: ${b.total} patient${b.total === 1 ? '' : 's'}` : '';
+            },
+            afterLabel: (item) => {
+              const b = hourlyData.buckets[item.dataIndex];
+              return b ? ` Walk-in: ${b.walkin} · WhatsApp: ${b.whatsapp}` : '';
+            },
+          },
+        },
+      },
+      scales: {
+        x: { grid: { display: false }, border: { display: false }, ticks: { color: '#64748B', maxRotation: 0, autoSkip: true, font: { size: 10, weight: 'bold' } } },
+        y: { beginAtZero: true, border: { display: false }, grid: { color: '#F1F5F9' }, ticks: { precision: 0, color: '#94A3B8', font: { size: 11 } } },
+      },
+    }),
+    [hourlyData]
+  );
+
+  const caseMixDoughnutData: ChartConfiguration<'doughnut'>['data'] = useMemo(
+    () => ({
+      labels: clinicalAndPharmacy.caseMix.map((c) => c.label),
+      datasets: [
+        {
+          data: clinicalAndPharmacy.caseMix.map((c) => c.count),
+          backgroundColor: SERIES_PALETTE.slice(0, clinicalAndPharmacy.caseMix.length),
+          borderWidth: 2,
+          borderColor: '#FFFFFF',
+          hoverOffset: 6,
+        },
+      ],
+    }),
+    [clinicalAndPharmacy.caseMix]
+  );
+
+  const caseMixDoughnutOptions: ChartConfiguration<'doughnut'>['options'] = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '64%',
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 14, color: '#475569', font: { size: 11, weight: 'bold' } },
+        },
+        tooltip: { backgroundColor: '#1E293B', padding: 10, cornerRadius: 10 },
+      },
+    }),
+    []
+  );
+
+  const fastMoleculesChartData: ChartConfiguration<'bar'>['data'] = useMemo(
+    () => ({
+      labels: clinicalAndPharmacy.fastMoving.map((m) => m.name),
+      datasets: [
+        {
+          label: 'Units Sold',
+          data: clinicalAndPharmacy.fastMoving.map((m) => m.unitsSold),
+          backgroundColor: 'rgba(37, 99, 235, 0.88)',
+          hoverBackgroundColor: '#1D4ED8',
+          borderRadius: 6,
+          barThickness: 20,
+        },
+      ],
+    }),
+    [clinicalAndPharmacy.fastMoving]
+  );
+
+  const horizontalBarOptions: ChartConfiguration<'bar'>['options'] = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      layout: { padding: { right: 42 } },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1E293B', padding: 10, cornerRadius: 10 } },
+      scales: {
+        x: { beginAtZero: true, border: { display: false }, grid: { color: '#F1F5F9' }, ticks: { precision: 0, color: '#94A3B8', font: { size: 11 } } },
+        y: { grid: { display: false }, border: { display: false }, ticks: { color: '#334155', font: { size: 11, weight: 'bold' } } },
+      },
+    }),
+    []
+  );
+
+  const cancelReasonsChartData: ChartConfiguration<'bar'>['data'] = useMemo(
+    () => ({
+      labels: queueMetrics.reasons.map((r) => r.label),
+      datasets: [
+        {
+          label: 'Cancellations',
+          data: queueMetrics.reasons.map((r) => r.count),
+          backgroundColor: 'rgba(244, 63, 94, 0.85)',
+          hoverBackgroundColor: '#E11D48',
+          borderRadius: 6,
+          barThickness: 20,
+        },
+      ],
+    }),
+    [queueMetrics.reasons]
+  );
+
+  const queueStatusChartData: ChartConfiguration<'bar'>['data'] = useMemo(
+    () => ({
+      labels: queueMetrics.statusBreakdown.map((s) => s.label),
+      datasets: [
+        {
+          label: 'Appointments',
+          data: queueMetrics.statusBreakdown.map((s) => s.count),
+          backgroundColor: queueMetrics.statusBreakdown.map((s) => s.barColor),
+          borderRadius: 6,
+          barThickness: 22,
+        },
+      ],
+    }),
+    [queueMetrics.statusBreakdown]
+  );
+
+  const waConversionChartData: ChartConfiguration<'bar'>['data'] = useMemo(
+    () => ({
+      labels: ['Links Sent', 'Bookings Made'],
+      datasets: [
+        {
+          label: 'Count',
+          data: [queueMetrics.linksSent, queueMetrics.linkBookings],
+          backgroundColor: ['rgba(59, 130, 246, 0.85)', 'rgba(16, 185, 129, 0.88)'],
+          borderRadius: 6,
+          barThickness: 26,
+        },
+      ],
+    }),
+    [queueMetrics.linksSent, queueMetrics.linkBookings]
+  );
+
+  const doctorQuotaChartData: ChartConfiguration<'bar'>['data'] = useMemo(
+    () => ({
+      labels: queueMetrics.quotaRows.map((q) => q.name),
+      datasets: [
+        {
+          label: 'Quota Used %',
+          data: queueMetrics.quotaRows.map((q) => q.usedPct),
+          backgroundColor: queueMetrics.quotaRows.map((q) => (q.usedPct >= 85 ? '#F59E0B' : '#2563EB')),
+          borderRadius: 6,
+          maxBarThickness: 36,
+        },
+      ],
+    }),
+    [queueMetrics.quotaRows]
+  );
+
+  const doctorPatientsBranchChartData: ChartConfiguration<'bar'>['data'] = useMemo(() => {
+    return {
+      labels: doctorReport.summary.map((d) => d.name),
+      datasets: [
+        {
+          label: 'Patients',
+          data: doctorReport.summary.map((d) => d.totalVisits),
+          backgroundColor: doctorReport.summary.map((d) => d.color),
+          hoverBackgroundColor: doctorReport.summary.map((d) => d.color),
+          borderRadius: 6,
+          maxBarThickness: 36,
+        },
+      ],
+    };
+  }, [doctorReport.summary]);
+
+  const doctorPatientsChartOptions: ChartConfiguration<'bar'>['options'] = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 20 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1E293B',
+          padding: 12,
+          cornerRadius: 10,
+          callbacks: {
+            label: (item) => {
+              const doc = doctorReport.summary[item.dataIndex];
+              if (!doc) return '';
+              return ` Patients: ${doc.totalVisits.toLocaleString('en-IN')} (${doc.consulted.toLocaleString('en-IN')} completed)`;
+            },
+            afterLabel: (item) => {
+              const doc = doctorReport.summary[item.dataIndex];
+              if (!doc) return '';
+              const lines = [
+                ` Total Time: ${doc.totalMins !== null ? formatHoursMins(doc.totalMins) : 'N/A'}`,
+                ` Avg / Patient: ${doc.avgMins !== null ? `${doc.avgMins.toFixed(1)} min` : 'N/A'}`,
+              ];
+              if (doctorReport.branchNames.length > 1) {
+                doctorReport.branchNames.forEach((bn, idx) => {
+                  lines.push(` ${bn}: ${(doc.byBranch[idx] ?? 0).toLocaleString('en-IN')}`);
+                });
+              }
+              return lines;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { grid: { display: false }, border: { display: false }, ticks: { color: '#475569', font: { size: 11, weight: 'bold' } } },
+        y: { beginAtZero: true, grace: '18%', border: { display: false }, grid: { color: '#F1F5F9' }, ticks: { precision: 0, color: '#94A3B8', font: { size: 11 } } },
+      },
+    }),
+    [doctorReport.summary, doctorReport.branchNames]
+  );
+
+  const doctorBookedVsSeenChartData: ChartConfiguration<'bar'>['data'] = useMemo(() => {
+    const isSingleDay = doctorReport.dayLabels.length === 1;
+    return {
+      labels: doctorReport.dayLabels.map((d) => d.slice(5)),
+      datasets: [
+        {
+          label: 'Booked',
+          data: doctorReport.dayLabels.map((day) =>
+            doctorReport.dailyRows.filter((r) => r.date === day).reduce((s, r) => s + r.booked, 0)
+          ),
+          backgroundColor: 'rgba(37, 99, 235, 0.85)',
+          borderRadius: 4,
+          maxBarThickness: 28,
+          barPercentage: 0.7,
+          categoryPercentage: isSingleDay ? 0.32 : 0.72,
+        },
+        {
+          label: 'Consulted',
+          data: doctorReport.dayLabels.map((day) =>
+            doctorReport.dailyRows.filter((r) => r.date === day).reduce((s, r) => s + r.consulted, 0)
+          ),
+          backgroundColor: 'rgba(16, 185, 129, 0.88)',
+          borderRadius: 4,
+          maxBarThickness: 28,
+          barPercentage: 0.7,
+          categoryPercentage: isSingleDay ? 0.32 : 0.72,
+        },
+      ],
+    };
+  }, [doctorReport.dayLabels, doctorReport.dailyRows]);
+
+  const multiBarChartOptions: ChartConfiguration<'bar'>['options'] = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 22 } },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1E293B',
+          padding: 12,
+          cornerRadius: 10,
+          callbacks: {
+            title: (items) => doctorReport.dayLabels[items[0]?.dataIndex ?? 0] || '',
+            afterBody: (items) => {
+              const day = doctorReport.dayLabels[items[0]?.dataIndex ?? 0];
+              if (!day) return '';
+              const active = doctorReport.dailyRows.filter(
+                (r) => r.date === day && (r.booked > 0 || r.consulted > 0)
+              );
+              if (active.length === 0) return '\nNo appointments';
+              return ['', ...active.map((r) => `${r.name}: ${r.consulted}/${r.booked} consulted`)];
+            },
+          },
+        },
+      },
+      scales: {
+        x: { grid: { display: false }, border: { display: false }, ticks: { color: '#64748B', font: { size: 11, weight: 'bold' } } },
+        y: { beginAtZero: true, grace: '20%', border: { display: false }, grid: { color: '#F1F5F9' }, ticks: { precision: 0, color: '#94A3B8', font: { size: 11 } } },
+      },
+    }),
+    [doctorReport.dayLabels, doctorReport.dailyRows]
+  );
+
+  const periodSubtitle = useMemo(() => {
+    const opt = PERIOD_OPTIONS.find((p) => p.id === selectedPeriod);
+    return opt ? opt.label : 'Last 30 Days';
   }, [selectedPeriod]);
 
-  const topSellingMedicines: RankBarItem[] = useMemo(() => {
-    if (report?.fast_moving_molecules && report.fast_moving_molecules.length > 0) {
-      return report.fast_moving_molecules.map((m, idx) => ({
-        label: m.medicine_name,
-        sub: `Prescribed ${m.prescribed_count} times`,
-        value: m.prescribed_count,
-        highlight: idx === 0,
-      }));
-    }
-    return [
-      {
-        label: 'Paracetamol 650mg',
-        sub: 'Dolo-650 · Analgesic & Antipyretic',
-        value: 1420,
-        highlight: true,
-      },
-      {
-        label: 'Amoxicillin + Clav 625mg',
-        sub: 'Augmentin · Broad-Spectrum Antibiotic',
-        value: 1180,
-      },
-      {
-        label: 'Pantoprazole 40mg',
-        sub: 'Pan-40 · Antacid & PPI Gastro',
-        value: 940,
-      },
-      {
-        label: 'Cetirizine 10mg',
-        sub: 'Cetzine · Antihistamine & Allergy',
-        value: 760,
-      },
-      {
-        label: 'Metformin 500mg',
-        sub: 'Glycomet · Glycemic Control',
-        value: 680,
-      },
-      {
-        label: 'Azithromycin 500mg',
-        sub: 'Azee-500 · Macrolide Antibiotic',
-        value: 520,
-      },
-      {
-        label: 'Montelukast 10mg',
-        sub: 'Montair · Respiratory Care',
-        value: 410,
-      },
-    ];
-  }, [report]);
-
-  const defaultTopSellingMedicines: RankBarItem[] = [
-    {
-      label: 'Paracetamol 650mg',
-      sub: 'Dolo-650 · Analgesic & Antipyretic',
-      value: 1420,
-      highlight: true,
-    },
-    {
-      label: 'Amoxicillin + Clav 625mg',
-      sub: 'Augmentin · Broad-Spectrum Antibiotic',
-      value: 1180,
-    },
-    {
-      label: 'Pantoprazole 40mg',
-      sub: 'Pan-40 · Antacid & PPI Gastro',
-      value: 940,
-    },
-    {
-      label: 'Cetirizine 10mg',
-      sub: 'Cetzine · Antihistamine & Allergy',
-      value: 760,
-    },
-    {
-      label: 'Metformin 500mg',
-      sub: 'Glycomet · Glycemic Control',
-      value: 680,
-    },
-    {
-      label: 'Azithromycin 500mg',
-      sub: 'Azee-500 · Macrolide Antibiotic',
-      value: 520,
-    },
-    {
-      label: 'Montelukast 10mg',
-      sub: 'Montair · Respiratory Care',
-      value: 410,
-    },
-  ];
-
-  const casesData = useMemo(() => {
-    if (report?.casemix && report.casemix.length > 0) {
-      const total = report.casemix.reduce((sum, item) => sum + item.count, 0) || 1;
-      const colors = ['bg-blue-600', 'bg-blue-500', 'bg-blue-400', 'bg-blue-300', 'bg-blue-200'];
-      return report.casemix.map((item, idx) => ({
-        label: item.category,
-        pct: `${Math.round((item.count / total) * 100)}%`,
-        color: colors[idx % colors.length],
-      }));
-    }
-    return [
-      { label: 'Viral / Respiratory', pct: '45%', color: 'bg-blue-600' },
-      { label: 'Endocrine / Diabetes', pct: '25%', color: 'bg-blue-500' },
-      { label: 'Cardiovascular', pct: '15%', color: 'bg-blue-400' },
-      { label: 'Gastrointestinal', pct: '10%', color: 'bg-blue-300' },
-      { label: 'General Consultation', pct: '5%', color: 'bg-blue-200' },
-    ];
-  }, [report]);
-
-  const filteredMedicines = useMemo(() => {
-    if (!cleanQuery) return topSellingMedicines;
-    return topSellingMedicines.filter(
-      (m) => (m.label || '').toLowerCase().includes(cleanQuery) || (m.sub || '').toLowerCase().includes(cleanQuery)
-    );
-  }, [cleanQuery, topSellingMedicines]);
-
-  const filteredCases = useMemo(() => {
-    if (!cleanQuery) return casesData;
-    return casesData.filter((c) => (c.label || '').toLowerCase().includes(cleanQuery));
-  }, [cleanQuery, casesData]);
-
-  const filteredCancelled = useMemo(() => {
-    if (!cleanQuery) return cancelledList;
-    return cancelledList.filter(
-      (p) =>
-        (p.name || '').toLowerCase().includes(cleanQuery) ||
-        (p.phone || '').toLowerCase().includes(cleanQuery) ||
-        (p.cancellationReason || '').toLowerCase().includes(cleanQuery)
-    );
-  }, [cleanQuery, cancelledList]);
-
-  const totalCancelledPages = Math.max(1, Math.ceil(filteredCancelled.length / CANCELLED_PER_PAGE));
-
-  useEffect(() => {
-    if (cancelledPage > totalCancelledPages) {
-      setCancelledPage(totalCancelledPages);
-    }
-  }, [cancelledPage, totalCancelledPages]);
-
-  const paginatedCancelled = useMemo(() => {
-    const start = (cancelledPage - 1) * CANCELLED_PER_PAGE;
-    return filteredCancelled.slice(start, start + CANCELLED_PER_PAGE);
-  }, [filteredCancelled, cancelledPage]);
+  const hasAnyMonthlyFootfall = monthlyBuckets.some((m) => m.total > 0);
+  const hasAnyHourlyFootfall = hourlyData.maxHourTotal > 0;
 
   return (
     <motion.section
       key="analytics-view"
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -12 }}
-      transition={{ duration: 0.25 }}
-      className="space-y-5 sm:space-y-6 pb-12"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="space-y-4 pb-4 overscroll-contain"
     >
-      <EcgActionLoader isLoading={isLoading} fullscreen={true} />
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
-        <div>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2 flex-wrap">
-            <span>Clinic Analytics &amp; Practice Insights</span>
-            {branchName && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                {branchName}
-              </span>
-            )}
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Monitor patient volume trends, consultation dynamics, digital adoption, and pharmacy metrics
-          </p>
+      <EcgActionLoader isLoading={isLoading} fullscreen={true} text="Loading clinic analytics..." />
+
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg sm:text-xl font-bold text-[#16191E] tracking-tight">
+                Clinic Analytics &amp; Operations
+              </h2>
+              {branchName && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                  {branchName}
+                </span>
+              )}
+              {isSampleMode ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                  <Sparkles className="w-3 h-3 text-amber-600" />
+                  Sample data, not real clinic figures
+                </span>
+              ) : realAppointments.length === 0 ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                  No Recorded Visits Yet
+                </span>
+              ) : null}
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Footfall channels, case mix &amp; pharmacy valuation, queue reliability, and physician performance
+            </p>
+          </div>
+
+          {realAppointments.length === 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowSamplePreview((prev) => !prev);
+                resetDoctorPages();
+              }}
+              className={`self-start lg:self-auto px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer flex items-center gap-1.5 ${
+                showSamplePreview
+                  ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-2xs'
+                  : 'bg-white text-slate-600 border-[#ECEEF2] hover:bg-slate-50'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>{showSamplePreview ? 'Exit Sample Preview' : 'Preview Sample Data'}</span>
+            </button>
+          )}
         </div>
 
-        <div className="flex items-center space-x-3 self-start sm:self-auto">
-          <div className="flex items-center bg-white/90 backdrop-blur-md rounded-xl border border-[#ECEEF2] p-1 shadow-2xs hover:border-slate-300 transition-all">
-            {PERIOD_OPTIONS.map((period) => {
-              const isActive = selectedPeriod === period.id;
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 bg-white rounded-2xl p-2.5 border border-[#ECEEF2] shadow-2xs">
+          <div className="flex flex-wrap items-center gap-1 bg-slate-100/90 rounded-xl p-1">
+            {[
+              { id: 'footfall' as const, label: 'Patient Footfall' },
+              { id: 'clinical' as const, label: 'Case Mix & Pharmacy' },
+              { id: 'queue' as const, label: 'Queue & Bookings' },
+              { id: 'doctors' as const, label: 'Doctors' },
+            ].map((tabItem) => {
+              const isActive = activeTab === tabItem.id;
               return (
                 <button
-                  key={period.id}
+                  key={tabItem.id}
                   type="button"
-                  onClick={() => setSelectedPeriod(period.id)}
-                  className={`relative px-3.5 py-1.5 text-xs font-bold rounded-xl transition-colors cursor-pointer select-none ${isActive ? 'text-white' : 'text-slate-600 hover:text-slate-800'
-                    }`}
+                  aria-pressed={isActive}
+                  onClick={() => setActiveTab(tabItem.id)}
+                  className={`relative px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
+                    isActive ? 'text-white' : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
                   {isActive && (
                     <motion.div
-                      layoutId="activeAnalyticsPeriod"
-                      className="absolute inset-0 bg-[#2563EB] rounded-xl shadow-xs"
+                      layoutId="activeAnalyticsMainTab"
+                      className="absolute inset-0 bg-[#2563EB] rounded-lg shadow-xs"
                       transition={{ type: 'spring', damping: 25, stiffness: 400 }}
                     />
                   )}
-                  <span className="relative z-10 whitespace-nowrap">{period.label}</span>
+                  <span className="relative z-10">{tabItem.label}</span>
                 </button>
               );
             })}
           </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5 bg-slate-50 border border-[#ECEEF2] rounded-xl px-2.5 py-1.5 text-xs text-slate-600">
+              <Building2 className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+              <select
+                aria-label="Filter by branch"
+                value={selectedBranchId}
+                onChange={(e) => {
+                  setSelectedBranchId(e.target.value);
+                  resetDoctorPages();
+                }}
+                className="bg-transparent font-semibold text-slate-800 focus:outline-hidden cursor-pointer pr-1"
+              >
+                <option value="">All Branches</option>
+                {activeBranches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex items-center gap-1.5 bg-slate-50 border border-[#ECEEF2] rounded-xl px-2.5 py-1.5 text-xs text-slate-600">
+              <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+              <select
+                aria-label="Filter by period"
+                value={String(selectedPeriod)}
+                onChange={(e) => {
+                  setSelectedPeriod(Number(e.target.value) as PeriodDays);
+                  resetDoctorPages();
+                }}
+                className="bg-transparent font-semibold text-slate-800 focus:outline-hidden cursor-pointer pr-1"
+              >
+                {PERIOD_OPTIONS.map((p) => (
+                  <option key={p.id} value={String(p.id)}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex items-center gap-1.5 bg-slate-50 border border-[#ECEEF2] rounded-xl px-2.5 py-1.5 text-xs text-slate-600">
+              <Stethoscope className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+              <select
+                aria-label="Filter by doctor"
+                value={selectedDoctorId}
+                onChange={(e) => {
+                  const nextDocId = e.target.value;
+                  setSelectedDoctorId(nextDocId);
+                  setOverviewDoctorId(nextDocId);
+                  resetDoctorPages();
+                }}
+                className="bg-transparent font-semibold text-slate-800 focus:outline-hidden cursor-pointer pr-1 max-w-[140px]"
+              >
+                <option value="">All Doctors</option>
+                {activeDoctors.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
       </div>
 
-      <motion.div
-        variants={staggerContainer}
-        initial="hidden"
-        animate="visible"
-        className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
-      >
-        <motion.div
-          variants={fadeScale}
-          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-          transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
-        >
-          <div className="min-w-0 pr-2">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
-              Walking Patients
-            </span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-[#16191E] tracking-tight block">
-                <AnimatedCounter target={walkinCount} />
-              </span>
-              <span className="text-[11px] text-slate-400 font-normal">Active</span>
-            </div>
-            <span className="text-[11px] text-blue-600 font-semibold flex items-center gap-1 mt-1">
-              <ArrowUpRight className="w-3 h-3 flex-shrink-0" />
-              <span>{activeCount > 0 ? `${Math.round((walkinCount / activeCount) * 100)}% ` : '0%'}</span>
-              <span className="text-slate-400 font-normal">of queue</span>
-            </span>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-blue-600 to-indigo-500 shadow-md shadow-blue-500/25 flex items-center justify-center text-white flex-shrink-0">
-            <Users className="w-5 h-5 stroke-[2.2]" />
-          </div>
-        </motion.div>
+      {fetchError && (
+        <div className="rounded-xl bg-amber-50/90 border border-amber-200 px-4 py-2.5 flex items-center gap-2.5 text-xs text-amber-900">
+          <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+          <span>Historical database query returned a notice ({fetchError}). Showing available active queue data.</span>
+        </div>
+      )}
 
-        <motion.div
-          variants={fadeScale}
-          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-          transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
-        >
-          <div className="min-w-0 pr-2">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
-              WhatsApp Bookings
-            </span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-emerald-600 tracking-tight block">
-                <AnimatedCounter target={whatsappCount} />
-              </span>
-              <span className="text-[11px] text-slate-400 font-normal">Active</span>
-            </div>
-            <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-1">
-              <ArrowUpRight className="w-3 h-3 flex-shrink-0" />
-              <span>{activeCount > 0 ? `${Math.round((whatsappCount / activeCount) * 100)}% ` : '0%'}</span>
-              <span className="text-slate-400 font-normal">digital adoption</span>
-            </span>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-emerald-600 to-teal-500 shadow-md shadow-emerald-500/25 flex items-center justify-center text-white flex-shrink-0">
-            <MessageSquare className="w-5 h-5 stroke-[2.2]" />
-          </div>
-        </motion.div>
+      {cleanQuery && (
+        <div className="rounded-xl bg-blue-50/80 border border-blue-200/80 px-4 py-2 text-xs text-blue-800 flex items-center justify-between gap-2">
+          <span>
+            Filtered analytics by query: <strong>&ldquo;{searchQuery}&rdquo;</strong>
+          </span>
+          <span className="font-semibold">{activeFootfallOnly.length} matching visits</span>
+        </div>
+      )}
 
-        <motion.div
-          variants={fadeScale}
-          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-          transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
-        >
-          <div className="min-w-0 pr-2">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
-              Completed Patients
-            </span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-indigo-600 tracking-tight block">
-                <AnimatedCounter target={completedCount} />
-              </span>
-              <span className="text-[11px] text-slate-400 font-normal">Today</span>
-            </div>
-            <span className="text-[11px] text-indigo-600 font-semibold flex items-center gap-1 mt-1">
-              <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
-              <span>{activeCount > 0 ? `${Math.round((completedCount / activeCount) * 100)}% ` : '0%'}</span>
-              <span className="text-slate-400 font-normal">consulted</span>
-            </span>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-indigo-600 to-violet-500 shadow-md shadow-indigo-500/25 flex items-center justify-center text-white flex-shrink-0">
-            <CheckCircle2 className="w-5 h-5 stroke-[2.2]" />
-          </div>
-        </motion.div>
-
-        <motion.div
-          variants={fadeScale}
-          whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-          transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl py-3.5 px-4 sm:p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
-        >
-          <div className="min-w-0 pr-2">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
-              Cancelled Patients
-            </span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-rose-600 tracking-tight block">
-                <AnimatedCounter target={cancelledCount} />
-              </span>
-              <span className="text-[11px] text-slate-400 font-normal">Rate</span>
-            </div>
-            <span className="text-[11px] text-rose-600 font-semibold flex items-center gap-1 mt-1">
-              <ArrowDownRight className="w-3 h-3 flex-shrink-0" />
-              <span>{cancelledCount > 0 ? `${cancellationRate}% ` : '0%'}</span>
-              <span className="text-slate-400 font-normal">cancellation rate</span>
-            </span>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-rose-500 to-pink-500 shadow-md shadow-rose-500/25 flex items-center justify-center text-white flex-shrink-0">
-            <CalendarX className="w-5 h-5 stroke-[2.2]" />
-          </div>
-        </motion.div>
-      </motion.div>
-
-      <motion.div
-        variants={fadeScale}
-        initial="hidden"
-        animate="visible"
-        className="w-full"
-      >
-        <ChartLine
-          key={selectedPeriod}
-          title={chartMeta.title}
-          description={chartMeta.description}
-          data={chartMeta.data}
-          index="time"
-          series={[
-            { key: 'walkins', label: 'Walk-in Patients', color: '#2563EB' },
-            { key: 'whatsapp', label: 'WhatsApp Bookings', color: '#10B981' },
-          ]}
-          valueFormat="number"
-          total="sum"
-          delta="auto"
-          curve="smooth"
-          fill="dots"
-          strokeWidth={2.5}
-          height={240}
-          showTooltip={true}
-          showLegend={true}
-          icon={<TrendingUp className="w-4 h-4 text-blue-600" />}
-        />
-      </motion.div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        <motion.div
-          variants={fadeScale}
-          initial="hidden"
-          animate="visible"
-          whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
-          transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between"
-        >
-          <div className="flex items-start justify-between gap-3 mb-5">
-            <div>
-              <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
-                Top Selling &amp; Dispensed Medicines
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Pharmacy dispensation leaderboard · Current monthly volume
-              </p>
-            </div>
-            <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/60 flex items-center justify-center text-blue-600 flex-shrink-0 shadow-2xs">
-              <Pill className="w-4 h-4" />
-            </div>
-          </div>
-
-          <div className="flex-1 flex flex-col justify-center">
-            <RankBarChart
-              unit=" strips"
-              items={filteredMedicines}
-              highlightColor="#2563EB"
-            />
-          </div>
-        </motion.div>
-
-        <motion.div
-          variants={fadeScale}
-          initial="hidden"
-          animate="visible"
-          whileHover={{ y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' }}
-          transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-          className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between"
-        >
-          <div className="flex items-start justify-between gap-3 mb-5">
-            <div>
-              <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
-                Consultation Case Breakdown
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Distribution of symptoms and clinical diagnostic categories
-              </p>
-            </div>
-            <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/60 flex items-center justify-center text-blue-600 flex-shrink-0 shadow-2xs">
-              <Activity className="w-4 h-4" />
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-8 flex-1">
-            <div className="relative w-36 h-36 sm:w-40 sm:h-40 flex-shrink-0">
-              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  fill="transparent"
-                  stroke="#2563EB"
-                  strokeWidth="14"
-                  strokeDasharray="107.44 238.76"
-                  strokeDashoffset="0"
-                />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  fill="transparent"
-                  stroke="#3B82F6"
-                  strokeWidth="14"
-                  strokeDasharray="59.69 238.76"
-                  strokeDashoffset="-107.44"
-                />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  fill="transparent"
-                  stroke="#60A5FA"
-                  strokeWidth="14"
-                  strokeDasharray="35.81 238.76"
-                  strokeDashoffset="-167.13"
-                />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  fill="transparent"
-                  stroke="#93C5FD"
-                  strokeWidth="14"
-                  strokeDasharray="23.88 238.76"
-                  strokeDashoffset="-202.94"
-                />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  fill="transparent"
-                  stroke="#BFDBFE"
-                  strokeWidth="14"
-                  strokeDasharray="11.94 238.76"
-                  strokeDashoffset="-226.82"
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-base sm:text-lg font-bold text-slate-800">100%</span>
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Cases</span>
+      {activeTab === 'footfall' && (
+        <>
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
+          >
+            <motion.div
+              variants={fadeScale}
+              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
+              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+            >
+              <div className="min-w-0 pr-3">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Total Patient Visits
+                </span>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-[#16191E] tracking-tight">
+                    <AnimatedCounter target={kpiMetrics.totalPatients} />
+                  </span>
+                  <span className="text-xs font-medium text-slate-400">{periodSubtitle}</span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-1.5 text-[11px] flex-wrap">
+                  <span className="font-semibold text-[#2563EB]">{kpiMetrics.walkinCount} Walk-in</span>
+                  <span className="text-slate-300">•</span>
+                  <span className="font-semibold text-emerald-600">{kpiMetrics.whatsappCount} WhatsApp</span>
+                </div>
               </div>
-            </div>
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-blue-700 to-blue-500 shadow-md shadow-blue-500/25 flex items-center justify-center text-white flex-shrink-0">
+                <Users className="w-5 h-5 stroke-[2.2]" />
+              </div>
+            </motion.div>
 
-            <div className="space-y-2.5 text-xs font-medium w-full sm:w-auto">
-              {filteredCases.map((item) => (
-                <motion.div
-                  key={item.label}
-                  whileHover={{ x: 4 }}
-                  transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-                  className="space-y-1 cursor-default"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center space-x-2">
-                      <span className={`w - 2.5 h - 2.5 rounded - full flex - shrink - 0 ${item.color} `} />
-                      <span className="text-slate-700 font-medium">{item.label}</span>
-                    </div>
-                    <span className="text-slate-800 font-bold ml-4">{item.pct}</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: item.pct }}
-                      transition={{ duration: 0.6, ease: 'easeOut' }}
-                      className={`h - full rounded - full ${item.color} `}
-                    />
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </motion.div>
-      </div>
+            <motion.div
+              variants={fadeScale}
+              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
+              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+            >
+              <div className="min-w-0 pr-3">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Avg Consultation
+                </span>
+                <div className="flex items-baseline gap-1.5">
+                  {kpiMetrics.avgDurationMins !== null ? (
+                    <>
+                      <span className="text-2xl font-bold text-[#16191E] tracking-tight">
+                        {kpiMetrics.avgDurationMins.toFixed(1)}
+                      </span>
+                      <span className="text-sm font-bold text-slate-500">min</span>
+                    </>
+                  ) : (
+                    <span className="text-xl font-bold text-slate-400 tracking-tight">N/A</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1.5 truncate">{kpiMetrics.durationLabel}</p>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-indigo-600 to-blue-500 shadow-md shadow-indigo-500/25 flex items-center justify-center text-white flex-shrink-0">
+                <Clock className="w-5 h-5 stroke-[2.2]" />
+              </div>
+            </motion.div>
 
-      <motion.div
-        variants={fadeScale}
-        initial="hidden"
-        animate="visible"
-        className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs"
-      >
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-2.5">
-            <h3 className="text-sm sm:text-base font-bold text-[#16191E]">
-              Cancelled Appointments
-            </h3>
-            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">
-              {cancelledCount}
-            </span>
-          </div>
-          {cancelledCount > 0 && (
-            <span className="text-xs text-slate-400 font-medium">
-              {cancellationRate}% cancellation rate
-            </span>
-          )}
-        </div>
-
-        {cancelledCount === 0 ? (
-          <div className="py-12 text-center">
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3 shadow-2xs border border-emerald-100/60">
-              <CheckCircle2 className="w-6 h-6 stroke-[1.8]" />
-            </div>
-            <h4 className="text-sm font-bold text-slate-800">No cancelled appointments recorded today</h4>
-            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-              All appointments are active or successfully fulfilled with optimal consultation throughput.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="divide-y divide-slate-100">
-              <AnimatePresence mode="popLayout">
-                {paginatedCancelled.map((p) => {
-                  const tokenDisplay = formatPatientToken(p);
-                  const visitTypeDisplay =
-                    p.visitType && (p.visitType.toLowerCase().includes('whatsapp') || p.visitType.toLowerCase().includes('online'))
-                      ? 'Online'
-                      : 'Walk-in';
-
-                  return (
-                    <motion.div
-                      key={p.id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.96 }}
-                      transition={{ duration: 0.2 }}
-                      whileHover={{ y: -1, backgroundColor: 'rgba(248, 250, 252, 0.9)' }}
-                      className="py-3 px-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs rounded-xl transition-all border border-transparent hover:border-slate-100"
-                    >
-                      <div className="flex items-center space-x-3 min-w-0">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-50 to-pink-50 border border-rose-100 flex items-center justify-center font-bold text-xs text-rose-600 flex-shrink-0 shadow-2xs">
-                          {getInitials(p.name)}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center space-x-2 flex-wrap">
-                            <span className="font-semibold text-xs sm:text-sm text-slate-800 truncate">
-                              {p.name}
-                            </span>
-                            <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/60 flex-shrink-0">
-                              {tokenDisplay}
-                            </span>
-                            <span className="text-[11px] text-slate-400">
-                              {p.age}y · {p.gender}
-                            </span>
-                            {p.phone && (
-                              <span className="text-[11px] text-slate-400 hidden md:inline">
-                                · {p.phone}
-                              </span>
-                            )}
-                          </div>
-                          {p.cancellationReason && (
-                            <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                              Reason: {p.cancellationReason}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-2.5 self-end sm:self-auto flex-shrink-0">
-                        <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-slate-400" />
-                          <span>{p.time}</span>
-                        </span>
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200 text-slate-600">
-                          {visitTypeDisplay}
-                        </span>
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200/70">
-                          Cancelled
-                        </span>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
-            </div>
-
-            {totalCancelledPages > 1 && (
-              <div className="pt-2 flex justify-center">
-                <NumberedPagination
-                  currentPage={cancelledPage}
-                  totalPages={totalCancelledPages}
-                  onPageChange={setCancelledPage}
+            <motion.div
+              variants={fadeScale}
+              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
+              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
+            >
+              <div className="flex items-center justify-between">
+                <div className="min-w-0 pr-3">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    WhatsApp Share
+                  </span>
+                  <span className="text-2xl font-bold text-emerald-600 tracking-tight block">
+                    {kpiMetrics.whatsappSharePct}%
+                  </span>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    {kpiMetrics.totalPatients > 0
+                      ? `${kpiMetrics.whatsappCount} of ${kpiMetrics.totalPatients} visits`
+                      : 'No visits recorded'}
+                  </p>
+                </div>
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-emerald-600 to-teal-400 shadow-md shadow-emerald-500/25 flex items-center justify-center text-white flex-shrink-0">
+                  <MessageSquare className="w-5 h-5 stroke-[2.2]" />
+                </div>
+              </div>
+              <div className="w-full h-1.5 bg-slate-100 rounded-full mt-2.5 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, Math.max(0, kpiMetrics.whatsappSharePct))}%` }}
                 />
+              </div>
+            </motion.div>
+
+            <motion.div
+              variants={fadeScale}
+              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
+              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+            >
+              <div className="min-w-0 pr-3">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  New Patient Visits
+                </span>
+                <div className="flex items-baseline gap-2">
+                  {kpiMetrics.newPatientVisits !== null ? (
+                    <span className="text-2xl font-bold text-[#16191E] tracking-tight">
+                      <AnimatedCounter target={kpiMetrics.newPatientVisits} />
+                    </span>
+                  ) : (
+                    <span className="text-xl font-bold text-slate-400 tracking-tight">N/A</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1.5">First-time patients in period</p>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-violet-600 to-purple-500 shadow-md shadow-violet-500/25 flex items-center justify-center text-white flex-shrink-0">
+                <UserPlus className="w-5 h-5 stroke-[2.2]" />
+              </div>
+            </motion.div>
+          </motion.div>
+
+          <motion.div
+            variants={fadeScale}
+            initial="hidden"
+            animate="visible"
+            className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-2xs space-y-4"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                Branch Comparison
+              </h3>
+              <span className="text-[11px] font-semibold text-slate-400">{periodSubtitle}</span>
+            </div>
+
+            {branchComparisonRows.length === 0 ? (
+              <p className="text-xs text-slate-400 py-4 text-center">No clinic branches found.</p>
+            ) : (
+              <>
+                {branchComparisonRows.length > 1 && (
+                  <div className="relative w-full h-[190px]">
+                    <ChartCanvas type="bar" data={branchChartData} options={branchChartOptions} showValues={true} />
+                  </div>
+                )}
+                <div className="overflow-x-auto -mx-2 sm:mx-0">
+                  <table className="w-full text-left border-collapse min-w-[440px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        <th className="py-2 px-3">Branch</th>
+                        <th className="py-2 px-3 text-right">Visits</th>
+                        <th className="py-2 px-3 text-right">Avg Consult</th>
+                        <th className="py-2 px-3 text-right">WhatsApp Share</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 text-xs">
+                      {branchComparisonRows.map((row) => (
+                        <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-2.5 px-3 font-semibold text-[#16191E]">{row.name}</td>
+                          <td className="py-2.5 px-3 text-right font-bold text-slate-800 tabular-nums">
+                            {row.total.toLocaleString('en-IN')}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-medium text-slate-600 tabular-nums">
+                            {row.avgMins !== null ? `${row.avgMins.toFixed(1)} min` : 'N/A'}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-bold text-emerald-600 tabular-nums">
+                            {row.whatsappShare.toFixed(1)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </motion.div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            <motion.div
+              variants={fadeScale}
+              initial="hidden"
+              animate="visible"
+              className="lg:col-span-7 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                    How Patients Booked (Walk-in vs. WhatsApp)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Monthly column comparison of Walk-in visits vs. WhatsApp appointments
+                  </p>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-[#2563EB] flex-shrink-0">
+                  <BarChart3 className="w-4 h-4" />
+                </div>
+              </div>
+
+              <div className="relative w-full h-[260px] sm:h-[300px]">
+                {hasAnyMonthlyFootfall ? (
+                  <ChartCanvas type="bar" data={footfallColumnChartData} options={footfallColumnChartOptions} />
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
+                    <BarChart3 className="w-8 h-8 text-slate-300 mb-2" />
+                    <p className="text-xs font-semibold text-slate-600">No monthly channel data available yet</p>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+                      Monthly Walk-in and WhatsApp counts will populate automatically as clinic visits are logged.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+
+            <motion.div
+              variants={fadeScale}
+              initial="hidden"
+              animate="visible"
+              className="lg:col-span-5 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                      Busiest Hours (Peak Arrival)
+                    </h3>
+                    {hourlyData.peakHours.length > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-[#2563EB] border border-blue-200">
+                        <Activity className="w-3 h-3" />
+                        Peak: {hourlyData.peakHours.map((p) => p.label).join(', ')} ({hourlyData.maxHourTotal} pts)
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Hourly arrival pattern ({periodSubtitle}, IST)
+                  </p>
+                </div>
+              </div>
+
+              <div className="relative w-full h-[260px] sm:h-[300px]">
+                {hasAnyHourlyFootfall ? (
+                  <ChartCanvas type="bar" data={peakHoursChartData} options={peakHoursChartOptions} />
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
+                    <Clock className="w-8 h-8 text-slate-300 mb-2" />
+                    <p className="text-xs font-semibold text-slate-600">No hourly arrival pattern in this period</p>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+                      Select a wider period or record check-ins to reveal busiest consultation hours.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            <motion.div
+              variants={fadeScale}
+              initial="hidden"
+              animate="visible"
+              className="lg:col-span-7 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
+            >
+              <div className="flex items-start justify-between gap-2 mb-4">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                      Patients Each Month &amp; Intake Growth
+                    </h3>
+                    {kpiMetrics.latestMomGrowth !== null && (
+                      <span
+                        className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                          kpiMetrics.latestMomGrowth >= 0
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-rose-50 text-rose-700 border-rose-200'
+                        }`}
+                      >
+                        {kpiMetrics.latestMomGrowth >= 0 ? (
+                          <TrendingUp className="w-3 h-3" />
+                        ) : (
+                          <TrendingDown className="w-3 h-3" />
+                        )}
+                        {kpiMetrics.latestMomGrowth >= 0 ? '+' : ''}
+                        {kpiMetrics.latestMomGrowth}% MoM
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Monthly patient footfall trajectory (last 6 months)
+                  </p>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-[#2563EB] flex-shrink-0">
+                  <TrendingUp className="w-4 h-4" />
+                </div>
+              </div>
+
+              <div className="relative w-full h-[250px] sm:h-[280px]">
+                {hasAnyMonthlyFootfall ? (
+                  <ChartCanvas type="line" data={monthlyTrendChartData} options={monthlyTrendChartOptions} />
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
+                    <TrendingUp className="w-8 h-8 text-slate-300 mb-2" />
+                    <p className="text-xs font-semibold text-slate-600">Monthly growth curve awaiting visits</p>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+                      Month-over-month footfall growth requires recorded visits across consecutive months.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+
+            <motion.div
+              variants={fadeScale}
+              initial="hidden"
+              animate="visible"
+              className="lg:col-span-5 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col min-w-0"
+            >
+              <div className="flex items-start justify-between gap-2 mb-4">
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                    Monthly Intake Breakdown
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Monthly channel counts &amp; month-over-month intake growth
+                  </p>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200/70 flex items-center justify-center text-slate-600 flex-shrink-0">
+                  <Calendar className="w-4 h-4" />
+                </div>
+              </div>
+
+              <div className="overflow-x-auto -mx-2 sm:mx-0 flex-1">
+                <table className="w-full text-left border-collapse min-w-[380px]">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="py-2.5 px-2">Month</th>
+                      <th className="py-2.5 px-2 text-right">Walk-in</th>
+                      <th className="py-2.5 px-2 text-right">WhatsApp</th>
+                      <th className="py-2.5 px-2 text-right">Total</th>
+                      <th className="py-2.5 px-2 text-right">MoM Growth</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 text-xs">
+                    {monthlyBuckets.map((m) => (
+                      <tr key={m.monthKey} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 px-2 font-semibold text-[#16191E] whitespace-nowrap">
+                          {m.fullLabel}
+                        </td>
+                        <td className="py-3 px-2 text-right font-medium text-[#2563EB] tabular-nums">
+                          {m.walkin}
+                        </td>
+                        <td className="py-3 px-2 text-right font-medium text-emerald-600 tabular-nums">
+                          {m.whatsapp}
+                        </td>
+                        <td className="py-3 px-2 text-right font-bold text-slate-800 tabular-nums">
+                          {m.total}
+                        </td>
+                        <td className="py-3 px-2 text-right whitespace-nowrap tabular-nums">
+                          {m.momGrowthPct === null ? (
+                            <span className="text-[11px] text-slate-400">—</span>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                                m.momGrowthPct >= 0
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : 'bg-rose-50 text-rose-700'
+                              }`}
+                            >
+                              {m.momGrowthPct >= 0 ? '+' : ''}
+                              {m.momGrowthPct}%
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'clinical' && (
+        <>
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5"
+          >
+            <motion.div
+              variants={fadeScale}
+              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
+              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+            >
+              <div className="min-w-0 pr-3">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Pharmacy Revenue
+                </span>
+                <div className="flex items-baseline gap-2">
+                  {clinicalAndPharmacy.totalRevenue !== null ? (
+                    <span className="text-2xl sm:text-3xl font-bold text-[#16191E] tracking-tight">
+                      {formatINR(clinicalAndPharmacy.totalRevenue)}
+                    </span>
+                  ) : (
+                    <span className="text-xl sm:text-2xl font-bold text-slate-400 tracking-tight">N/A</span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-1.5">
+                  {clinicalAndPharmacy.totalRevenue !== null
+                    ? `${periodSubtitle} dispensed value`
+                    : 'No priced dispensing logs found'}
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tl from-emerald-600 to-teal-400 shadow-md shadow-emerald-500/25 flex items-center justify-center text-white flex-shrink-0">
+                <IndianRupee className="w-5 h-5 stroke-[2.2]" />
+              </div>
+            </motion.div>
+
+            <motion.div
+              variants={fadeScale}
+              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
+              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+            >
+              <div className="min-w-0 pr-3">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Stock Value
+                </span>
+                <div className="flex items-baseline gap-2">
+                  {clinicalAndPharmacy.totalStockValue !== null ? (
+                    <span className="text-2xl sm:text-3xl font-bold text-[#16191E] tracking-tight">
+                      {formatINR(clinicalAndPharmacy.totalStockValue)}
+                    </span>
+                  ) : (
+                    <span className="text-xl sm:text-2xl font-bold text-slate-400 tracking-tight">N/A</span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-1.5">
+                  {clinicalAndPharmacy.totalStockValue !== null
+                    ? 'At purchase / unit valuation today'
+                    : 'No stock valuation prices recorded'}
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tl from-blue-700 to-blue-500 shadow-md shadow-blue-500/25 flex items-center justify-center text-white flex-shrink-0">
+                <Boxes className="w-5 h-5 stroke-[2.2]" />
+              </div>
+            </motion.div>
+
+            <motion.div
+              variants={fadeScale}
+              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
+              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+            >
+              <div className="min-w-0 pr-3">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Stock Turnover
+                </span>
+                <div className="flex items-baseline gap-2">
+                  {clinicalAndPharmacy.stockTurnover !== null ? (
+                    <>
+                      <span className="text-2xl sm:text-3xl font-bold text-[#16191E] tracking-tight">
+                        {clinicalAndPharmacy.stockTurnover.toFixed(1)}×
+                      </span>
+                      <span className="text-xs font-medium text-slate-400">per year</span>
+                    </>
+                  ) : (
+                    <span className="text-xl sm:text-2xl font-bold text-slate-400 tracking-tight">N/A</span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-1.5">
+                  {clinicalAndPharmacy.stockTurnover !== null
+                    ? 'At current dispensing rate'
+                    : 'Requires dispensing & stock cost data'}
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tl from-amber-500 to-orange-400 shadow-md shadow-amber-500/25 flex items-center justify-center text-white flex-shrink-0">
+                <RefreshCw className="w-5 h-5 stroke-[2.2]" />
+              </div>
+            </motion.div>
+          </motion.div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            <motion.div
+              variants={fadeScale}
+              initial="hidden"
+              animate="visible"
+              className="lg:col-span-6 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
+            >
+              <div className="flex items-start justify-between gap-2 mb-4">
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                    Common Illnesses (Diagnosis Case Mix)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Clinical presentation breakdown ({periodSubtitle})
+                  </p>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-[#2563EB] flex-shrink-0">
+                  <Activity className="w-4 h-4" />
+                </div>
+              </div>
+
+              {clinicalAndPharmacy.caseMix.length > 0 ? (
+                <div className="space-y-5">
+                  <div className="relative w-full h-[220px]">
+                    <ChartCanvas type="doughnut" data={caseMixDoughnutData} options={caseMixDoughnutOptions} />
+                  </div>
+                  <div className="overflow-x-auto border-t border-slate-100 pt-3">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          <th className="py-2 px-2">Category</th>
+                          <th className="py-2 px-2 text-right">Visits</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 text-xs">
+                        {clinicalAndPharmacy.caseMix.map((c) => (
+                          <tr key={c.label}>
+                            <td className="py-2 px-2 font-semibold text-slate-700">{c.label}</td>
+                            <td className="py-2 px-2 text-right font-bold text-[#16191E] tabular-nums">
+                              {c.count.toLocaleString('en-IN')}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-[260px] flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
+                  <Activity className="w-8 h-8 text-slate-300 mb-2" />
+                  <p className="text-xs font-semibold text-slate-600">No diagnosis case notes in this period</p>
+                  <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+                    Completed consultations with clinical notes will automatically classify the clinic case mix.
+                  </p>
+                </div>
+              )}
+            </motion.div>
+
+            <motion.div
+              variants={fadeScale}
+              initial="hidden"
+              animate="visible"
+              className="lg:col-span-6 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
+            >
+              <div className="flex items-start justify-between gap-2 mb-4">
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                    Most Sold Medicines (Units)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Fast-moving formulations dispensed ({periodSubtitle})
+                  </p>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-[#2563EB] flex-shrink-0">
+                  <Pill className="w-4 h-4" />
+                </div>
+              </div>
+
+              <div className="relative w-full h-[280px] sm:h-[320px]">
+                {clinicalAndPharmacy.fastMoving.length > 0 ? (
+                  <ChartCanvas type="bar" data={fastMoleculesChartData} options={horizontalBarOptions} showValues={true} />
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
+                    <Pill className="w-8 h-8 text-slate-300 mb-2" />
+                    <p className="text-xs font-semibold text-slate-600">No dispensed medication units yet</p>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+                      Fast-moving molecules appear once prescriptions or pharmacy stock movements are recorded.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+
+          <motion.div
+            variants={fadeScale}
+            initial="hidden"
+            animate="visible"
+            className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-2xs space-y-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                Pharmacy Sales &amp; Stock Valuation
+              </h3>
+              <span className="text-[11px] font-semibold text-slate-400">{periodSubtitle}</span>
+            </div>
+
+            {clinicalAndPharmacy.molecules.length === 0 ? (
+              <p className="py-6 text-center text-xs text-slate-400">
+                No pharmacy sales or inventory valuation records found.
+              </p>
+            ) : (
+              <div className="overflow-x-auto -mx-2 sm:mx-0">
+                <table className="w-full text-left border-collapse min-w-[440px]">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="py-2 px-3">Molecule / Brand</th>
+                      <th className="py-2 px-3 text-right">Units Sold</th>
+                      <th className="py-2 px-3 text-right">Revenue</th>
+                      <th className="py-2 px-3 text-right">Stock Value</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 text-xs">
+                    {clinicalAndPharmacy.molecules.slice(0, 15).map((m) => (
+                      <tr key={m.name} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-2.5 px-3 font-semibold text-[#16191E]">{m.name}</td>
+                        <td className="py-2.5 px-3 text-right font-medium text-slate-700 tabular-nums">
+                          {m.unitsSold.toLocaleString('en-IN')}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-semibold text-emerald-600 tabular-nums">
+                          {m.hasRevenue ? formatINR(m.revenue) : '—'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-bold text-slate-800 tabular-nums">
+                          {m.hasStockValue ? formatINR(m.stockValue) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
+          </motion.div>
+        </>
+      )}
+
+      {activeTab === 'queue' && (
+        <>
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5"
+          >
+            <motion.div
+              variants={fadeScale}
+              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
+              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+            >
+              <div className="min-w-0 pr-3">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  No-Show Rate
+                </span>
+                <span className="text-2xl sm:text-3xl font-bold text-[#16191E] tracking-tight block">
+                  {queueMetrics.noShowRate.toFixed(1)}%
+                </span>
+                <p className="text-xs text-slate-500 mt-1.5">
+                  {queueMetrics.noShows.toLocaleString('en-IN')} of {queueMetrics.totalBookings.toLocaleString('en-IN')} bookings
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tl from-amber-500 to-orange-400 shadow-md shadow-amber-500/25 flex items-center justify-center text-white flex-shrink-0">
+                <UserX className="w-5 h-5 stroke-[2.2]" />
+              </div>
+            </motion.div>
+
+            <motion.div
+              variants={fadeScale}
+              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
+              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+            >
+              <div className="min-w-0 pr-3">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Cancellation Rate
+                </span>
+                <span className="text-2xl sm:text-3xl font-bold text-rose-600 tracking-tight block">
+                  {queueMetrics.cancelRate.toFixed(1)}%
+                </span>
+                <p className="text-xs text-slate-500 mt-1.5">
+                  {queueMetrics.cancellations.toLocaleString('en-IN')} cancelled bookings
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tl from-rose-600 to-pink-500 shadow-md shadow-rose-500/25 flex items-center justify-center text-white flex-shrink-0">
+                <CalendarX className="w-5 h-5 stroke-[2.2]" />
+              </div>
+            </motion.div>
+
+            <motion.div
+              variants={fadeScale}
+              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
+              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
+              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+            >
+              <div className="min-w-0 pr-3">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Late Arrivals
+                </span>
+                <span className="text-2xl sm:text-3xl font-bold text-[#16191E] tracking-tight block">
+                  {queueMetrics.lateRate.toFixed(1)}%
+                </span>
+                <p className="text-xs text-slate-500 mt-1.5">
+                  {queueMetrics.lateArrivedCount} late of {queueMetrics.arrivedCount} attended
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tl from-blue-700 to-blue-500 shadow-md shadow-blue-500/25 flex items-center justify-center text-white flex-shrink-0">
+                <Clock className="w-5 h-5 stroke-[2.2]" />
+              </div>
+            </motion.div>
+          </motion.div>
+
+          <motion.div
+            variants={fadeScale}
+            initial="hidden"
+            animate="visible"
+            className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-2xs space-y-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                  Live Queue &amp; Appointment Status
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Waiting, in progress, completed, and cancelled breakdown ({periodSubtitle})
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {(queueMetrics.todayWaiting > 0 || queueMetrics.todayInProgress > 0) && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-[#2563EB] border border-blue-200/80">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] animate-pulse" aria-hidden="true" />
+                    {queueMetrics.todayWaiting} waiting · {queueMetrics.todayInProgress} in progress today
+                  </span>
+                )}
+                <span className="text-[11px] font-semibold text-slate-400">
+                  {queueMetrics.totalBookings.toLocaleString('en-IN')} total
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+              <div className="lg:col-span-5 grid grid-cols-2 gap-2.5">
+                {queueMetrics.statusBreakdown.map((item) => (
+                  <div
+                    key={item.label}
+                    className="rounded-xl border border-[#ECEEF2] bg-slate-50/60 p-3 flex flex-col justify-between gap-1.5 min-w-0"
+                  >
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-600 truncate">
+                        <span
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: item.color }}
+                          aria-hidden="true"
+                        />
+                        {item.label}
+                      </span>
+                      <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold border ${item.badgeClass}`}>
+                        {item.pct.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="text-xl font-bold text-[#16191E] tabular-nums">
+                      {item.count.toLocaleString('en-IN')}
+                    </div>
+                    <p className="text-[10px] text-slate-500 truncate">{item.note}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="lg:col-span-7 relative w-full h-[185px]">
+                {queueMetrics.totalBookings > 0 ? (
+                  <ChartCanvas
+                    type="bar"
+                    data={queueStatusChartData}
+                    options={horizontalBarOptions}
+                    showValues={true}
+                  />
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
+                    <Activity className="w-8 h-8 text-slate-300 mb-2" />
+                    <p className="text-xs font-semibold text-slate-600">No queue or booking records in this period</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            <motion.div
+              variants={fadeScale}
+              initial="hidden"
+              animate="visible"
+              className="lg:col-span-6 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
+            >
+              <div className="flex items-start justify-between gap-2 mb-4">
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                    Why Bookings Were Cancelled
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Logged cancellation reasons ({periodSubtitle})
+                  </p>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 flex-shrink-0">
+                  <CalendarX className="w-4 h-4" />
+                </div>
+              </div>
+
+              <div className="relative w-full h-[250px]">
+                {queueMetrics.reasons.length > 0 ? (
+                  <ChartCanvas type="bar" data={cancelReasonsChartData} options={horizontalBarOptions} showValues={true} />
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
+                    <CalendarX className="w-8 h-8 text-slate-300 mb-2" />
+                    <p className="text-xs font-semibold text-slate-600">No cancellations recorded in this period</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+
+            <motion.div
+              variants={fadeScale}
+              initial="hidden"
+              animate="visible"
+              className="lg:col-span-6 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0 space-y-4"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                    WhatsApp Links That Became Bookings
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Booking link funnel conversion ({periodSubtitle})
+                  </p>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 flex-shrink-0">
+                  <Link2 className="w-4 h-4" />
+                </div>
+              </div>
+
+              {queueMetrics.linksSent > 0 ? (
+                <>
+                  <div className="relative w-full h-[180px]">
+                    <ChartCanvas type="bar" data={waConversionChartData} options={horizontalBarOptions} showValues={true} />
+                  </div>
+                  <div className="overflow-x-auto border-t border-slate-100 pt-3">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          <th className="py-2 px-2">Step</th>
+                          <th className="py-2 px-2 text-right">Count</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 text-xs">
+                        <tr>
+                          <td className="py-2 px-2 font-semibold text-slate-700">Links Sent</td>
+                          <td className="py-2 px-2 text-right font-bold text-[#16191E] tabular-nums">
+                            {queueMetrics.linksSent.toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="py-2 px-2 font-semibold text-slate-700">Bookings Made</td>
+                          <td className="py-2 px-2 text-right font-bold text-[#16191E] tabular-nums">
+                            {queueMetrics.linkBookings.toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="py-2 px-2 font-semibold text-slate-700">Conversion Rate</td>
+                          <td className="py-2 px-2 text-right font-bold text-emerald-600 tabular-nums">
+                            {queueMetrics.waConversion.toFixed(1)}%
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <div className="h-[250px] flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
+                  <Link2 className="w-8 h-8 text-slate-300 mb-2" />
+                  <p className="text-xs font-semibold text-slate-600">No WhatsApp booking link logs in this period</p>
+                </div>
+              )}
+            </motion.div>
           </div>
-        )}
-      </motion.div>
+
+          <motion.div
+            variants={fadeScale}
+            initial="hidden"
+            animate="visible"
+            className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs space-y-5"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                  How Full Each Doctor&apos;s Day Is (%, All Branches)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Daily appointment bookings vs. configured physician daily quota ({periodSubtitle})
+                </p>
+              </div>
+              <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-[#2563EB] flex-shrink-0">
+                <Gauge className="w-4 h-4" />
+              </div>
+            </div>
+
+            {queueMetrics.quotaRows.length === 0 ? (
+              <div className="py-10 text-center text-xs text-slate-400 bg-slate-50/70 rounded-xl border border-dashed border-slate-200">
+                No active doctors configured to compute daily quota utilization.
+              </div>
+            ) : (
+              <>
+                <div className="relative w-full h-[230px]">
+                  <ChartCanvas type="bar" data={doctorQuotaChartData} options={branchChartOptions} showValues={true} />
+                </div>
+                <div className="overflow-x-auto -mx-2 sm:mx-0 border-t border-slate-100 pt-3">
+                  <table className="w-full text-left border-collapse min-w-[480px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        <th className="py-2.5 px-3">Doctor</th>
+                        <th className="py-2.5 px-3 text-right">Daily Quota</th>
+                        <th className="py-2.5 px-3 text-right">Avg Bookings / Day</th>
+                        <th className="py-2.5 px-3 text-right">Quota Used</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 text-xs">
+                      {queueMetrics.quotaRows.map((q) => (
+                        <tr key={q.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3 px-3 font-semibold text-[#16191E]">{q.name}</td>
+                          <td className="py-3 px-3 text-right font-medium text-slate-600 tabular-nums">
+                            {q.dailyQuota}
+                          </td>
+                          <td className="py-3 px-3 text-right font-medium text-slate-700 tabular-nums">
+                            {q.perDay.toFixed(1)}
+                          </td>
+                          <td className="py-3 px-3 text-right font-bold text-[#2563EB] tabular-nums">
+                            {q.usedPct.toFixed(1)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </motion.div>
+        </>
+      )}
+
+      {activeTab === 'doctors' && (
+        <>
+          <motion.div
+            variants={fadeScale}
+            initial="hidden"
+            animate="visible"
+            className="bg-white rounded-2xl p-3.5 sm:p-4 border border-[#ECEEF2] shadow-2xs space-y-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                Branch Distribution &amp; Time Workload
+              </h3>
+              <span className="text-[11px] font-semibold text-slate-400">{periodSubtitle}</span>
+            </div>
+
+            {doctorReport.summary.length === 0 ? (
+              <p className="py-5 text-center text-xs text-slate-400">
+                No doctor activity found for the selected filters.
+              </p>
+            ) : (
+              <>
+                <div className="relative w-full h-[165px]">
+                  <ChartCanvas
+                    type="bar"
+                    data={doctorPatientsBranchChartData}
+                    options={doctorPatientsChartOptions}
+                    showValues={true}
+                  />
+                </div>
+
+                <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-t border-slate-100 pt-1.5">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                        <th className="py-2 pr-2">Doctor</th>
+                        <th className="py-2 px-2 text-right">Consulted</th>
+                        {doctorReport.branchNames.map((bn) => (
+                          <th key={bn} title={bn} className="py-2 px-2 text-right">
+                            <span className="inline-block max-w-[120px] truncate align-bottom">
+                              {formatCompactBranchHeader(bn, doctorReport.branchNames)}
+                            </span>
+                          </th>
+                        ))}
+                        <th className="py-2 px-2 text-right">Total Time</th>
+                        <th className="py-2 px-2 text-right">Avg / Patient</th>
+                        <th className="py-2 pl-2 text-right">Leaves</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 text-xs">
+                      {pagedDoctorSummary.rows.map((d) => (
+                        <tr key={d.id} className="hover:bg-slate-50/80 transition-colors whitespace-nowrap">
+                          <td className="py-2 pr-2 font-semibold text-[#16191E]">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: d.color }}
+                                aria-hidden="true"
+                              />
+                              <span>{d.name}</span>
+                            </div>
+                          </td>
+                          <td className="py-2 px-2 text-right font-bold text-slate-800 tabular-nums">
+                            {d.consulted.toLocaleString('en-IN')}
+                          </td>
+                          {d.byBranch.map((cnt, idx) => (
+                            <td key={`${d.id}-br-${idx}`} className="py-2 px-2 text-right text-slate-600 tabular-nums">
+                              {cnt.toLocaleString('en-IN')}
+                            </td>
+                          ))}
+                          <td className="py-2 px-2 text-right text-slate-600 tabular-nums">
+                            {d.totalMins !== null ? formatHoursMins(d.totalMins) : 'N/A'}
+                          </td>
+                          <td className="py-2 px-2 text-right font-semibold text-[#2563EB] tabular-nums">
+                            {d.avgMins !== null ? `${d.avgMins.toFixed(1)} min` : 'N/A'}
+                          </td>
+                          <td className="py-2 pl-2 text-right font-semibold text-amber-600 tabular-nums">
+                            {d.leaveDays}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <DoctorTablePagination
+                  currentPage={pagedDoctorSummary.currentPage}
+                  totalPages={pagedDoctorSummary.totalPages}
+                  totalItems={doctorReport.summary.length}
+                  startIndex={pagedDoctorSummary.startIndex}
+                  endIndex={pagedDoctorSummary.endIndex}
+                  itemName="doctors"
+                  onPageChange={setDoctorSummaryPage}
+                />
+              </>
+            )}
+          </motion.div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <motion.div
+              variants={fadeScale}
+              initial="hidden"
+              animate="visible"
+              className="lg:col-span-6 h-full bg-white rounded-2xl p-3.5 sm:p-4 border border-[#ECEEF2] shadow-2xs flex flex-col gap-3 min-w-0"
+            >
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                    Appointment Overview
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <label className="flex items-center gap-1.5 bg-slate-50 border border-[#ECEEF2] rounded-lg px-2 py-1 text-[11px] text-slate-600">
+                      <Stethoscope className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                      <select
+                        aria-label="Filter Appointment Overview by doctor"
+                        value={overviewDoctorId}
+                        onChange={(e) => {
+                          setOverviewDoctorId(e.target.value);
+                          setDoctorDailyPage(1);
+                        }}
+                        className="bg-transparent font-semibold text-slate-800 focus:outline-hidden cursor-pointer max-w-[130px] text-[11px]"
+                      >
+                        <option value="">All Doctors</option>
+                        {activeDoctors.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <input
+                      type="date"
+                      aria-label="Filter Appointment Overview by date"
+                      value={overviewDateFilter}
+                      max={todayIST}
+                      onChange={(e) => {
+                        setOverviewDateFilter(e.target.value);
+                        setDoctorDailyPage(1);
+                      }}
+                      className="bg-slate-50 border border-[#ECEEF2] rounded-lg px-2.5 py-1 font-semibold text-slate-800 focus:outline-hidden cursor-pointer text-[11px]"
+                    />
+                    {overviewDateFilter && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOverviewDateFilter('');
+                          setDoctorDailyPage(1);
+                        }}
+                        aria-label="Clear appointment overview date filter"
+                        title="Show last 7 days"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-semibold transition cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                        <span>7D</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-500">
+                  <span>{overviewDateFilter ? `Showing ${overviewDateFilter}` : 'Last 7 Days'}</span>
+                  <div className="flex items-center gap-3 text-slate-600">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#2563EB]" aria-hidden="true" />
+                      Booked
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#10B981]" aria-hidden="true" />
+                      Consulted
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {doctorReport.dailyRows.length === 0 ? (
+                <div className="flex-1 min-h-[220px] flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
+                  <BarChart3 className="w-8 h-8 text-slate-300 mb-2" />
+                  <p className="text-xs font-semibold text-slate-600">
+                    {overviewDateFilter
+                      ? `No appointment overview data for ${overviewDateFilter}.`
+                      : 'No 7-day doctor data available.'}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="relative w-full h-[165px]">
+                    <ChartCanvas
+                      type="bar"
+                      data={doctorBookedVsSeenChartData}
+                      options={multiBarChartOptions}
+                      showValues={true}
+                    />
+                  </div>
+                  <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-t border-slate-100 pt-1.5 flex-1">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                          <th className="py-2 pr-2">Date</th>
+                          <th className="py-2 px-2">Doctor</th>
+                          <th className="py-2 px-2 text-right">Consulted / Booked</th>
+                          <th className="py-2 px-2 text-right">Avg Time</th>
+                          <th className="py-2 pl-2 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 text-xs">
+                        {pagedDoctorDaily.rows.map((d) => (
+                          <tr key={`${d.date}-${d.doctorId}`} className="hover:bg-slate-50/80 transition-colors whitespace-nowrap">
+                            <td className="py-2 pr-2 font-mono text-[11px] text-slate-600 whitespace-nowrap">
+                              {d.date}
+                            </td>
+                            <td className="py-2 px-2 font-semibold text-[#16191E] whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="w-2 h-2 rounded-full flex-shrink-0"
+                                  style={{ backgroundColor: d.color }}
+                                  aria-hidden="true"
+                                />
+                                <span>{d.name}</span>
+                              </div>
+                            </td>
+                            <td className="py-2 px-2 text-right font-bold text-slate-800 tabular-nums">
+                              {d.consulted} / {d.booked}
+                            </td>
+                            <td className="py-2 px-2 text-right font-medium text-[#2563EB] tabular-nums">
+                              {d.avgMins !== null ? `${d.avgMins.toFixed(1)} min` : '—'}
+                            </td>
+                            <td className="py-2 pl-2 text-right">
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                  d.onLeave
+                                    ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200/70'
+                                }`}
+                              >
+                                {d.onLeave ? 'On Leave' : 'Working'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <DoctorTablePagination
+                    currentPage={pagedDoctorDaily.currentPage}
+                    totalPages={pagedDoctorDaily.totalPages}
+                    totalItems={doctorReport.dailyRows.length}
+                    startIndex={pagedDoctorDaily.startIndex}
+                    endIndex={pagedDoctorDaily.endIndex}
+                    itemName="entries"
+                    onPageChange={setDoctorDailyPage}
+                  />
+                </>
+              )}
+            </motion.div>
+
+            <motion.div
+              variants={fadeScale}
+              initial="hidden"
+              animate="visible"
+              className="lg:col-span-6 h-full bg-white rounded-2xl p-3.5 sm:p-4 border border-[#ECEEF2] shadow-2xs flex flex-col gap-3 min-w-0"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                  Doctor Leave Days
+                </h3>
+                <span className="text-[11px] font-semibold text-slate-400">{doctorReport.leaves.length} logs</span>
+              </div>
+
+              {doctorReport.leaves.length === 0 ? (
+                <div className="flex-1 min-h-[180px] flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-5">
+                  <Calendar className="w-7 h-7 text-slate-300 mb-2" />
+                  <p className="text-xs font-semibold text-slate-600">No doctor leave days recorded.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-t border-slate-100 pt-1.5 flex-1">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                          <th className="py-2 pr-2">Date</th>
+                          <th className="py-2 px-2">Doctor</th>
+                          <th className="py-2 px-2">Type</th>
+                          <th className="py-2 pl-2 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 text-xs">
+                        {pagedDoctorLeaves.rows.map((l, idx) => (
+                          <tr
+                            key={`${l.dateKey}-${l.doctorId}-${l.type}-${pagedDoctorLeaves.startIndex + idx}`}
+                            className="hover:bg-slate-50/80 transition-colors whitespace-nowrap"
+                          >
+                            <td className="py-2 pr-2 font-mono text-[11px] text-slate-600">{l.dateKey}</td>
+                            <td className="py-2 px-2 font-semibold text-[#16191E]">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="w-2 h-2 rounded-full flex-shrink-0"
+                                  style={{ backgroundColor: l.color }}
+                                  aria-hidden="true"
+                                />
+                                <span>{l.doctorName}</span>
+                              </div>
+                            </td>
+                            <td className="py-2 px-2 text-slate-600">{l.type}</td>
+                            <td className="py-2 pl-2 text-right">
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                  l.upcoming
+                                    ? 'bg-blue-50 text-[#2563EB]'
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {l.upcoming ? 'Upcoming' : 'Taken'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <DoctorTablePagination
+                    currentPage={pagedDoctorLeaves.currentPage}
+                    totalPages={pagedDoctorLeaves.totalPages}
+                    totalItems={doctorReport.leaves.length}
+                    startIndex={pagedDoctorLeaves.startIndex}
+                    endIndex={pagedDoctorLeaves.endIndex}
+                    itemName="logs"
+                    onPageChange={setDoctorLeavesPage}
+                  />
+                </>
+              )}
+            </motion.div>
+          </div>
+        </>
+      )}
     </motion.section>
   );
 }
