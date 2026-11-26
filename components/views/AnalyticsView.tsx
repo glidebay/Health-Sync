@@ -2221,35 +2221,39 @@ export function AnalyticsView({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="space-y-4 pb-4 overscroll-contain"
+      className="space-y-6 pb-8 overscroll-contain"
     >
       <EcgActionLoader isLoading={isLoading} fullscreen={true} text="Loading clinic analytics..." />
 
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      {/* Editorial Header + Tabs & Filters */}
+      <div className="bg-white rounded-2xl border border-[#ECEEF2] p-6 sm:p-8 shadow-2xs space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg sm:text-xl font-bold text-[#16191E] tracking-tight">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+              Practice Insights • {periodSubtitle}
+            </span>
+            <div className="mt-1.5 flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-base sm:text-lg font-semibold text-[#16191E]">
                 Clinic Analytics &amp; Operations
               </h2>
               {branchName && (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-[#2563EB] border border-blue-200/70">
                   {branchName}
                 </span>
               )}
               {isSampleMode ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200/80">
                   <Sparkles className="w-3 h-3 text-amber-600" />
-                  Sample data, not real clinic figures
+                  Sample preview data
                 </span>
               ) : realAppointments.length === 0 ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-50 text-slate-600 border border-slate-200">
                   No Recorded Visits Yet
                 </span>
               ) : null}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Footfall channels, case mix &amp; pharmacy valuation, queue reliability, and physician performance
+            <p className="text-xs text-slate-500 mt-1">
+              Footfall channels, case mix &amp; pharmacy valuation, queue reliability, and physician performance.
             </p>
           </div>
 
@@ -2260,20 +2264,20 @@ export function AnalyticsView({
                 setShowSamplePreview((prev) => !prev);
                 resetDoctorPages();
               }}
-              className={`self-start lg:self-auto px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer flex items-center gap-1.5 ${
+              className={`self-start lg:self-auto px-4 py-2 rounded-full text-xs font-medium border transition cursor-pointer inline-flex items-center gap-1.5 ${
                 showSamplePreview
-                  ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-2xs'
-                  : 'bg-white text-slate-600 border-[#ECEEF2] hover:bg-slate-50'
+                  ? 'bg-amber-50 text-amber-800 border-amber-300'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB]'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <Sparkles className="w-3.5 h-3.5" />
               <span>{showSamplePreview ? 'Exit Sample Preview' : 'Preview Sample Data'}</span>
             </button>
           )}
         </div>
 
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 bg-white rounded-2xl p-2.5 border border-[#ECEEF2] shadow-2xs">
-          <div className="flex flex-wrap items-center gap-1 bg-slate-100/90 rounded-xl p-1">
+        <div className="pt-5 border-t border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1 bg-slate-50 border border-[#ECEEF2] rounded-full p-1">
             {[
               { id: 'footfall' as const, label: 'Patient Footfall' },
               { id: 'clinical' as const, label: 'Case Mix & Pharmacy' },
@@ -2287,14 +2291,14 @@ export function AnalyticsView({
                   type="button"
                   aria-pressed={isActive}
                   onClick={() => setActiveTab(tabItem.id)}
-                  className={`relative px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
+                  className={`relative px-4 py-1.5 text-xs font-medium rounded-full transition-colors cursor-pointer whitespace-nowrap ${
                     isActive ? 'text-white' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {isActive && (
                     <motion.div
                       layoutId="activeAnalyticsMainTab"
-                      className="absolute inset-0 bg-[#2563EB] rounded-lg shadow-xs"
+                      className="absolute inset-0 bg-[#2563EB] rounded-full shadow-2xs"
                       transition={{ type: 'spring', damping: 25, stiffness: 400 }}
                     />
                   )}
@@ -2305,7 +2309,7 @@ export function AnalyticsView({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-1.5 bg-slate-50 border border-[#ECEEF2] rounded-xl px-2.5 py-1.5 text-xs text-slate-600">
+            <label className="flex items-center gap-1.5 bg-slate-50/80 border border-[#ECEEF2] rounded-full px-3.5 py-1.5 text-xs text-slate-600">
               <Building2 className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
               <select
                 aria-label="Filter by branch"
@@ -2314,7 +2318,7 @@ export function AnalyticsView({
                   setSelectedBranchId(e.target.value);
                   resetDoctorPages();
                 }}
-                className="bg-transparent font-semibold text-slate-800 focus:outline-hidden cursor-pointer pr-1"
+                className="bg-transparent font-medium text-slate-700 focus:outline-hidden cursor-pointer pr-1"
               >
                 <option value="">All Branches</option>
                 {activeBranches.map((b) => (
@@ -2325,7 +2329,7 @@ export function AnalyticsView({
               </select>
             </label>
 
-            <label className="flex items-center gap-1.5 bg-slate-50 border border-[#ECEEF2] rounded-xl px-2.5 py-1.5 text-xs text-slate-600">
+            <label className="flex items-center gap-1.5 bg-slate-50/80 border border-[#ECEEF2] rounded-full px-3.5 py-1.5 text-xs text-slate-600">
               <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
               <select
                 aria-label="Filter by period"
@@ -2334,7 +2338,7 @@ export function AnalyticsView({
                   setSelectedPeriod(Number(e.target.value) as PeriodDays);
                   resetDoctorPages();
                 }}
-                className="bg-transparent font-semibold text-slate-800 focus:outline-hidden cursor-pointer pr-1"
+                className="bg-transparent font-medium text-slate-700 focus:outline-hidden cursor-pointer pr-1"
               >
                 {PERIOD_OPTIONS.map((p) => (
                   <option key={p.id} value={String(p.id)}>
@@ -2344,7 +2348,7 @@ export function AnalyticsView({
               </select>
             </label>
 
-            <label className="flex items-center gap-1.5 bg-slate-50 border border-[#ECEEF2] rounded-xl px-2.5 py-1.5 text-xs text-slate-600">
+            <label className="flex items-center gap-1.5 bg-slate-50/80 border border-[#ECEEF2] rounded-full px-3.5 py-1.5 text-xs text-slate-600">
               <Stethoscope className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
               <select
                 aria-label="Filter by doctor"
@@ -2355,7 +2359,7 @@ export function AnalyticsView({
                   setOverviewDoctorId(nextDocId);
                   resetDoctorPages();
                 }}
-                className="bg-transparent font-semibold text-slate-800 focus:outline-hidden cursor-pointer pr-1 max-w-[140px]"
+                className="bg-transparent font-medium text-slate-700 focus:outline-hidden cursor-pointer pr-1 max-w-[140px]"
               >
                 <option value="">All Doctors</option>
                 {activeDoctors.map((d) => (
@@ -2370,18 +2374,18 @@ export function AnalyticsView({
       </div>
 
       {fetchError && (
-        <div className="rounded-xl bg-amber-50/90 border border-amber-200 px-4 py-2.5 flex items-center gap-2.5 text-xs text-amber-900">
+        <div className="rounded-2xl bg-amber-50/90 border border-amber-200 px-5 py-3 flex items-center gap-2.5 text-xs text-amber-900">
           <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
           <span>Historical database query returned a notice ({fetchError}). Showing available active queue data.</span>
         </div>
       )}
 
       {cleanQuery && (
-        <div className="rounded-xl bg-blue-50/80 border border-blue-200/80 px-4 py-2 text-xs text-blue-800 flex items-center justify-between gap-2">
+        <div className="rounded-2xl bg-blue-50/80 border border-blue-200/80 px-5 py-2.5 text-xs text-blue-800 flex items-center justify-between gap-2">
           <span>
             Filtered analytics by query: <strong>&ldquo;{searchQuery}&rdquo;</strong>
           </span>
-          <span className="font-semibold">{activeFootfallOnly.length} matching visits</span>
+          <span className="font-medium">{activeFootfallOnly.length} matching visits</span>
         </div>
       )}
 
@@ -2395,72 +2399,66 @@ export function AnalyticsView({
           >
             <motion.div
               variants={fadeScale}
-              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
-              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+              className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
             >
               <div className="min-w-0 pr-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">
                   Total Patient Visits
                 </span>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-bold text-[#16191E] tracking-tight">
+                  <span className="text-xl sm:text-2xl font-semibold text-[#16191E] tabular-nums">
                     <AnimatedCounter target={kpiMetrics.totalPatients} />
                   </span>
-                  <span className="text-xs font-medium text-slate-400">{periodSubtitle}</span>
+                  <span className="text-[11px] text-slate-400">{periodSubtitle}</span>
                 </div>
                 <div className="flex items-center gap-1.5 mt-1.5 text-[11px] flex-wrap">
-                  <span className="font-semibold text-[#2563EB]">{kpiMetrics.walkinCount} Walk-in</span>
+                  <span className="font-medium text-[#2563EB]">{kpiMetrics.walkinCount} Walk-in</span>
                   <span className="text-slate-300">•</span>
-                  <span className="font-semibold text-emerald-600">{kpiMetrics.whatsappCount} WhatsApp</span>
+                  <span className="font-medium text-emerald-600">{kpiMetrics.whatsappCount} WhatsApp</span>
                 </div>
               </div>
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-blue-700 to-blue-500 shadow-md shadow-blue-500/25 flex items-center justify-center text-white flex-shrink-0">
-                <Users className="w-5 h-5 stroke-[2.2]" />
+              <div className="w-10 h-10 rounded-full border border-blue-100 bg-blue-50 text-[#2563EB] flex items-center justify-center flex-shrink-0">
+                <Users className="w-4 h-4 stroke-[1.9]" />
               </div>
             </motion.div>
 
             <motion.div
               variants={fadeScale}
-              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
-              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+              className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
             >
               <div className="min-w-0 pr-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">
                   Avg Consultation
                 </span>
                 <div className="flex items-baseline gap-1.5">
                   {kpiMetrics.avgDurationMins !== null ? (
                     <>
-                      <span className="text-2xl font-bold text-[#16191E] tracking-tight">
+                      <span className="text-xl sm:text-2xl font-semibold text-[#16191E] tabular-nums">
                         {kpiMetrics.avgDurationMins.toFixed(1)}
                       </span>
-                      <span className="text-sm font-bold text-slate-500">min</span>
+                      <span className="text-xs font-medium text-slate-500">min</span>
                     </>
                   ) : (
-                    <span className="text-xl font-bold text-slate-400 tracking-tight">N/A</span>
+                    <span className="text-xl font-semibold text-slate-400">N/A</span>
                   )}
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1.5 truncate">{kpiMetrics.durationLabel}</p>
               </div>
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-indigo-600 to-blue-500 shadow-md shadow-indigo-500/25 flex items-center justify-center text-white flex-shrink-0">
-                <Clock className="w-5 h-5 stroke-[2.2]" />
+              <div className="w-10 h-10 rounded-full border border-slate-200 bg-slate-50 text-slate-700 flex items-center justify-center flex-shrink-0">
+                <Clock className="w-4 h-4 stroke-[1.9]" />
               </div>
             </motion.div>
 
             <motion.div
               variants={fadeScale}
-              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
-              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
+              className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
             >
               <div className="flex items-center justify-between">
                 <div className="min-w-0 pr-3">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">
                     WhatsApp Share
                   </span>
-                  <span className="text-2xl font-bold text-emerald-600 tracking-tight block">
+                  <span className="text-xl sm:text-2xl font-semibold text-emerald-700 tabular-nums block">
                     {kpiMetrics.whatsappSharePct}%
                   </span>
                   <p className="text-[11px] text-slate-500 mt-1">
@@ -2469,13 +2467,13 @@ export function AnalyticsView({
                       : 'No visits recorded'}
                   </p>
                 </div>
-                <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-emerald-600 to-teal-400 shadow-md shadow-emerald-500/25 flex items-center justify-center text-white flex-shrink-0">
-                  <MessageSquare className="w-5 h-5 stroke-[2.2]" />
+                <div className="w-10 h-10 rounded-full border border-emerald-100 bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                  <MessageSquare className="w-4 h-4 stroke-[1.9]" />
                 </div>
               </div>
-              <div className="w-full h-1.5 bg-slate-100 rounded-full mt-2.5 overflow-hidden">
+              <div className="w-full h-1.5 bg-slate-100 rounded-full mt-3 overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500"
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
                   style={{ width: `${Math.min(100, Math.max(0, kpiMetrics.whatsappSharePct))}%` }}
                 />
               </div>
@@ -2483,46 +2481,49 @@ export function AnalyticsView({
 
             <motion.div
               variants={fadeScale}
-              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
-              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+              className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
             >
               <div className="min-w-0 pr-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">
                   New Patient Visits
                 </span>
                 <div className="flex items-baseline gap-2">
                   {kpiMetrics.newPatientVisits !== null ? (
-                    <span className="text-2xl font-bold text-[#16191E] tracking-tight">
+                    <span className="text-xl sm:text-2xl font-semibold text-[#16191E] tabular-nums">
                       <AnimatedCounter target={kpiMetrics.newPatientVisits} />
                     </span>
                   ) : (
-                    <span className="text-xl font-bold text-slate-400 tracking-tight">N/A</span>
+                    <span className="text-xl font-semibold text-slate-400">N/A</span>
                   )}
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1.5">First-time patients in period</p>
               </div>
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-tl from-violet-600 to-purple-500 shadow-md shadow-violet-500/25 flex items-center justify-center text-white flex-shrink-0">
-                <UserPlus className="w-5 h-5 stroke-[2.2]" />
+              <div className="w-10 h-10 rounded-full border border-blue-100 bg-blue-50 text-[#2563EB] flex items-center justify-center flex-shrink-0">
+                <UserPlus className="w-4 h-4 stroke-[1.9]" />
               </div>
             </motion.div>
           </motion.div>
 
-          <motion.div
-            variants={fadeScale}
-            initial="hidden"
-            animate="visible"
-            className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-2xs space-y-4"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
-                Branch Comparison
-              </h3>
-              <span className="text-[11px] font-semibold text-slate-400">{periodSubtitle}</span>
+          {/* Branch Comparison Card */}
+          <div className="bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs space-y-5">
+            <div className="flex items-end justify-between gap-3 flex-wrap">
+              <div>
+                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                  Multi-Branch View • {periodSubtitle}
+                </span>
+                <h3 className="mt-1 text-base font-semibold text-[#16191E]">
+                  Branch Comparison
+                </h3>
+              </div>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-600">
+                {branchComparisonRows.length} {branchComparisonRows.length === 1 ? 'Branch' : 'Branches'}
+              </span>
             </div>
 
             {branchComparisonRows.length === 0 ? (
-              <p className="text-xs text-slate-400 py-4 text-center">No clinic branches found.</p>
+              <p className="text-xs text-slate-400 py-6 border-y border-slate-200/80 text-center">
+                No clinic branches found.
+              </p>
             ) : (
               <>
                 {branchComparisonRows.length > 1 && (
@@ -2530,55 +2531,52 @@ export function AnalyticsView({
                     <ChartCanvas type="bar" data={branchChartData} options={branchChartOptions} showValues={true} />
                   </div>
                 )}
-                <div className="overflow-x-auto -mx-2 sm:mx-0">
-                  <table className="w-full text-left border-collapse min-w-[440px]">
-                    <thead>
-                      <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        <th className="py-2 px-3">Branch</th>
-                        <th className="py-2 px-3 text-right">Visits</th>
-                        <th className="py-2 px-3 text-right">Avg Consult</th>
-                        <th className="py-2 px-3 text-right">WhatsApp Share</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50 text-xs">
-                      {branchComparisonRows.map((row) => (
-                        <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-2.5 px-3 font-semibold text-[#16191E]">{row.name}</td>
-                          <td className="py-2.5 px-3 text-right font-bold text-slate-800 tabular-nums">
-                            {row.total.toLocaleString('en-IN')}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-medium text-slate-600 tabular-nums">
-                            {row.avgMins !== null ? `${row.avgMins.toFixed(1)} min` : 'N/A'}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-bold text-emerald-600 tabular-nums">
-                            {row.whatsappShare.toFixed(1)}%
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80">
+                  {branchComparisonRows.map((row, index) => (
+                    <li
+                      key={row.id}
+                      className="py-4 grid grid-cols-1 sm:grid-cols-[2rem_1.3fr_1fr_auto] gap-3 sm:gap-5 items-center text-xs"
+                    >
+                      <span className="text-xs font-medium text-slate-400 tabular-nums">
+                        {String(index + 1).padStart(2, '0')}
+                      </span>
+                      <span className="text-sm font-medium text-[#16191E] truncate">{row.name}</span>
+                      <div className="flex flex-wrap items-center gap-3 text-slate-500">
+                        <span>
+                          Visits: <strong className="font-semibold text-[#16191E] tabular-nums">{row.total.toLocaleString('en-IN')}</strong>
+                        </span>
+                        <span className="text-slate-300">•</span>
+                        <span>
+                          Avg Consult: <strong className="font-medium text-slate-700 tabular-nums">{row.avgMins !== null ? `${row.avgMins.toFixed(1)} min` : 'N/A'}</strong>
+                        </span>
+                      </div>
+                      <div className="flex items-center sm:justify-end">
+                        <span className="rounded-full border border-emerald-200/70 bg-emerald-50 px-3 py-0.5 text-[11px] font-medium text-emerald-700 tabular-nums">
+                          {row.whatsappShare.toFixed(1)}% WhatsApp
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </>
             )}
-          </motion.div>
+          </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            <motion.div
-              variants={fadeScale}
-              initial="hidden"
-              animate="visible"
-              className="lg:col-span-7 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
+            <div className="lg:col-span-7 bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0">
+              <div className="flex items-start justify-between gap-3 mb-5">
                 <div>
-                  <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                    Channel Mix
+                  </span>
+                  <h3 className="mt-1 text-base font-semibold text-[#16191E]">
                     How Patients Booked (Walk-in vs. WhatsApp)
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Monthly column comparison of Walk-in visits vs. WhatsApp appointments
+                    Monthly column comparison of Walk-in visits vs. WhatsApp appointments.
                   </p>
                 </div>
-                <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-[#2563EB] flex-shrink-0">
+                <div className="w-10 h-10 rounded-full border border-blue-100 bg-blue-50 flex items-center justify-center text-[#2563EB] flex-shrink-0">
                   <BarChart3 className="w-4 h-4" />
                 </div>
               </div>
@@ -2589,38 +2587,34 @@ export function AnalyticsView({
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
                     <BarChart3 className="w-8 h-8 text-slate-300 mb-2" />
-                    <p className="text-xs font-semibold text-slate-600">No monthly channel data available yet</p>
+                    <p className="text-xs font-medium text-slate-600">No monthly channel data available yet</p>
                     <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
                       Monthly Walk-in and WhatsApp counts will populate automatically as clinic visits are logged.
                     </p>
                   </div>
                 )}
               </div>
-            </motion.div>
+            </div>
 
-            <motion.div
-              variants={fadeScale}
-              initial="hidden"
-              animate="visible"
-              className="lg:col-span-5 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
-                      Busiest Hours (Peak Arrival)
-                    </h3>
-                    {hourlyData.peakHours.length > 0 && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-[#2563EB] border border-blue-200">
-                        <Activity className="w-3 h-3" />
-                        Peak: {hourlyData.peakHours.map((p) => p.label).join(', ')} ({hourlyData.maxHourTotal} pts)
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Hourly arrival pattern ({periodSubtitle}, IST)
-                  </p>
+            <div className="lg:col-span-5 bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0">
+              <div className="mb-5">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                  Hourly Pattern • IST
+                </span>
+                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base font-semibold text-[#16191E]">
+                    Busiest Hours (Peak Arrival)
+                  </h3>
+                  {hourlyData.peakHours.length > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-blue-50 text-[#2563EB] border border-blue-200/70">
+                      <Activity className="w-3 h-3" />
+                      Peak: {hourlyData.peakHours.map((p) => p.label).join(', ')} ({hourlyData.maxHourTotal} pts)
+                    </span>
+                  )}
                 </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Hourly arrival breakdown ({periodSubtitle}).
+                </p>
               </div>
 
               <div className="relative w-full h-[260px] sm:h-[300px]">
@@ -2629,35 +2623,33 @@ export function AnalyticsView({
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
                     <Clock className="w-8 h-8 text-slate-300 mb-2" />
-                    <p className="text-xs font-semibold text-slate-600">No hourly arrival pattern in this period</p>
+                    <p className="text-xs font-medium text-slate-600">No hourly arrival pattern in this period</p>
                     <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
                       Select a wider period or record check-ins to reveal busiest consultation hours.
                     </p>
                   </div>
                 )}
               </div>
-            </motion.div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            <motion.div
-              variants={fadeScale}
-              initial="hidden"
-              animate="visible"
-              className="lg:col-span-7 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
-            >
-              <div className="flex items-start justify-between gap-2 mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
+            <div className="lg:col-span-7 bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0">
+              <div className="flex items-start justify-between gap-3 mb-5">
                 <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                    6-Month Growth
+                  </span>
+                  <div className="mt-1 flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-semibold text-[#16191E]">
                       Patients Each Month &amp; Intake Growth
                     </h3>
                     {kpiMetrics.latestMomGrowth !== null && (
                       <span
-                        className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                        className={`inline-flex items-center gap-0.5 text-[11px] font-medium px-2.5 py-0.5 rounded-full border ${
                           kpiMetrics.latestMomGrowth >= 0
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-rose-50 text-rose-700 border-rose-200'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200/70'
+                            : 'bg-rose-50 text-rose-700 border-rose-200/70'
                         }`}
                       >
                         {kpiMetrics.latestMomGrowth >= 0 ? (
@@ -2671,10 +2663,10 @@ export function AnalyticsView({
                     )}
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Monthly patient footfall trajectory (last 6 months)
+                    Monthly patient footfall trajectory across the last 6 months.
                   </p>
                 </div>
-                <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-[#2563EB] flex-shrink-0">
+                <div className="w-10 h-10 rounded-full border border-blue-100 bg-blue-50 flex items-center justify-center text-[#2563EB] flex-shrink-0">
                   <TrendingUp className="w-4 h-4" />
                 </div>
               </div>
@@ -2685,83 +2677,72 @@ export function AnalyticsView({
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
                     <TrendingUp className="w-8 h-8 text-slate-300 mb-2" />
-                    <p className="text-xs font-semibold text-slate-600">Monthly growth curve awaiting visits</p>
+                    <p className="text-xs font-medium text-slate-600">Monthly growth curve awaiting visits</p>
                     <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
                       Month-over-month footfall growth requires recorded visits across consecutive months.
                     </p>
                   </div>
                 )}
               </div>
-            </motion.div>
+            </div>
 
-            <motion.div
-              variants={fadeScale}
-              initial="hidden"
-              animate="visible"
-              className="lg:col-span-5 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col min-w-0"
-            >
-              <div className="flex items-start justify-between gap-2 mb-4">
+            <div className="lg:col-span-5 bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs flex flex-col min-w-0">
+              <div className="flex items-start justify-between gap-3 mb-5">
                 <div>
-                  <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                    Monthly Breakdown
+                  </span>
+                  <h3 className="mt-1 text-base font-semibold text-[#16191E]">
                     Monthly Intake Breakdown
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Monthly channel counts &amp; month-over-month intake growth
+                    Channel counts &amp; month-over-month growth.
                   </p>
                 </div>
-                <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200/70 flex items-center justify-center text-slate-600 flex-shrink-0">
+                <div className="w-10 h-10 rounded-full border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-600 flex-shrink-0">
                   <Calendar className="w-4 h-4" />
                 </div>
               </div>
 
-              <div className="overflow-x-auto -mx-2 sm:mx-0 flex-1">
-                <table className="w-full text-left border-collapse min-w-[380px]">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      <th className="py-2.5 px-2">Month</th>
-                      <th className="py-2.5 px-2 text-right">Walk-in</th>
-                      <th className="py-2.5 px-2 text-right">WhatsApp</th>
-                      <th className="py-2.5 px-2 text-right">Total</th>
-                      <th className="py-2.5 px-2 text-right">MoM Growth</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50 text-xs">
-                    {monthlyBuckets.map((m) => (
-                      <tr key={m.monthKey} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-2 font-semibold text-[#16191E] whitespace-nowrap">
-                          {m.fullLabel}
-                        </td>
-                        <td className="py-3 px-2 text-right font-medium text-[#2563EB] tabular-nums">
-                          {m.walkin}
-                        </td>
-                        <td className="py-3 px-2 text-right font-medium text-emerald-600 tabular-nums">
-                          {m.whatsapp}
-                        </td>
-                        <td className="py-3 px-2 text-right font-bold text-slate-800 tabular-nums">
-                          {m.total}
-                        </td>
-                        <td className="py-3 px-2 text-right whitespace-nowrap tabular-nums">
-                          {m.momGrowthPct === null ? (
-                            <span className="text-[11px] text-slate-400">—</span>
-                          ) : (
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                                m.momGrowthPct >= 0
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : 'bg-rose-50 text-rose-700'
-                              }`}
-                            >
-                              {m.momGrowthPct >= 0 ? '+' : ''}
-                              {m.momGrowthPct}%
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </motion.div>
+              <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80 flex-1">
+                {monthlyBuckets.map((m, idx) => (
+                  <li
+                    key={m.monthKey}
+                    className="py-3.5 grid grid-cols-[1.75rem_1fr_auto] gap-3 items-center text-xs"
+                  >
+                    <span className="text-[11px] font-medium text-slate-400 tabular-nums">
+                      {String(idx + 1).padStart(2, '0')}
+                    </span>
+                    <div className="min-w-0">
+                      <span className="font-medium text-[#16191E] block">{m.fullLabel}</span>
+                      <span className="text-[11px] text-slate-500">
+                        <span className="text-[#2563EB] font-medium">{m.walkin}</span> walk-in •{' '}
+                        <span className="text-emerald-600 font-medium">{m.whatsapp}</span> WhatsApp
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-[#16191E] tabular-nums">
+                        {m.total}
+                      </span>
+                      {m.momGrowthPct === null ? (
+                        <span className="text-[11px] text-slate-400 w-12 text-right">—</span>
+                      ) : (
+                        <span
+                          className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-medium tabular-nums ${
+                            m.momGrowthPct >= 0
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : 'bg-rose-50 text-rose-700'
+                          }`}
+                        >
+                          {m.momGrowthPct >= 0 ? '+' : ''}
+                          {m.momGrowthPct}%
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </>
       )}
@@ -2776,21 +2757,19 @@ export function AnalyticsView({
           >
             <motion.div
               variants={fadeScale}
-              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
-              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+              className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
             >
               <div className="min-w-0 pr-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">
                   Pharmacy Revenue
                 </span>
                 <div className="flex items-baseline gap-2">
                   {clinicalAndPharmacy.totalRevenue !== null ? (
-                    <span className="text-2xl sm:text-3xl font-bold text-[#16191E] tracking-tight">
+                    <span className="text-xl sm:text-2xl font-semibold text-[#16191E] tabular-nums">
                       {formatINR(clinicalAndPharmacy.totalRevenue)}
                     </span>
                   ) : (
-                    <span className="text-xl sm:text-2xl font-bold text-slate-400 tracking-tight">N/A</span>
+                    <span className="text-xl font-semibold text-slate-400">N/A</span>
                   )}
                 </div>
                 <p className="text-xs text-slate-500 mt-1.5">
@@ -2799,28 +2778,26 @@ export function AnalyticsView({
                     : 'No priced dispensing logs found'}
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-tl from-emerald-600 to-teal-400 shadow-md shadow-emerald-500/25 flex items-center justify-center text-white flex-shrink-0">
-                <IndianRupee className="w-5 h-5 stroke-[2.2]" />
+              <div className="w-10 h-10 rounded-full border border-emerald-100 bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                <IndianRupee className="w-4 h-4 stroke-[1.9]" />
               </div>
             </motion.div>
 
             <motion.div
               variants={fadeScale}
-              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
-              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+              className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
             >
               <div className="min-w-0 pr-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">
                   Stock Value
                 </span>
                 <div className="flex items-baseline gap-2">
                   {clinicalAndPharmacy.totalStockValue !== null ? (
-                    <span className="text-2xl sm:text-3xl font-bold text-[#16191E] tracking-tight">
+                    <span className="text-xl sm:text-2xl font-semibold text-[#16191E] tabular-nums">
                       {formatINR(clinicalAndPharmacy.totalStockValue)}
                     </span>
                   ) : (
-                    <span className="text-xl sm:text-2xl font-bold text-slate-400 tracking-tight">N/A</span>
+                    <span className="text-xl font-semibold text-slate-400">N/A</span>
                   )}
                 </div>
                 <p className="text-xs text-slate-500 mt-1.5">
@@ -2829,31 +2806,29 @@ export function AnalyticsView({
                     : 'No stock valuation prices recorded'}
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-tl from-blue-700 to-blue-500 shadow-md shadow-blue-500/25 flex items-center justify-center text-white flex-shrink-0">
-                <Boxes className="w-5 h-5 stroke-[2.2]" />
+              <div className="w-10 h-10 rounded-full border border-blue-100 bg-blue-50 text-[#2563EB] flex items-center justify-center flex-shrink-0">
+                <Boxes className="w-4 h-4 stroke-[1.9]" />
               </div>
             </motion.div>
 
             <motion.div
               variants={fadeScale}
-              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
-              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+              className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
             >
               <div className="min-w-0 pr-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">
                   Stock Turnover
                 </span>
                 <div className="flex items-baseline gap-2">
                   {clinicalAndPharmacy.stockTurnover !== null ? (
                     <>
-                      <span className="text-2xl sm:text-3xl font-bold text-[#16191E] tracking-tight">
+                      <span className="text-xl sm:text-2xl font-semibold text-[#16191E] tabular-nums">
                         {clinicalAndPharmacy.stockTurnover.toFixed(1)}×
                       </span>
-                      <span className="text-xs font-medium text-slate-400">per year</span>
+                      <span className="text-xs text-slate-400">per year</span>
                     </>
                   ) : (
-                    <span className="text-xl sm:text-2xl font-bold text-slate-400 tracking-tight">N/A</span>
+                    <span className="text-xl font-semibold text-slate-400">N/A</span>
                   )}
                 </div>
                 <p className="text-xs text-slate-500 mt-1.5">
@@ -2862,29 +2837,27 @@ export function AnalyticsView({
                     : 'Requires dispensing & stock cost data'}
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-tl from-amber-500 to-orange-400 shadow-md shadow-amber-500/25 flex items-center justify-center text-white flex-shrink-0">
-                <RefreshCw className="w-5 h-5 stroke-[2.2]" />
+              <div className="w-10 h-10 rounded-full border border-amber-100 bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
+                <RefreshCw className="w-4 h-4 stroke-[1.9]" />
               </div>
             </motion.div>
           </motion.div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            <motion.div
-              variants={fadeScale}
-              initial="hidden"
-              animate="visible"
-              className="lg:col-span-6 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
-            >
-              <div className="flex items-start justify-between gap-2 mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
+            <div className="lg:col-span-6 bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0">
+              <div className="flex items-start justify-between gap-3 mb-5">
                 <div>
-                  <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                    Case Mix
+                  </span>
+                  <h3 className="mt-1 text-base font-semibold text-[#16191E]">
                     Common Illnesses (Diagnosis Case Mix)
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Clinical presentation breakdown ({periodSubtitle})
+                    Clinical presentation breakdown ({periodSubtitle}).
                   </p>
                 </div>
-                <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-[#2563EB] flex-shrink-0">
+                <div className="w-10 h-10 rounded-full border border-blue-100 bg-blue-50 flex items-center justify-center text-[#2563EB] flex-shrink-0">
                   <Activity className="w-4 h-4" />
                 </div>
               </div>
@@ -2894,54 +2867,47 @@ export function AnalyticsView({
                   <div className="relative w-full h-[220px]">
                     <ChartCanvas type="doughnut" data={caseMixDoughnutData} options={caseMixDoughnutOptions} />
                   </div>
-                  <div className="overflow-x-auto border-t border-slate-100 pt-3">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                          <th className="py-2 px-2">Category</th>
-                          <th className="py-2 px-2 text-right">Visits</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50 text-xs">
-                        {clinicalAndPharmacy.caseMix.map((c) => (
-                          <tr key={c.label}>
-                            <td className="py-2 px-2 font-semibold text-slate-700">{c.label}</td>
-                            <td className="py-2 px-2 text-right font-bold text-[#16191E] tabular-nums">
-                              {c.count.toLocaleString('en-IN')}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80">
+                    {clinicalAndPharmacy.caseMix.map((c, idx) => (
+                      <li key={c.label} className="py-3 flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="text-[11px] font-medium text-slate-400 tabular-nums">
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
+                          <span className="font-medium text-slate-700 truncate">{c.label}</span>
+                        </div>
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-[#16191E] tabular-nums">
+                          {c.count.toLocaleString('en-IN')} visits
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               ) : (
                 <div className="h-[260px] flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
                   <Activity className="w-8 h-8 text-slate-300 mb-2" />
-                  <p className="text-xs font-semibold text-slate-600">No diagnosis case notes in this period</p>
+                  <p className="text-xs font-medium text-slate-600">No diagnosis case notes in this period</p>
                   <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
                     Completed consultations with clinical notes will automatically classify the clinic case mix.
                   </p>
                 </div>
               )}
-            </motion.div>
+            </div>
 
-            <motion.div
-              variants={fadeScale}
-              initial="hidden"
-              animate="visible"
-              className="lg:col-span-6 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
-            >
-              <div className="flex items-start justify-between gap-2 mb-4">
+            <div className="lg:col-span-6 bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0">
+              <div className="flex items-start justify-between gap-3 mb-5">
                 <div>
-                  <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                    Dispensation Leaders
+                  </span>
+                  <h3 className="mt-1 text-base font-semibold text-[#16191E]">
                     Most Sold Medicines (Units)
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Fast-moving formulations dispensed ({periodSubtitle})
+                    Fast-moving formulations dispensed ({periodSubtitle}).
                   </p>
                 </div>
-                <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-[#2563EB] flex-shrink-0">
+                <div className="w-10 h-10 rounded-full border border-blue-100 bg-blue-50 flex items-center justify-center text-[#2563EB] flex-shrink-0">
                   <Pill className="w-4 h-4" />
                 </div>
               </div>
@@ -2952,64 +2918,65 @@ export function AnalyticsView({
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
                     <Pill className="w-8 h-8 text-slate-300 mb-2" />
-                    <p className="text-xs font-semibold text-slate-600">No dispensed medication units yet</p>
+                    <p className="text-xs font-medium text-slate-600">No dispensed medication units yet</p>
                     <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
                       Fast-moving molecules appear once prescriptions or pharmacy stock movements are recorded.
                     </p>
                   </div>
                 )}
               </div>
-            </motion.div>
+            </div>
           </div>
 
-          <motion.div
-            variants={fadeScale}
-            initial="hidden"
-            animate="visible"
-            className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-2xs space-y-3"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
-                Pharmacy Sales &amp; Stock Valuation
-              </h3>
-              <span className="text-[11px] font-semibold text-slate-400">{periodSubtitle}</span>
+          <div className="bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs space-y-5">
+            <div className="flex items-end justify-between gap-3 flex-wrap">
+              <div>
+                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                  Valuation Summary • {periodSubtitle}
+                </span>
+                <h3 className="mt-1 text-base font-semibold text-[#16191E]">
+                  Pharmacy Sales &amp; Stock Valuation
+                </h3>
+              </div>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-600">
+                Top {Math.min(15, clinicalAndPharmacy.molecules.length)} items
+              </span>
             </div>
 
             {clinicalAndPharmacy.molecules.length === 0 ? (
-              <p className="py-6 text-center text-xs text-slate-400">
+              <p className="py-8 border-y border-slate-200/80 text-center text-xs text-slate-400">
                 No pharmacy sales or inventory valuation records found.
               </p>
             ) : (
-              <div className="overflow-x-auto -mx-2 sm:mx-0">
-                <table className="w-full text-left border-collapse min-w-[440px]">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      <th className="py-2 px-3">Molecule / Brand</th>
-                      <th className="py-2 px-3 text-right">Units Sold</th>
-                      <th className="py-2 px-3 text-right">Revenue</th>
-                      <th className="py-2 px-3 text-right">Stock Value</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50 text-xs">
-                    {clinicalAndPharmacy.molecules.slice(0, 15).map((m) => (
-                      <tr key={m.name} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-2.5 px-3 font-semibold text-[#16191E]">{m.name}</td>
-                        <td className="py-2.5 px-3 text-right font-medium text-slate-700 tabular-nums">
-                          {m.unitsSold.toLocaleString('en-IN')}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-semibold text-emerald-600 tabular-nums">
-                          {m.hasRevenue ? formatINR(m.revenue) : '—'}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-bold text-slate-800 tabular-nums">
-                          {m.hasStockValue ? formatINR(m.stockValue) : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80">
+                {clinicalAndPharmacy.molecules.slice(0, 15).map((m, idx) => (
+                  <li
+                    key={m.name}
+                    className="py-4 grid grid-cols-1 sm:grid-cols-[2rem_1.4fr_1fr_auto] gap-3 sm:gap-5 items-center text-xs"
+                  >
+                    <span className="text-xs font-medium text-slate-400 tabular-nums">
+                      {String(idx + 1).padStart(2, '0')}
+                    </span>
+                    <span className="text-sm font-medium text-[#16191E] truncate">{m.name}</span>
+                    <div className="flex flex-wrap items-center gap-3 text-slate-500">
+                      <span>
+                        Sold: <strong className="font-medium text-slate-800 tabular-nums">{m.unitsSold.toLocaleString('en-IN')} units</strong>
+                      </span>
+                      <span className="text-slate-300">•</span>
+                      <span>
+                        Revenue: <strong className="font-medium text-emerald-700 tabular-nums">{m.hasRevenue ? formatINR(m.revenue) : '—'}</strong>
+                      </span>
+                    </div>
+                    <div className="flex items-center sm:justify-end">
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-0.5 text-[11px] font-medium text-slate-700 tabular-nums">
+                        Stock Value: {m.hasStockValue ? formatINR(m.stockValue) : '—'}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
-          </motion.div>
+          </div>
         </>
       )}
 
@@ -3023,108 +2990,100 @@ export function AnalyticsView({
           >
             <motion.div
               variants={fadeScale}
-              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
-              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+              className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
             >
               <div className="min-w-0 pr-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">
                   No-Show Rate
                 </span>
-                <span className="text-2xl sm:text-3xl font-bold text-[#16191E] tracking-tight block">
+                <span className="text-xl sm:text-2xl font-semibold text-[#16191E] tabular-nums block">
                   {queueMetrics.noShowRate.toFixed(1)}%
                 </span>
                 <p className="text-xs text-slate-500 mt-1.5">
                   {queueMetrics.noShows.toLocaleString('en-IN')} of {queueMetrics.totalBookings.toLocaleString('en-IN')} bookings
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-tl from-amber-500 to-orange-400 shadow-md shadow-amber-500/25 flex items-center justify-center text-white flex-shrink-0">
-                <UserX className="w-5 h-5 stroke-[2.2]" />
+              <div className="w-10 h-10 rounded-full border border-amber-100 bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
+                <UserX className="w-4 h-4 stroke-[1.9]" />
               </div>
             </motion.div>
 
             <motion.div
               variants={fadeScale}
-              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
-              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+              className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
             >
               <div className="min-w-0 pr-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">
                   Cancellation Rate
                 </span>
-                <span className="text-2xl sm:text-3xl font-bold text-rose-600 tracking-tight block">
+                <span className="text-xl sm:text-2xl font-semibold text-rose-600 tabular-nums block">
                   {queueMetrics.cancelRate.toFixed(1)}%
                 </span>
                 <p className="text-xs text-slate-500 mt-1.5">
                   {queueMetrics.cancellations.toLocaleString('en-IN')} cancelled bookings
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-tl from-rose-600 to-pink-500 shadow-md shadow-rose-500/25 flex items-center justify-center text-white flex-shrink-0">
-                <CalendarX className="w-5 h-5 stroke-[2.2]" />
+              <div className="w-10 h-10 rounded-full border border-rose-100 bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0">
+                <CalendarX className="w-4 h-4 stroke-[1.9]" />
               </div>
             </motion.div>
 
             <motion.div
               variants={fadeScale}
-              whileHover={{ y: -3, boxShadow: '0 20px 27px 0 rgba(0,0,0,0.06)' }}
-              transition={{ type: 'spring', damping: 24, stiffness: 360 }}
-              className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
+              className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex items-center justify-between min-w-0"
             >
               <div className="min-w-0 pr-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">
                   Late Arrivals
                 </span>
-                <span className="text-2xl sm:text-3xl font-bold text-[#16191E] tracking-tight block">
+                <span className="text-xl sm:text-2xl font-semibold text-[#16191E] tabular-nums block">
                   {queueMetrics.lateRate.toFixed(1)}%
                 </span>
                 <p className="text-xs text-slate-500 mt-1.5">
                   {queueMetrics.lateArrivedCount} late of {queueMetrics.arrivedCount} attended
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-tl from-blue-700 to-blue-500 shadow-md shadow-blue-500/25 flex items-center justify-center text-white flex-shrink-0">
-                <Clock className="w-5 h-5 stroke-[2.2]" />
+              <div className="w-10 h-10 rounded-full border border-blue-100 bg-blue-50 text-[#2563EB] flex items-center justify-center flex-shrink-0">
+                <Clock className="w-4 h-4 stroke-[1.9]" />
               </div>
             </motion.div>
           </motion.div>
 
-          <motion.div
-            variants={fadeScale}
-            initial="hidden"
-            animate="visible"
-            className="bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-2xs space-y-4"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs space-y-5">
+            <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                  Queue Status • {periodSubtitle}
+                </span>
+                <h3 className="mt-1 text-base font-semibold text-[#16191E]">
                   Live Queue &amp; Appointment Status
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Waiting, in progress, completed, and cancelled breakdown ({periodSubtitle})
+                  Waiting, in progress, completed, and cancelled breakdown.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {(queueMetrics.todayWaiting > 0 || queueMetrics.todayInProgress > 0) && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-[#2563EB] border border-blue-200/80">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium bg-blue-50 text-[#2563EB] border border-blue-200/80">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] animate-pulse" aria-hidden="true" />
-                    {queueMetrics.todayWaiting} waiting · {queueMetrics.todayInProgress} in progress today
+                    {queueMetrics.todayWaiting} waiting • {queueMetrics.todayInProgress} in progress today
                   </span>
                 )}
-                <span className="text-[11px] font-semibold text-slate-400">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-600">
                   {queueMetrics.totalBookings.toLocaleString('en-IN')} total
                 </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
-              <div className="lg:col-span-5 grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+              <div className="lg:col-span-5 grid grid-cols-2 gap-3">
                 {queueMetrics.statusBreakdown.map((item) => (
                   <div
                     key={item.label}
-                    className="rounded-xl border border-[#ECEEF2] bg-slate-50/60 p-3 flex flex-col justify-between gap-1.5 min-w-0"
+                    className="rounded-xl border border-[#ECEEF2] bg-slate-50/60 p-3.5 flex flex-col justify-between gap-1.5 min-w-0"
                   >
                     <div className="flex items-center justify-between gap-1.5">
-                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-600 truncate">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 truncate">
                         <span
                           className="w-2 h-2 rounded-full flex-shrink-0"
                           style={{ backgroundColor: item.color }}
@@ -3132,14 +3091,14 @@ export function AnalyticsView({
                         />
                         {item.label}
                       </span>
-                      <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold border ${item.badgeClass}`}>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${item.badgeClass}`}>
                         {item.pct.toFixed(1)}%
                       </span>
                     </div>
-                    <div className="text-xl font-bold text-[#16191E] tabular-nums">
+                    <div className="text-xl font-semibold text-[#16191E] tabular-nums">
                       {item.count.toLocaleString('en-IN')}
                     </div>
-                    <p className="text-[10px] text-slate-500 truncate">{item.note}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{item.note}</p>
                   </div>
                 ))}
               </div>
@@ -3155,30 +3114,28 @@ export function AnalyticsView({
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
                     <Activity className="w-8 h-8 text-slate-300 mb-2" />
-                    <p className="text-xs font-semibold text-slate-600">No queue or booking records in this period</p>
+                    <p className="text-xs font-medium text-slate-600">No queue or booking records in this period</p>
                   </div>
                 )}
               </div>
             </div>
-          </motion.div>
+          </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            <motion.div
-              variants={fadeScale}
-              initial="hidden"
-              animate="visible"
-              className="lg:col-span-6 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0"
-            >
-              <div className="flex items-start justify-between gap-2 mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
+            <div className="lg:col-span-6 bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0">
+              <div className="flex items-start justify-between gap-3 mb-5">
                 <div>
-                  <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                    Cancellation Insights
+                  </span>
+                  <h3 className="mt-1 text-base font-semibold text-[#16191E]">
                     Why Bookings Were Cancelled
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Logged cancellation reasons ({periodSubtitle})
+                    Logged cancellation reasons ({periodSubtitle}).
                   </p>
                 </div>
-                <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 flex-shrink-0">
+                <div className="w-10 h-10 rounded-full border border-rose-100 bg-rose-50 flex items-center justify-center text-rose-600 flex-shrink-0">
                   <CalendarX className="w-4 h-4" />
                 </div>
               </div>
@@ -3189,28 +3146,26 @@ export function AnalyticsView({
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
                     <CalendarX className="w-8 h-8 text-slate-300 mb-2" />
-                    <p className="text-xs font-semibold text-slate-600">No cancellations recorded in this period</p>
+                    <p className="text-xs font-medium text-slate-600">No cancellations recorded in this period</p>
                   </div>
                 )}
               </div>
-            </motion.div>
+            </div>
 
-            <motion.div
-              variants={fadeScale}
-              initial="hidden"
-              animate="visible"
-              className="lg:col-span-6 bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0 space-y-4"
-            >
-              <div className="flex items-start justify-between gap-2">
+            <div className="lg:col-span-6 bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between min-w-0 space-y-5">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                    Link Funnel
+                  </span>
+                  <h3 className="mt-1 text-base font-semibold text-[#16191E]">
                     WhatsApp Links That Became Bookings
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Booking link funnel conversion ({periodSubtitle})
+                    Booking link conversion ({periodSubtitle}).
                   </p>
                 </div>
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 flex-shrink-0">
+                <div className="w-10 h-10 rounded-full border border-emerald-100 bg-emerald-50 flex items-center justify-center text-emerald-600 flex-shrink-0">
                   <Link2 className="w-4 h-4" />
                 </div>
               </div>
@@ -3220,68 +3175,56 @@ export function AnalyticsView({
                   <div className="relative w-full h-[180px]">
                     <ChartCanvas type="bar" data={waConversionChartData} options={horizontalBarOptions} showValues={true} />
                   </div>
-                  <div className="overflow-x-auto border-t border-slate-100 pt-3">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                          <th className="py-2 px-2">Step</th>
-                          <th className="py-2 px-2 text-right">Count</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50 text-xs">
-                        <tr>
-                          <td className="py-2 px-2 font-semibold text-slate-700">Links Sent</td>
-                          <td className="py-2 px-2 text-right font-bold text-[#16191E] tabular-nums">
-                            {queueMetrics.linksSent.toLocaleString('en-IN')}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="py-2 px-2 font-semibold text-slate-700">Bookings Made</td>
-                          <td className="py-2 px-2 text-right font-bold text-[#16191E] tabular-nums">
-                            {queueMetrics.linkBookings.toLocaleString('en-IN')}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="py-2 px-2 font-semibold text-slate-700">Conversion Rate</td>
-                          <td className="py-2 px-2 text-right font-bold text-emerald-600 tabular-nums">
-                            {queueMetrics.waConversion.toFixed(1)}%
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                  <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80 text-xs">
+                    <li className="py-3 flex items-center justify-between">
+                      <span className="font-medium text-slate-700">Links Sent</span>
+                      <span className="font-semibold text-[#16191E] tabular-nums">
+                        {queueMetrics.linksSent.toLocaleString('en-IN')}
+                      </span>
+                    </li>
+                    <li className="py-3 flex items-center justify-between">
+                      <span className="font-medium text-slate-700">Bookings Made</span>
+                      <span className="font-semibold text-[#16191E] tabular-nums">
+                        {queueMetrics.linkBookings.toLocaleString('en-IN')}
+                      </span>
+                    </li>
+                    <li className="py-3 flex items-center justify-between">
+                      <span className="font-medium text-slate-700">Conversion Rate</span>
+                      <span className="rounded-full border border-emerald-200/70 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 tabular-nums">
+                        {queueMetrics.waConversion.toFixed(1)}%
+                      </span>
+                    </li>
+                  </ul>
                 </>
               ) : (
                 <div className="h-[250px] flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
                   <Link2 className="w-8 h-8 text-slate-300 mb-2" />
-                  <p className="text-xs font-semibold text-slate-600">No WhatsApp booking link logs in this period</p>
+                  <p className="text-xs font-medium text-slate-600">No WhatsApp booking link logs in this period</p>
                 </div>
               )}
-            </motion.div>
+            </div>
           </div>
 
-          <motion.div
-            variants={fadeScale}
-            initial="hidden"
-            animate="visible"
-            className="bg-white rounded-2xl p-4 sm:p-6 border border-[#ECEEF2] shadow-2xs space-y-5"
-          >
+          <div className="bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs space-y-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                  Quota Utilization • {periodSubtitle}
+                </span>
+                <h3 className="mt-1 text-base font-semibold text-[#16191E]">
                   How Full Each Doctor&apos;s Day Is (%, All Branches)
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Daily appointment bookings vs. configured physician daily quota ({periodSubtitle})
+                  Daily appointment bookings vs. configured physician daily quota.
                 </p>
               </div>
-              <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-[#2563EB] flex-shrink-0">
+              <div className="w-10 h-10 rounded-full border border-blue-100 bg-blue-50 flex items-center justify-center text-[#2563EB] flex-shrink-0">
                 <Gauge className="w-4 h-4" />
               </div>
             </div>
 
             {queueMetrics.quotaRows.length === 0 ? (
-              <div className="py-10 text-center text-xs text-slate-400 bg-slate-50/70 rounded-xl border border-dashed border-slate-200">
+              <div className="py-10 text-center text-xs text-slate-400 border-y border-slate-200/80">
                 No active doctors configured to compute daily quota utilization.
               </div>
             ) : (
@@ -3289,62 +3232,63 @@ export function AnalyticsView({
                 <div className="relative w-full h-[230px]">
                   <ChartCanvas type="bar" data={doctorQuotaChartData} options={branchChartOptions} showValues={true} />
                 </div>
-                <div className="overflow-x-auto -mx-2 sm:mx-0 border-t border-slate-100 pt-3">
-                  <table className="w-full text-left border-collapse min-w-[480px]">
-                    <thead>
-                      <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        <th className="py-2.5 px-3">Doctor</th>
-                        <th className="py-2.5 px-3 text-right">Daily Quota</th>
-                        <th className="py-2.5 px-3 text-right">Avg Bookings / Day</th>
-                        <th className="py-2.5 px-3 text-right">Quota Used</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50 text-xs">
-                      {queueMetrics.quotaRows.map((q) => (
-                        <tr key={q.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-3 px-3 font-semibold text-[#16191E]">{q.name}</td>
-                          <td className="py-3 px-3 text-right font-medium text-slate-600 tabular-nums">
-                            {q.dailyQuota}
-                          </td>
-                          <td className="py-3 px-3 text-right font-medium text-slate-700 tabular-nums">
-                            {q.perDay.toFixed(1)}
-                          </td>
-                          <td className="py-3 px-3 text-right font-bold text-[#2563EB] tabular-nums">
-                            {q.usedPct.toFixed(1)}%
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80">
+                  {queueMetrics.quotaRows.map((q, idx) => (
+                    <li
+                      key={q.id}
+                      className="py-4 grid grid-cols-1 sm:grid-cols-[2rem_1.3fr_1fr_auto] gap-3 sm:gap-5 items-center text-xs"
+                    >
+                      <span className="text-xs font-medium text-slate-400 tabular-nums">
+                        {String(idx + 1).padStart(2, '0')}
+                      </span>
+                      <span className="text-sm font-medium text-[#16191E] truncate">{q.name}</span>
+                      <div className="flex flex-wrap items-center gap-3 text-slate-500">
+                        <span>
+                          Daily Quota: <strong className="font-medium text-slate-800 tabular-nums">{q.dailyQuota}</strong>
+                        </span>
+                        <span className="text-slate-300">•</span>
+                        <span>
+                          Avg / Day: <strong className="font-medium text-slate-800 tabular-nums">{q.perDay.toFixed(1)}</strong>
+                        </span>
+                      </div>
+                      <div className="flex items-center sm:justify-end">
+                        <span className="rounded-full border border-blue-200/70 bg-blue-50 px-3 py-0.5 text-[11px] font-medium text-[#2563EB] tabular-nums">
+                          {q.usedPct.toFixed(1)}% Used
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </>
             )}
-          </motion.div>
+          </div>
         </>
       )}
 
       {activeTab === 'doctors' && (
         <>
-          <motion.div
-            variants={fadeScale}
-            initial="hidden"
-            animate="visible"
-            className="bg-white rounded-2xl p-3.5 sm:p-4 border border-[#ECEEF2] shadow-2xs space-y-3"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
-                Branch Distribution &amp; Time Workload
-              </h3>
-              <span className="text-[11px] font-semibold text-slate-400">{periodSubtitle}</span>
+          <div className="bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs space-y-5">
+            <div className="flex items-end justify-between gap-3 flex-wrap">
+              <div>
+                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                  Physician Throughput • {periodSubtitle}
+                </span>
+                <h3 className="mt-1 text-base font-semibold text-[#16191E]">
+                  Branch Distribution &amp; Time Workload
+                </h3>
+              </div>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-600">
+                {doctorReport.summary.length} {doctorReport.summary.length === 1 ? 'Doctor' : 'Doctors'}
+              </span>
             </div>
 
             {doctorReport.summary.length === 0 ? (
-              <p className="py-5 text-center text-xs text-slate-400">
+              <p className="py-8 border-y border-slate-200/80 text-center text-xs text-slate-400">
                 No doctor activity found for the selected filters.
               </p>
             ) : (
               <>
-                <div className="relative w-full h-[165px]">
+                <div className="relative w-full h-[175px]">
                   <ChartCanvas
                     type="bar"
                     data={doctorPatientsBranchChartData}
@@ -3353,59 +3297,51 @@ export function AnalyticsView({
                   />
                 </div>
 
-                <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-t border-slate-100 pt-1.5">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
-                        <th className="py-2 pr-2">Doctor</th>
-                        <th className="py-2 px-2 text-right">Consulted</th>
-                        {doctorReport.branchNames.map((bn) => (
-                          <th key={bn} title={bn} className="py-2 px-2 text-right">
-                            <span className="inline-block max-w-[120px] truncate align-bottom">
-                              {formatCompactBranchHeader(bn, doctorReport.branchNames)}
-                            </span>
-                          </th>
+                <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80">
+                  {pagedDoctorSummary.rows.map((d, idx) => (
+                    <li
+                      key={d.id}
+                      className="py-4 grid grid-cols-1 lg:grid-cols-[2rem_1.2fr_1.6fr_auto] gap-3 sm:gap-5 items-start lg:items-center text-xs"
+                    >
+                      <span className="text-xs font-medium text-slate-400 tabular-nums">
+                        {String(pagedDoctorSummary.startIndex + idx).padStart(2, '0')}
+                      </span>
+
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: d.color }}
+                          aria-hidden="true"
+                        />
+                        <span className="text-sm font-medium text-[#16191E] truncate">{d.name}</span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-500">
+                        <span>
+                          Consulted: <strong className="font-medium text-slate-800 tabular-nums">{d.consulted.toLocaleString('en-IN')}</strong>
+                        </span>
+                        {doctorReport.branchNames.map((bn, bIdx) => (
+                          <span key={`${d.id}-br-${bIdx}`}>
+                            • {formatCompactBranchHeader(bn, doctorReport.branchNames)}:{' '}
+                            <strong className="font-medium text-slate-700 tabular-nums">{(d.byBranch[bIdx] ?? 0).toLocaleString('en-IN')}</strong>
+                          </span>
                         ))}
-                        <th className="py-2 px-2 text-right">Total Time</th>
-                        <th className="py-2 px-2 text-right">Avg / Patient</th>
-                        <th className="py-2 pl-2 text-right">Leaves</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50 text-xs">
-                      {pagedDoctorSummary.rows.map((d) => (
-                        <tr key={d.id} className="hover:bg-slate-50/80 transition-colors whitespace-nowrap">
-                          <td className="py-2 pr-2 font-semibold text-[#16191E]">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                style={{ backgroundColor: d.color }}
-                                aria-hidden="true"
-                              />
-                              <span>{d.name}</span>
-                            </div>
-                          </td>
-                          <td className="py-2 px-2 text-right font-bold text-slate-800 tabular-nums">
-                            {d.consulted.toLocaleString('en-IN')}
-                          </td>
-                          {d.byBranch.map((cnt, idx) => (
-                            <td key={`${d.id}-br-${idx}`} className="py-2 px-2 text-right text-slate-600 tabular-nums">
-                              {cnt.toLocaleString('en-IN')}
-                            </td>
-                          ))}
-                          <td className="py-2 px-2 text-right text-slate-600 tabular-nums">
-                            {d.totalMins !== null ? formatHoursMins(d.totalMins) : 'N/A'}
-                          </td>
-                          <td className="py-2 px-2 text-right font-semibold text-[#2563EB] tabular-nums">
-                            {d.avgMins !== null ? `${d.avgMins.toFixed(1)} min` : 'N/A'}
-                          </td>
-                          <td className="py-2 pl-2 text-right font-semibold text-amber-600 tabular-nums">
-                            {d.leaveDays}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                        <span>
+                          • Total Time: <strong className="font-medium text-slate-700 tabular-nums">{d.totalMins !== null ? formatHoursMins(d.totalMins) : 'N/A'}</strong>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 lg:justify-end flex-wrap">
+                        <span className="rounded-full border border-blue-200/70 bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-[#2563EB] tabular-nums">
+                          {d.avgMins !== null ? `${d.avgMins.toFixed(1)} min avg` : 'No avg'}
+                        </span>
+                        <span className="rounded-full border border-amber-200/70 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700 tabular-nums">
+                          {d.leaveDays} {d.leaveDays === 1 ? 'leave' : 'leaves'}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
 
                 <DoctorTablePagination
                   currentPage={pagedDoctorSummary.currentPage}
@@ -3418,22 +3354,22 @@ export function AnalyticsView({
                 />
               </>
             )}
-          </motion.div>
+          </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            <motion.div
-              variants={fadeScale}
-              initial="hidden"
-              animate="visible"
-              className="lg:col-span-6 h-full bg-white rounded-2xl p-3.5 sm:p-4 border border-[#ECEEF2] shadow-2xs flex flex-col gap-3 min-w-0"
-            >
-              <div className="space-y-2">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
+            <div className="lg:col-span-6 h-full bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs flex flex-col gap-4 min-w-0">
+              <div className="space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
-                    Appointment Overview
-                  </h3>
+                  <div>
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                      Daily Activity
+                    </span>
+                    <h3 className="mt-1 text-base font-semibold text-[#16191E]">
+                      Appointment Overview
+                    </h3>
+                  </div>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <label className="flex items-center gap-1.5 bg-slate-50 border border-[#ECEEF2] rounded-lg px-2 py-1 text-[11px] text-slate-600">
+                    <label className="flex items-center gap-1.5 bg-slate-50 border border-[#ECEEF2] rounded-full px-3 py-1 text-[11px] text-slate-600">
                       <Stethoscope className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                       <select
                         aria-label="Filter Appointment Overview by doctor"
@@ -3442,7 +3378,7 @@ export function AnalyticsView({
                           setOverviewDoctorId(e.target.value);
                           setDoctorDailyPage(1);
                         }}
-                        className="bg-transparent font-semibold text-slate-800 focus:outline-hidden cursor-pointer max-w-[130px] text-[11px]"
+                        className="bg-transparent font-medium text-slate-800 focus:outline-hidden cursor-pointer max-w-[130px] text-[11px]"
                       >
                         <option value="">All Doctors</option>
                         {activeDoctors.map((d) => (
@@ -3461,7 +3397,7 @@ export function AnalyticsView({
                         setOverviewDateFilter(e.target.value);
                         setDoctorDailyPage(1);
                       }}
-                      className="bg-slate-50 border border-[#ECEEF2] rounded-lg px-2.5 py-1 font-semibold text-slate-800 focus:outline-hidden cursor-pointer text-[11px]"
+                      className="bg-slate-50 border border-[#ECEEF2] rounded-full px-3 py-1 font-medium text-slate-700 focus:outline-hidden cursor-pointer text-[11px]"
                     />
                     {overviewDateFilter && (
                       <button
@@ -3472,7 +3408,7 @@ export function AnalyticsView({
                         }}
                         aria-label="Clear appointment overview date filter"
                         title="Show last 7 days"
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-semibold transition cursor-pointer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-slate-200 bg-white hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] text-slate-600 text-[11px] font-medium transition-colors cursor-pointer"
                       >
                         <X className="w-3 h-3" />
                         <span>7D</span>
@@ -3480,9 +3416,9 @@ export function AnalyticsView({
                     )}
                   </div>
                 </div>
-                <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-500">
+                <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
                   <span>{overviewDateFilter ? `Showing ${overviewDateFilter}` : 'Last 7 Days'}</span>
-                  <div className="flex items-center gap-3 text-slate-600">
+                  <div className="flex items-center gap-3 text-slate-600 text-[11px] font-medium">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-[#2563EB]" aria-hidden="true" />
                       Booked
@@ -3498,7 +3434,7 @@ export function AnalyticsView({
               {doctorReport.dailyRows.length === 0 ? (
                 <div className="flex-1 min-h-[220px] flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-6">
                   <BarChart3 className="w-8 h-8 text-slate-300 mb-2" />
-                  <p className="text-xs font-semibold text-slate-600">
+                  <p className="text-xs font-medium text-slate-600">
                     {overviewDateFilter
                       ? `No appointment overview data for ${overviewDateFilter}.`
                       : 'No 7-day doctor data available.'}
@@ -3514,55 +3450,44 @@ export function AnalyticsView({
                       showValues={true}
                     />
                   </div>
-                  <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-t border-slate-100 pt-1.5 flex-1">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
-                          <th className="py-2 pr-2">Date</th>
-                          <th className="py-2 px-2">Doctor</th>
-                          <th className="py-2 px-2 text-right">Consulted / Booked</th>
-                          <th className="py-2 px-2 text-right">Avg Time</th>
-                          <th className="py-2 pl-2 text-right">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50 text-xs">
-                        {pagedDoctorDaily.rows.map((d) => (
-                          <tr key={`${d.date}-${d.doctorId}`} className="hover:bg-slate-50/80 transition-colors whitespace-nowrap">
-                            <td className="py-2 pr-2 font-mono text-[11px] text-slate-600 whitespace-nowrap">
-                              {d.date}
-                            </td>
-                            <td className="py-2 px-2 font-semibold text-[#16191E] whitespace-nowrap">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className="w-2 h-2 rounded-full flex-shrink-0"
-                                  style={{ backgroundColor: d.color }}
-                                  aria-hidden="true"
-                                />
-                                <span>{d.name}</span>
-                              </div>
-                            </td>
-                            <td className="py-2 px-2 text-right font-bold text-slate-800 tabular-nums">
-                              {d.consulted} / {d.booked}
-                            </td>
-                            <td className="py-2 px-2 text-right font-medium text-[#2563EB] tabular-nums">
-                              {d.avgMins !== null ? `${d.avgMins.toFixed(1)} min` : '—'}
-                            </td>
-                            <td className="py-2 pl-2 text-right">
-                              <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                  d.onLeave
-                                    ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200/70'
-                                }`}
-                              >
-                                {d.onLeave ? 'On Leave' : 'Working'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80 flex-1">
+                    {pagedDoctorDaily.rows.map((d) => (
+                      <li
+                        key={`${d.date}-${d.doctorId}`}
+                        className="py-3 flex flex-wrap items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            className="w-2 h-2 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: d.color }}
+                            aria-hidden="true"
+                          />
+                          <div className="min-w-0">
+                            <span className="font-medium text-[#16191E] block truncate">{d.name}</span>
+                            <span className="text-[11px] text-slate-400 tabular-nums">{d.date}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 flex-shrink-0">
+                          <span className="text-xs font-medium text-slate-700 tabular-nums">
+                            {d.consulted}/{d.booked}
+                          </span>
+                          <span className="text-[11px] font-medium text-[#2563EB] tabular-nums">
+                            {d.avgMins !== null ? `${d.avgMins.toFixed(1)}m` : '—'}
+                          </span>
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-medium border ${
+                              d.onLeave
+                                ? 'bg-amber-50 text-amber-800 border-amber-200/70'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200/70'
+                            }`}
+                          >
+                            {d.onLeave ? 'On Leave' : 'Working'}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
 
                   <DoctorTablePagination
                     currentPage={pagedDoctorDaily.currentPage}
@@ -3575,72 +3500,62 @@ export function AnalyticsView({
                   />
                 </>
               )}
-            </motion.div>
+            </div>
 
-            <motion.div
-              variants={fadeScale}
-              initial="hidden"
-              animate="visible"
-              className="lg:col-span-6 h-full bg-white rounded-2xl p-3.5 sm:p-4 border border-[#ECEEF2] shadow-2xs flex flex-col gap-3 min-w-0"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight">
-                  Doctor Leave Days
-                </h3>
-                <span className="text-[11px] font-semibold text-slate-400">{doctorReport.leaves.length} logs</span>
+            <div className="lg:col-span-6 h-full bg-white rounded-2xl p-6 sm:p-7 border border-[#ECEEF2] shadow-2xs flex flex-col gap-4 min-w-0">
+              <div className="flex items-end justify-between gap-2">
+                <div>
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+                    Leave Schedule
+                  </span>
+                  <h3 className="mt-1 text-base font-semibold text-[#16191E]">
+                    Doctor Leave Days
+                  </h3>
+                </div>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-600">
+                  {doctorReport.leaves.length} logs
+                </span>
               </div>
 
               {doctorReport.leaves.length === 0 ? (
                 <div className="flex-1 min-h-[180px] flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 p-5">
                   <Calendar className="w-7 h-7 text-slate-300 mb-2" />
-                  <p className="text-xs font-semibold text-slate-600">No doctor leave days recorded.</p>
+                  <p className="text-xs font-medium text-slate-600">No doctor leave days recorded.</p>
                 </div>
               ) : (
                 <>
-                  <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-t border-slate-100 pt-1.5 flex-1">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
-                          <th className="py-2 pr-2">Date</th>
-                          <th className="py-2 px-2">Doctor</th>
-                          <th className="py-2 px-2">Type</th>
-                          <th className="py-2 pl-2 text-right">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50 text-xs">
-                        {pagedDoctorLeaves.rows.map((l, idx) => (
-                          <tr
-                            key={`${l.dateKey}-${l.doctorId}-${l.type}-${pagedDoctorLeaves.startIndex + idx}`}
-                            className="hover:bg-slate-50/80 transition-colors whitespace-nowrap"
-                          >
-                            <td className="py-2 pr-2 font-mono text-[11px] text-slate-600">{l.dateKey}</td>
-                            <td className="py-2 px-2 font-semibold text-[#16191E]">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className="w-2 h-2 rounded-full flex-shrink-0"
-                                  style={{ backgroundColor: l.color }}
-                                  aria-hidden="true"
-                                />
-                                <span>{l.doctorName}</span>
-                              </div>
-                            </td>
-                            <td className="py-2 px-2 text-slate-600">{l.type}</td>
-                            <td className="py-2 pl-2 text-right">
-                              <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                  l.upcoming
-                                    ? 'bg-blue-50 text-[#2563EB]'
-                                    : 'bg-slate-100 text-slate-600'
-                                }`}
-                              >
-                                {l.upcoming ? 'Upcoming' : 'Taken'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80 flex-1">
+                    {pagedDoctorLeaves.rows.map((l, idx) => (
+                      <li
+                        key={`${l.dateKey}-${l.doctorId}-${l.type}-${pagedDoctorLeaves.startIndex + idx}`}
+                        className="py-3 flex flex-wrap items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            className="w-2 h-2 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: l.color }}
+                            aria-hidden="true"
+                          />
+                          <div className="min-w-0">
+                            <span className="font-medium text-[#16191E] block truncate">{l.doctorName}</span>
+                            <span className="text-[11px] text-slate-400 tabular-nums">
+                              {l.dateKey} • {l.type}
+                            </span>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-medium border ${
+                            l.upcoming
+                              ? 'bg-blue-50 text-[#2563EB] border-blue-200/70'
+                              : 'bg-slate-50 text-slate-600 border-slate-200'
+                          }`}
+                        >
+                          {l.upcoming ? 'Upcoming' : 'Taken'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
 
                   <DoctorTablePagination
                     currentPage={pagedDoctorLeaves.currentPage}
@@ -3653,7 +3568,7 @@ export function AnalyticsView({
                   />
                 </>
               )}
-            </motion.div>
+            </div>
           </div>
         </>
       )}

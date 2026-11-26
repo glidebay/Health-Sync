@@ -1182,7 +1182,14 @@ export async function fetchPatientAppointmentsFromDb(params?: {
 }
 
 export type RegisterWalkinResult =
-  | (FormattedQueuePatient & { success: true; message?: string })
+  | (FormattedQueuePatient & {
+      success: true;
+      message?: string;
+      alreadyInQueue?: boolean;
+      isReturningPatient?: boolean;
+      totalVisits?: number;
+      matchType?: string;
+    })
   | { success: false; error: string; message: string; code?: string; patient?: undefined; id?: undefined };
 
 export async function registerWalkinPatientDb(params: {
@@ -1215,7 +1222,7 @@ export async function registerWalkinPatientDb(params: {
       targetDoctorId = doctorData && doctorData.length > 0 ? doctorData[0].id : null;
     }
 
-    // Attempt RPC register_walk_in_patient first (exact SQL parameter order & keys)
+    // Attempt RPC register_walk_in_patient first (exact 12-param SQL signature)
     try {
       const { data: rpcData, error: rpcError } = await supabase.rpc('register_walk_in_patient', {
         p_clinic_id: params.clinicId || null,
@@ -1225,12 +1232,15 @@ export async function registerWalkinPatientDb(params: {
         p_phone_number: patientPhone,
         p_age: params.age,
         p_gender: params.gender,
+        p_blood_group: null,
+        p_visit_type: 'Walk-in',
+        p_booking_channel: 'Walk-in',
         p_priority: params.priority || 'Normal',
         p_scheduled_time: new Date().toISOString(),
       });
 
       if (!rpcError && rpcData && rpcData.success !== false) {
-        const rawToken = rpcData.queue_token_no || rpcData.fifo_token_no || 1;
+        const rawToken = rpcData.token_number ?? rpcData.queue_token_no ?? rpcData.fifo_token_no ?? 1;
         const tokenDisplay = typeof rawToken === 'string' && rawToken.startsWith('P') ? rawToken : `P${String(rawToken).padStart(3, '0')}`;
         const bookingTime = new Date().toISOString();
         return {
@@ -1241,15 +1251,20 @@ export async function registerWalkinPatientDb(params: {
           age: params.age,
           gender: (params.gender as any) || 'Male',
           phone: patientPhone,
-          status: normalizePatientStatus(rpcData.status || 'waiting'),
+          status: normalizePatientStatus(rpcData.status || 'Waiting'),
           time: rpcData.slot_time || rpcData.assigned_slot || new Date(bookingTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
           tokenNumber: tokenDisplay,
           queueTokenNo: typeof rawToken === 'number' ? rawToken : parseInt(rawToken, 10) || 1,
           patientNumber: rpcData.patient_number || (typeof rawToken === 'number' ? rawToken : 1),
-          displayId: tokenDisplay,
+          displayId: rpcData.display_id || tokenDisplay,
           priority: (params.priority as any) || 'Normal',
           scheduledTime: bookingTime,
           visitType: 'Walk-in',
+          message: rpcData.message,
+          alreadyInQueue: Boolean(rpcData.already_in_queue),
+          isReturningPatient: Boolean(rpcData.is_returning_patient),
+          totalVisits: typeof rpcData.total_visits === 'number' ? rpcData.total_visits : undefined,
+          matchType: rpcData.match_type,
         };
       } else if (rpcError?.message?.includes('Daily Quota Reached') || rpcError?.message?.toLowerCase().includes('quota')) {
         return {
@@ -1899,7 +1914,6 @@ export async function completeConsultationDb(params: {
         appointment_id: params.appointmentId,
         inventory_id: String(rx.inventoryId),
         dispensed_quantity: rx.qty,
-        created_at: new Date().toISOString(),
       };
       if (rx.medicineName) rxInsert.medicine_name = rx.medicineName;
       if (rx.dosage) rxInsert.dosage = rx.dosage;
@@ -1907,7 +1921,29 @@ export async function completeConsultationDb(params: {
       if (rx.duration) rxInsert.duration = rx.duration;
       if (rx.instructions) rxInsert.instructions = rx.instructions;
 
-      await supabase.from('prescribed_medications').insert([rxInsert]);
+      const { error: rxInsertErr } = await supabase
+        .from('prescribed_medications')
+        .insert([rxInsert]);
+
+      if (rxInsertErr) {
+        const errCode = (rxInsertErr as any).code || '';
+        const errMsg = rxInsertErr.message || '';
+        if (errCode === 'PGRST204' || errCode === '42703' || errMsg.toLowerCase().includes('column')) {
+          // Schema only has core columns (id, appointment_id, inventory_id, dispensed_quantity)
+          const { error: coreErr } = await supabase.from('prescribed_medications').insert([
+            {
+              appointment_id: params.appointmentId,
+              inventory_id: String(rx.inventoryId),
+              dispensed_quantity: rx.qty,
+            },
+          ]);
+          if (coreErr) {
+            console.warn('Error inserting core prescribed_medications row:', coreErr.message);
+          }
+        } else {
+          console.warn('Error inserting prescribed_medications row:', errMsg);
+        }
+      }
 
       const { data: invItem } = await supabase
         .from('inventory')
@@ -1946,6 +1982,73 @@ export async function completeConsultationDb(params: {
   } catch (err) {
     console.error('Error completing consultation in DB:', err);
     return false;
+  }
+}
+
+export async function saveAppointmentPrescriptionPdfDb(params: {
+  appointmentId: string;
+  clinicId?: string | null;
+  patientId?: string | null;
+  pdfBytes?: Uint8Array;
+  customRxData?: Record<string, any>;
+}): Promise<{ pdfUrl?: string | null; saved: boolean }> {
+  try {
+    let publicOrPathUrl: string | null = null;
+
+    if (params.pdfBytes && params.pdfBytes.length > 0) {
+      const clinicSeg = (params.clinicId || 'clinic').replace(/[^a-zA-Z0-9_-]/g, '');
+      const patientSeg = (params.patientId || 'patient').replace(/[^a-zA-Z0-9_-]/g, '');
+      const objectPath = `${clinicSeg}/${patientSeg}/${params.appointmentId}.pdf`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from('prescriptions')
+        .upload(objectPath, params.pdfBytes, {
+          contentType: 'application/pdf',
+          upsert: true,
+        });
+
+      if (!uploadErr) {
+        const { data: pubData } = supabase.storage
+          .from('prescriptions')
+          .getPublicUrl(objectPath);
+        publicOrPathUrl = pubData?.publicUrl || objectPath;
+      } else {
+        console.warn('Supabase storage upload (prescriptions bucket):', uploadErr.message);
+      }
+    }
+
+    const updatePayload: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (publicOrPathUrl) {
+      updatePayload.prescription_pdf_url = publicOrPathUrl;
+    }
+    if (params.customRxData) {
+      updatePayload.custom_rx_data = params.customRxData;
+    }
+
+    if (publicOrPathUrl || params.customRxData) {
+      const { error: updErr } = await supabase
+        .from('appointments')
+        .update(updatePayload)
+        .eq('id', params.appointmentId);
+
+      if (updErr) {
+        const msg = updErr.message || '';
+        // If custom_rx_data column hasn't been added yet, retry with just prescription_pdf_url
+        if ((updErr.code === 'PGRST204' || msg.includes('custom_rx_data')) && publicOrPathUrl) {
+          await supabase
+            .from('appointments')
+            .update({ prescription_pdf_url: publicOrPathUrl, updated_at: new Date().toISOString() })
+            .eq('id', params.appointmentId);
+        }
+      }
+    }
+
+    return { pdfUrl: publicOrPathUrl, saved: Boolean(publicOrPathUrl || params.customRxData) };
+  } catch (err) {
+    console.warn('saveAppointmentPrescriptionPdfDb error:', err);
+    return { saved: false };
   }
 }
 

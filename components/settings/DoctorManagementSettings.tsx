@@ -320,17 +320,15 @@ export function DoctorManagementSettings({
     <div className="space-y-6">
       <EcgActionLoader isLoading={isLoading} fullscreen={true} />
 
-      {/* Clean Header */}
-      <div className="bg-white rounded-2xl border border-[#ECEEF2] p-5 sm:p-6 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Editorial Header */}
+      <div className="bg-white rounded-2xl border border-[#ECEEF2] p-6 sm:p-8 shadow-2xs flex flex-col sm:flex-row sm:items-end justify-between gap-5">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-base sm:text-lg font-bold text-[#16191E]">
-              Doctor Management
-            </h2>
-            <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
-              {visibleDoctors.length} {visibleDoctors.length === 1 ? 'Doctor' : 'Doctors'}
-            </span>
-          </div>
+          <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+            Physician Roster • {visibleDoctors.length} {visibleDoctors.length === 1 ? 'Doctor' : 'Doctors'}
+          </span>
+          <h2 className="mt-1.5 text-base sm:text-lg font-semibold text-[#16191E]">
+            Doctor Management
+          </h2>
           <p className="text-xs text-slate-500 mt-1">
             {!isAdminUser && lockedBranchName
               ? `Manage doctors and daily quotas for ${lockedBranchName}.`
@@ -341,19 +339,19 @@ export function DoctorManagementSettings({
         <button
           type="button"
           onClick={handleOpenAdd}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#2563EB] hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-xs transition cursor-pointer self-start sm:self-auto"
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#2563EB] hover:bg-blue-700 text-white font-medium rounded-full text-xs shadow-2xs transition cursor-pointer self-start sm:self-auto"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5" />
           <span>Add New Doctor</span>
         </button>
       </div>
 
       {statusMessage && (
         <div
-          className={`p-3.5 rounded-xl text-xs font-medium flex items-center gap-2 ${
+          className={`p-4 rounded-2xl text-xs font-medium flex items-center gap-2.5 ${
             statusMessage.type === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-              : 'bg-rose-50 text-rose-800 border border-rose-200'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/80'
+              : 'bg-rose-50 text-rose-800 border border-rose-200/80'
           }`}
         >
           {statusMessage.type === 'success' ? (
@@ -365,21 +363,24 @@ export function DoctorManagementSettings({
         </div>
       )}
 
-      {/* Doctor Directory Grid */}
+      {/* Doctor Directory Sub-divided Cards */}
       {visibleDoctors.length === 0 && !isLoading ? (
-        <div className="p-12 text-center bg-white rounded-2xl border border-[#ECEEF2]">
-          <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-          <h4 className="text-sm font-bold text-slate-700">No Doctors Found</h4>
-          <p className="text-xs text-slate-400 mt-1">
+        <div className="p-12 text-center bg-white rounded-2xl border border-[#ECEEF2] shadow-2xs">
+          <div className="w-11 h-11 rounded-full border border-slate-200 bg-slate-50 text-slate-400 flex items-center justify-center mx-auto mb-3.5">
+            <Users className="w-5 h-5 stroke-[1.75]" />
+          </div>
+          <h4 className="text-sm font-medium text-slate-800">No Doctors Found</h4>
+          <p className="text-xs text-slate-400 mt-1.5">
             Click &quot;Add New Doctor&quot; above to add a doctor for this clinic.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {visibleDoctors.map((doc) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+          {visibleDoctors.map((doc, index) => {
             const isAdmin = Boolean(doc.is_admin_doctor);
             const canManageDoctor = isAdminUser || (!isAdmin && (!lockedLocationId || doc.location_id === lockedLocationId));
             const formattedName = formatDoctorDisplayName(doc.full_name);
+            const cardNumber = String(index + 1).padStart(2, '0');
             const initials = formattedName
               .replace(/^dr\.?\s+/i, '')
               .split(' ')
@@ -393,67 +394,72 @@ export function DoctorManagementSettings({
               <motion.div
                 key={doc.id}
                 layout
-                className="bg-white rounded-2xl border border-[#ECEEF2] p-5 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition duration-150"
+                className="bg-white rounded-2xl border border-[#ECEEF2] p-5 sm:p-6 shadow-2xs flex flex-col justify-between gap-4 hover:border-slate-300 transition duration-150"
               >
-                <div>
-                  {/* Top: Avatar, Name, Specialization */}
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100/60 flex items-center justify-center text-[#2563EB] font-bold text-xs flex-shrink-0">
-                      {initials || 'DR'}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-sm font-bold text-slate-900 truncate">
-                          {formattedName}
-                        </h4>
-                        {isAdmin && (
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/60">
-                            Admin
-                          </span>
-                        )}
+                <div className="space-y-4">
+                  {/* Top: Index, Avatar, Name, Specialization */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-full border border-blue-100 bg-blue-50 flex items-center justify-center text-[#2563EB] font-medium text-xs flex-shrink-0">
+                        {initials || 'DR'}
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5 truncate">
-                        {doc.specialization}
-                      </p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-sm sm:text-base font-semibold text-[#16191E] truncate">
+                            {formattedName}
+                          </h4>
+                          {isAdmin && (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200/70">
+                              Admin
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5 truncate">
+                          {doc.specialization}
+                        </p>
+                      </div>
                     </div>
+                    <span className="text-xs font-medium text-slate-400 tabular-nums pt-0.5">
+                      {cardNumber}
+                    </span>
                   </div>
 
                   {/* Credentials / Details */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs py-2.5 px-3 bg-slate-50/70 rounded-xl border border-slate-100 my-3 text-slate-600">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs p-3.5 bg-slate-50/70 rounded-xl border border-[#ECEEF2] text-slate-600">
                     <div>
-                      <span className="text-[10px] text-slate-400 block font-medium">Reg. No</span>
-                      <span className="font-semibold text-slate-800 text-xs truncate block">{doc.reg_no || '—'}</span>
+                      <span className="text-[11px] text-slate-400 block mb-0.5">Reg. No</span>
+                      <span className="font-medium text-slate-800 truncate block">{doc.reg_no || '—'}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 block font-medium">Daily Quota</span>
-                      <span className="font-semibold text-slate-800 text-xs">{doc.daily_quota || 30} pts</span>
+                      <span className="text-[11px] text-slate-400 block mb-0.5">Daily Quota</span>
+                      <span className="font-medium text-slate-800">{doc.daily_quota || 30} pts</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 block font-medium">Chamber PIN</span>
-                      <span className="font-mono font-semibold text-blue-700 text-xs">{doc.chamber_pin || '••••'}</span>
+                      <span className="text-[11px] text-slate-400 block mb-0.5">Chamber PIN</span>
+                      <span className="font-medium text-blue-700 tabular-nums">{doc.chamber_pin || '••••'}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 block font-medium">Today&apos;s Queue</span>
-                      <span className="font-semibold text-emerald-700 text-xs">{doc.today_patient_count ?? 0} active</span>
+                      <span className="text-[11px] text-slate-400 block mb-0.5">Today&apos;s Queue</span>
+                      <span className="font-medium text-emerald-700">{doc.today_patient_count ?? 0} active</span>
                     </div>
                   </div>
 
                   {/* Branch Scope */}
-                  <div>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1.5">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-[11px] text-slate-400 font-medium">
                       Branch Scope
                     </span>
                     {isAdmin || doc.is_all_branches || !doc.location_id ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-700">
-                        <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium border border-slate-200 bg-white text-slate-700">
+                        <Building2 className="w-3 h-3 text-slate-400" />
                         <span>All Branches (Org-wide)</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                        <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200/70">
+                        <MapPin className="w-3 h-3 text-blue-500" />
                         <span>{doc.branch_name || 'Assigned Branch'}</span>
                         {doc.branch_code && (
-                          <span className="text-blue-500 font-mono text-[10px]">({doc.branch_code})</span>
+                          <span className="text-blue-500 text-[10px]">({doc.branch_code})</span>
                         )}
                       </span>
                     )}
@@ -461,32 +467,32 @@ export function DoctorManagementSettings({
                 </div>
 
                 {/* Bottom Actions */}
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <div className="pt-3.5 border-t border-slate-100 flex items-center justify-end gap-2">
                   {canManageDoctor ? (
                     <>
                       <button
                         type="button"
                         onClick={() => handleOpenEdit(doc)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium text-slate-700 bg-white hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] border border-slate-200 transition-colors cursor-pointer"
                         title="Edit Doctor"
                       >
-                        <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                        <Edit3 className="w-3 h-3" />
                         <span>Edit</span>
                       </button>
                       {!isAdmin && !doc.is_admin_doctor && (
                         <button
                           type="button"
                           onClick={() => handleDeleteDoctor(doc)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium text-rose-600 bg-white hover:bg-rose-600 hover:text-white hover:border-rose-600 border border-rose-200/80 transition-colors cursor-pointer"
                           title="Delete Doctor"
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                          <Trash2 className="w-3 h-3" />
                           <span>Delete</span>
                         </button>
                       )}
                     </>
                   ) : (
-                    <span className="text-[11px] text-slate-400 font-medium italic">
+                    <span className="text-[11px] text-slate-400 italic">
                       Managed by Clinic Admin
                     </span>
                   )}
@@ -502,20 +508,25 @@ export function DoctorManagementSettings({
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              exit={{ opacity: 0, scale: 0.96 }}
               className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
             >
               {/* Modal Header */}
               <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                <h3 className="text-sm font-bold text-slate-800">
-                  {editingDoctor ? 'Edit Doctor' : 'Add New Doctor'}
-                </h3>
+                <div>
+                  <h3 className="text-sm font-semibold text-[#16191E]">
+                    {editingDoctor ? 'Edit Doctor Profile' : 'Add New Doctor'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Configure credentials, quota limits, and chamber PIN
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                  className="p-1.5 rounded-full hover:bg-slate-200/60 text-slate-400 hover:text-slate-700 transition cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -524,14 +535,14 @@ export function DoctorManagementSettings({
               {/* Modal Body */}
               <form onSubmit={handleSaveDoctor} className="p-6 overflow-y-auto space-y-4">
                 {formError && (
-                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 flex items-center gap-2">
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-medium text-rose-700 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 flex-shrink-0" />
                     <span>{formError}</span>
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
                     Doctor Full Name *
                   </label>
                   <input
@@ -540,19 +551,19 @@ export function DoctorManagementSettings({
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
                     placeholder="e.g. Dr. Faisal Khan"
-                    className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden"
+                    className="w-full px-3.5 py-2.5 text-xs bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden transition"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3.5">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       Specialization *
                     </label>
                     <select
                       value={formSpec}
                       onChange={(e) => setFormSpec(e.target.value)}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:border-blue-500 focus:outline-hidden"
+                      className="w-full px-3 py-2.5 text-xs bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden transition"
                     >
                       {SPECIALIZATION_OPTIONS.map((s) => (
                         <option key={s} value={s}>
@@ -564,7 +575,7 @@ export function DoctorManagementSettings({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       Council Reg No *
                     </label>
                     <input
@@ -573,14 +584,14 @@ export function DoctorManagementSettings({
                       value={formRegNo}
                       onChange={(e) => setFormRegNo(e.target.value)}
                       placeholder="e.g. KMC-45892"
-                      className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden"
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden transition"
                     />
                   </div>
                 </div>
 
                 {formSpec === 'Other' && (
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       Custom Specialization Title
                     </label>
                     <input
@@ -589,14 +600,14 @@ export function DoctorManagementSettings({
                       value={formCustomSpec}
                       onChange={(e) => setFormCustomSpec(e.target.value)}
                       placeholder="e.g. Consultant Pulmonologist"
-                      className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden"
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden transition"
                     />
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3.5">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       Daily Patient Quota (1-200)
                     </label>
                     <input
@@ -605,12 +616,12 @@ export function DoctorManagementSettings({
                       max={200}
                       value={formQuota}
                       onChange={(e) => setFormQuota(parseInt(e.target.value, 10) || 30)}
-                      className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden"
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden transition"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1.5">
                       Chamber PIN (4-Digits) {editingDoctor ? '(Leave blank to keep)' : '*'}
                     </label>
                     <input
@@ -619,7 +630,7 @@ export function DoctorManagementSettings({
                       value={formPin}
                       onChange={(e) => setFormPin(e.target.value)}
                       placeholder={editingDoctor ? '•••• (Unchanged)' : 'e.g. 1234'}
-                      className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden tracking-wider"
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden tracking-wider transition"
                     />
                   </div>
                 </div>
@@ -635,7 +646,7 @@ export function DoctorManagementSettings({
                       className="mt-0.5 w-4 h-4 text-blue-600 rounded-sm border-slate-300 focus:ring-blue-500 cursor-pointer"
                     />
                     <label htmlFor="adminDoctorCheckbox" className="text-xs text-slate-700 cursor-pointer">
-                      <span className="font-semibold text-slate-800 block">
+                      <span className="font-medium text-slate-800 block">
                         Admin Doctor
                       </span>
                       <span className="text-[11px] text-slate-500">
@@ -647,14 +658,14 @@ export function DoctorManagementSettings({
 
                 {/* Branch Location Selector */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
                     Branch Allocation
                   </label>
                   <select
                     disabled={formIsAdmin || (!isAdminUser && Boolean(lockedLocationId))}
                     value={!isAdminUser && lockedLocationId ? lockedLocationId : (formIsAdmin ? '' : formLocationId)}
                     onChange={(e) => setFormLocationId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:border-blue-500 focus:outline-hidden disabled:bg-slate-100 disabled:text-slate-400"
+                    className="w-full px-3 py-2.5 text-xs bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl focus:border-blue-500 focus:outline-hidden disabled:bg-slate-100 disabled:text-slate-400 transition"
                   >
                     <option value="">All Branches (Floating / Clinic Director)</option>
                     {branches.map((b) => (
@@ -664,15 +675,15 @@ export function DoctorManagementSettings({
                     ))}
                   </select>
                   {!isAdminUser && lockedLocationId ? (
-                    <p className="mt-1 text-[11px] text-slate-500">
+                    <p className="mt-1.5 text-[11px] text-slate-500">
                       Scoped to your active branch ({lockedBranchName || 'Current Branch'}).
                     </p>
                   ) : formIsAdmin ? (
-                    <p className="mt-1 text-[11px] text-slate-500">
+                    <p className="mt-1.5 text-[11px] text-slate-500">
                       Admin doctors operate across all clinic branches automatically.
                     </p>
                   ) : (
-                    <p className="mt-1 text-[11px] text-slate-400">
+                    <p className="mt-1.5 text-[11px] text-slate-400">
                       Select a specific branch, or choose &ldquo;All Branches&rdquo; for multi-branch coverage.
                     </p>
                   )}
@@ -683,14 +694,14 @@ export function DoctorManagementSettings({
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                    className="px-4 py-2 text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 rounded-full transition cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSaving}
-                    className="px-5 py-2 text-xs font-bold bg-[#2563EB] hover:bg-blue-700 text-white rounded-xl shadow-xs transition cursor-pointer disabled:opacity-50"
+                    className="px-5 py-2 text-xs font-medium bg-[#2563EB] hover:bg-blue-700 text-white rounded-full shadow-2xs transition cursor-pointer disabled:opacity-50"
                   >
                     {isSaving ? 'Saving...' : editingDoctor ? 'Save Changes' : 'Create Doctor'}
                   </button>

@@ -4,14 +4,10 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Stethoscope,
-  Phone,
   Calendar,
   ChevronLeft,
   ChevronRight,
-  Clock,
-  ArrowRight,
-  User,
-  AlertTriangle,
+  ArrowUpRight,
 } from 'lucide-react';
 import { Patient } from '@/types';
 import { NumberedPagination } from '@/components/ui/pagination';
@@ -63,36 +59,6 @@ function shiftDate(dateStr: string, days: number): string {
     return dateStr;
   }
 }
-
-function getInitials(name: string): string {
-  if (!name) return 'PT';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.04,
-    },
-  },
-};
-
-const cardVariants = {
-  hidden: { opacity: 0, y: 12, scale: 0.98 },
-  show: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      duration: 0.28,
-      ease: [0.16, 1, 0.3, 1] as const,
-    },
-  },
-};
 
 export function QueueView({
   queue,
@@ -198,207 +164,190 @@ export function QueueView({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -12 }}
       transition={{ duration: 0.25 }}
-      className="space-y-4 sm:space-y-6 pb-10"
+      className="space-y-6 pb-12"
     >
       <EcgActionLoader isLoading={isLoading} fullscreen={true} text="Syncing consultation queue..." />
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
-        <div>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">
-            Doctor Consultation Queue
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Live waiting room and direct 1-click consultation entry
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-          <div className="relative flex items-center bg-white/90 backdrop-blur-md rounded-xl border border-[#ECEEF2] p-1 shadow-2xs hover:border-slate-300 transition-all">
-            <button
-              type="button"
-              onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
-              className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
-              title="Previous day"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-
-            <div className="relative flex items-center gap-2 px-2.5 py-0.5 cursor-pointer">
-              <Calendar className="w-4 h-4 text-blue-600 flex-shrink-0" />
-              <span className="text-xs font-bold text-slate-800 select-none whitespace-nowrap">
-                {formatDisplayDate(selectedDate, todayIST)}
-              </span>
-              <span className="text-xs font-medium text-slate-400 select-none whitespace-nowrap">
-                {selectedDate}
-              </span>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                title="Pick a date"
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
-              className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
-              title="Next day"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          {selectedDate !== todayIST && (
-            <button
-              type="button"
-              onClick={() => setSelectedDate(todayIST)}
-              className="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition cursor-pointer shadow-2xs"
-            >
-              Today
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="relative min-h-[200px]">
-        {currentPatients.length === 0 ? (
-          <div className="bg-white rounded-2xl p-8 sm:p-10 border border-[#ECEEF2] text-center shadow-2xs">
-            <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-3 shadow-2xs border border-blue-100/60">
-              <Stethoscope className="w-6 h-6 stroke-[1.75]" />
-            </div>
-            <h3 className="text-sm font-bold text-slate-800">
-              No patients in queue for {formatDisplayDate(selectedDate, todayIST)}
-            </h3>
-            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-              Patients registered at the Assistant Desk or booked online via WhatsApp will appear here automatically.
+      {/* Editorial Section Header (matches Services01) */}
+      <div className="bg-white rounded-2xl border border-[#ECEEF2] p-6 sm:p-8 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5">
+          <div>
+            <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+              Live Queue • {currentPatients.length} {currentPatients.length === 1 ? 'Patient' : 'Patients'}
+            </span>
+            <h2 className="mt-1.5 text-base sm:text-lg font-semibold text-[#16191E]">
+              Doctor Consultation Queue
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Click any waiting patient or &quot;Consult&quot; to begin their examination.
             </p>
           </div>
-        ) : (
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="show"
-            className="space-y-3 sm:space-y-4"
-          >
-            <AnimatePresence mode="popLayout">
-              {paginatedQueue.map((p) => {
+
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+            <div className="relative flex items-center bg-white rounded-xl border border-[#ECEEF2] p-1 shadow-2xs hover:border-slate-300 transition-all">
+              <button
+                type="button"
+                onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+                title="Previous day"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <div className="relative flex items-center gap-2 px-2.5 py-0.5 cursor-pointer">
+                <Calendar className="w-3.5 h-3.5 text-slate-600 flex-shrink-0" />
+                <span className="text-xs font-semibold text-slate-800 select-none whitespace-nowrap">
+                  {formatDisplayDate(selectedDate, todayIST)}
+                </span>
+                <span className="text-[11px] font-normal text-slate-400 select-none whitespace-nowrap">
+                  {selectedDate}
+                </span>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  title="Pick a date"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+                title="Next day"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {selectedDate !== todayIST && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate(todayIST)}
+                className="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+              >
+                Today
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Services01-style Divided Queue List */}
+        <div className="mt-7">
+          {currentPatients.length === 0 ? (
+            <div className="border-y border-slate-200/80 py-12 text-center">
+              <div className="w-11 h-11 rounded-full border border-slate-200 bg-slate-50 text-slate-500 flex items-center justify-center mx-auto mb-3.5">
+                <Stethoscope className="w-5 h-5 stroke-[1.75]" />
+              </div>
+              <h3 className="text-sm font-medium text-slate-800">
+                No patients in queue for {formatDisplayDate(selectedDate, todayIST)}
+              </h3>
+              <p className="text-xs text-slate-400 mt-1.5 max-w-sm mx-auto">
+                Patients registered at the Assistant Desk or booked online via WhatsApp will appear here automatically.
+              </p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-200/80 border-y border-slate-200/80">
+              {paginatedQueue.map((p, index) => {
                 const isCompleted = p.status === 'Completed';
                 const isInProgress = p.status === 'In Progress';
                 const isUrgent = p.priority === 'Urgent';
                 const tokenDisplay = formatPatientToken(p);
-                const initials = getInitials(p.name);
+                const rowNumber = String((currentPage - 1) * itemsPerPage + index + 1).padStart(2, '0');
                 const isOnline =
                   (p.visitType || '').toLowerCase().includes('whatsapp') ||
                   (p.visitType || '').toLowerCase().includes('online');
 
                 return (
-                  <motion.div
-                    key={p.id}
-                    variants={cardVariants}
-                    whileHover={!isCompleted ? { y: -2, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.06)' } : {}}
-                    transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-                    onClick={() => !isCompleted && onStartConsultation(p.id, p)}
-                    className={`bg-white rounded-2xl p-4 sm:p-5 border border-[#ECEEF2] shadow-2xs relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-300 transition duration-150 ${isCompleted
-                      ? 'opacity-65 cursor-default'
-                      : 'cursor-pointer'
+                  <li key={p.id}>
+                    <div
+                      onClick={() => !isCompleted && onStartConsultation(p.id, p)}
+                      className={`group grid grid-cols-1 gap-4 py-5 sm:py-6 transition-colors sm:grid-cols-[2.75rem_1fr_auto] sm:gap-6 lg:grid-cols-[2.75rem_1fr_1.5fr_auto] lg:gap-10 items-start sm:items-center ${
+                        isCompleted
+                          ? 'opacity-55 cursor-default'
+                          : 'cursor-pointer hover:bg-slate-50/70 -mx-6 sm:-mx-8 px-6 sm:px-8'
                       }`}
-                  >
-                    <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
-                      <div className="relative flex-shrink-0">
-                        <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm border border-blue-100/60 shadow-2xs">
-                          {initials}
-                        </div>
-                        {isInProgress && (
-                          <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white animate-pulse" />
-                        )}
-                      </div>
+                    >
+                      {/* Index */}
+                      <span className="text-xs font-medium text-slate-400 tabular-nums sm:pt-0.5">
+                        {rowNumber}
+                      </span>
 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-sm sm:text-base font-bold text-[#16191E] tracking-tight truncate hover:text-blue-600 transition-colors">
+                      {/* Title + Token & Time Subtitle */}
+                      <div className="min-w-0 space-y-1.5">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <h3 className="text-sm sm:text-base font-semibold text-[#16191E] truncate">
                             {p.name}
                           </h3>
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/60 flex-shrink-0">
-                            {tokenDisplay}
-                          </span>
-                          {isUrgent && (
-                            <span className="bg-rose-50 text-rose-700 border border-rose-200/70 text-[10px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1 flex-shrink-0">
-                              <AlertTriangle className="w-2.5 h-2.5 text-rose-500" />
-                              Urgent
+                          {isInProgress && (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              In Progress
                             </span>
                           )}
                         </div>
+                        <p className="text-xs text-slate-500">
+                          Token {tokenDisplay} • Slot: {p.time}
+                        </p>
+                      </div>
 
-                        <div className="flex items-center gap-2 mt-1 text-xs text-slate-400 font-medium flex-wrap">
-                          <span>
-                            {p.age} Yrs • {p.gender}
-                          </span>
+                      {/* Description + Outline Pill Tags */}
+                      <div className="sm:col-start-2 lg:col-start-auto min-w-0 space-y-2.5">
+                        <p className="text-xs leading-5 text-slate-500 flex flex-wrap items-center gap-x-2">
+                          <span>{p.age} Years, {p.gender}</span>
                           {p.phone && (
                             <>
-                              <span>•</span>
-                              <span className="inline-flex items-center gap-1 text-slate-500">
-                                <Phone className="w-3 h-3 text-blue-500" />
-                                <span>{p.phone}</span>
-                              </span>
+                              <span className="text-slate-300">•</span>
+                              <span>Phone: {p.phone}</span>
                             </>
                           )}
-                          <span>•</span>
-                          <span className="inline-flex items-center gap-1 text-slate-500">
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            <span>Slot: {p.time}</span>
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2 mt-2">
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex-shrink-0 ${isCompleted
-                              ? 'bg-slate-100 text-slate-600 border-slate-200/60'
-                              : isInProgress
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
-                                : 'bg-blue-50 text-blue-700 border-blue-200/60'
-                              }`}
-                          >
+                        </p>
+                        <ul
+                          aria-label="Queue Metadata"
+                          className="flex flex-wrap gap-2"
+                        >
+                          <li className="rounded-full border border-slate-200 px-3 py-0.5 text-[11px] font-normal text-slate-600 bg-white">
                             {p.status}
-                          </span>
-
-                          {p.visitType && (
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex-shrink-0 ${isOnline
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
-                                : 'bg-indigo-50 text-indigo-700 border-indigo-200/60'
-                                }`}
-                            >
-                              {isOnline ? 'Online' : 'Walk-in'}
-                            </span>
+                          </li>
+                          <li className="rounded-full border border-slate-200 px-3 py-0.5 text-[11px] font-normal text-slate-600 bg-white">
+                            {isOnline ? 'Online (WhatsApp)' : 'Walk-in Visit'}
+                          </li>
+                          {isUrgent && (
+                            <li className="rounded-full border border-rose-200 bg-rose-50 px-3 py-0.5 text-[11px] font-medium text-rose-700">
+                              Urgent Priority
+                            </li>
                           )}
-                        </div>
+                        </ul>
+                      </div>
+
+                      {/* Consult Action Button */}
+                      <div className="flex items-center justify-end sm:col-start-3 sm:row-start-1 lg:col-start-4">
+                        {!isCompleted ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onStartConsultation(p.id, p);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] group-hover:bg-[#2563EB] group-hover:text-white group-hover:border-[#2563EB] cursor-pointer"
+                          >
+                            <span>{isInProgress ? 'Resume Consult' : 'Consult'}</span>
+                            <ArrowUpRight className="size-3.5" aria-hidden />
+                          </button>
+                        ) : (
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-400">
+                            Completed
+                          </span>
+                        )}
                       </div>
                     </div>
-
-                    <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 flex-shrink-0">
-                      {!isCompleted ? (
-                        <motion.button
-                          whileHover={{ scale: 1.03 }}
-                          whileTap={{ scale: 0.97 }}
-                          className="text-xs font-semibold px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl shadow-xs hover:shadow-md transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
-                        >
-                          <span>Start Consult</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </motion.button>
-                      ) : (
-                        <span className="text-xs font-semibold text-slate-400 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-100">
-                          Completed
-                        </span>
-                      )}
-                    </div>
-                  </motion.div>
+                  </li>
                 );
               })}
-            </AnimatePresence>
-          </motion.div>
-        )}
+            </ul>
+          )}
+        </div>
       </div>
 
       <NumberedPagination

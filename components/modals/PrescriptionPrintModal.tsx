@@ -7,6 +7,7 @@ import {
   Printer,
   X,
   HeartPulse,
+  Download,
 } from 'lucide-react';
 import { PrescriptionItem } from '@/types';
 import { useClinic } from '@/context/ClinicContext';
@@ -14,9 +15,11 @@ import {
   RxTemplateFields,
   DEFAULT_RX_TEMPLATE_FIELDS,
 } from '@/data/default-config';
-import { getAppConfigLocal } from '@/lib/supabaseService';
+import { getAppConfigLocal, fetchAppConfigDb, saveAppointmentPrescriptionPdfDb } from '@/lib/supabaseService';
+import { generatePrescriptionPdfBytes, triggerPdfDownload } from '@/lib/rxPdfGenerator';
+import { supabase } from '@/lib/supabaseClient';
 
-interface PrescriptionPrintRecord {
+export interface PrescriptionPrintRecord {
   date: string;
   patientName: string;
   patientPhone?: string;
@@ -27,6 +30,16 @@ interface PrescriptionPrintRecord {
   patientGender?: string;
   tokenNumber?: string | number;
   nextVisitDate?: string;
+  appointmentId?: string;
+  clinicId?: string;
+  locationId?: string;
+  patientId?: string;
+  branchName?: string;
+  doctorName?: string;
+  doctorTitle?: string;
+  doctorRegNo?: string;
+  prescriptionPdfUrl?: string;
+  autoSaveToBackend?: boolean;
 }
 
 interface PrescriptionPrintModalProps {
@@ -170,7 +183,7 @@ function printIsolatedPrescription(params: {
 
     ${params.fields.medications?.visible !== false ? `
       <div class="field" style="left: ${params.fields.medications.x}%; top: ${params.fields.medications.y}%; width: ${params.fields.medications.width || 72}%; font-size: ${params.fields.medications.fontSize || 12}px; font-weight: ${params.fields.medications.fontWeight || 'normal'}; color: ${params.fields.medications.color || '#16191E'}; text-align: ${params.fields.medications.align || 'left'};">
-        ${itemsHtml || '<p style="font-style: italic; color: #888;">No medication prescribed during this visit.</p>'}
+        ${itemsHtml || '<p style="font-style: color: #888;">No medication prescribed during this visit.</p>'}
       </div>
     ` : ''}
 
@@ -224,23 +237,71 @@ export function PrescriptionPrintModal({
 }: PrescriptionPrintModalProps) {
   const { config } = useClinic();
   const [mounted, setMounted] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [savedPdfUrl, setSavedPdfUrl] = useState<string | null>(null);
+  const [liveBranchConfig, setLiveBranchConfig] = useState<typeof config | null>(null);
+  const lastUploadedAptRef = React.useRef<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    if (!isOpen) {
+      lastUploadedAptRef.current = null;
+      setSavedPdfUrl(null);
+      setLiveBranchConfig(null);
+      return;
+    }
+    setSavedPdfUrl(printRecord?.prescriptionPdfUrl || null);
+
+    let cancelled = false;
+    fetchAppConfigDb(printRecord?.clinicId, printRecord?.locationId)
+      .then((freshCfg) => {
+        if (!cancelled && freshCfg) {
+          setLiveBranchConfig(freshCfg);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, printRecord?.appointmentId, printRecord?.prescriptionPdfUrl, printRecord?.clinicId, printRecord?.locationId]);
+
+  const effectiveDoctor = useMemo(
+    () => ({
+      name: printRecord?.doctorName || doctorProfile.name,
+      title: printRecord?.doctorTitle || doctorProfile.title,
+      regNo: printRecord?.doctorRegNo || doctorProfile.regNo,
+    }),
+    [printRecord?.doctorName, printRecord?.doctorTitle, printRecord?.doctorRegNo, doctorProfile]
+  );
+
   const localConfig = useMemo(() => getAppConfigLocal(), [isOpen]);
 
-  const activeTemplateUrl = config?.rx_template_url || localConfig?.rx_template_url || '';
+  const resolvedConfig = liveBranchConfig || config;
+  const activeTemplateUrl =
+    resolvedConfig?.rx_template_url || config?.rx_template_url || localConfig?.rx_template_url || '';
   const hasCustomTemplate = Boolean(activeTemplateUrl);
 
   const [printBackground, setPrintBackground] = useState<boolean>(() =>
-    config?.rx_template_print_bg !== false
+    resolvedConfig?.rx_template_print_bg !== false
   );
+
+  useEffect(() => {
+    if (resolvedConfig?.rx_template_print_bg !== undefined) {
+      setPrintBackground(resolvedConfig.rx_template_print_bg !== false);
+    }
+  }, [resolvedConfig?.rx_template_print_bg, isOpen]);
 
   const parsedFields: RxTemplateFields = useMemo(() => {
     try {
-      const raw = localConfig?.rx_template_fields || config?.rx_template_fields;
+      // Live DB / branch config ALWAYS takes precedence over stale browser localStorage
+      const raw =
+        liveBranchConfig?.rx_template_fields ||
+        config?.rx_template_fields ||
+        localConfig?.rx_template_fields;
       if (raw) {
         return {
           ...DEFAULT_RX_TEMPLATE_FIELDS,
@@ -251,7 +312,7 @@ export function PrescriptionPrintModal({
       // fallback
     }
     return DEFAULT_RX_TEMPLATE_FIELDS;
-  }, [config?.rx_template_fields, localConfig?.rx_template_fields]);
+  }, [liveBranchConfig?.rx_template_fields, config?.rx_template_fields, localConfig?.rx_template_fields]);
 
   const ageDisplay = useMemo(() => {
     if (printRecord?.patientAge) return `${printRecord.patientAge} Yrs`;
@@ -272,8 +333,132 @@ export function PrescriptionPrintModal({
     return 'Male';
   }, [printRecord]);
 
+  const buildPdfPayload = React.useCallback(() => {
+    if (!printRecord) return null;
+    return {
+      clinicName: config?.clinic_name || 'HealthSync Clinic',
+      branchName: printRecord.branchName || config?.branch_name,
+      clinicAddress: config?.branch_address || config?.clinic_address,
+      clinicPhone: config?.branch_phone || config?.clinic_phone,
+      footerText: config?.rx_footer_text,
+      patientName: printRecord.patientName,
+      patientAge: ageDisplay ? ageDisplay.replace(/\s*Yrs$/i, '') : printRecord.patientAge,
+      patientGender: genderDisplay,
+      patientPhone: printRecord.patientPhone,
+      visitDate: printRecord.date,
+      tokenNumber: printRecord.tokenNumber ? String(printRecord.tokenNumber) : undefined,
+      doctorName: effectiveDoctor.name,
+      doctorSpecialization: effectiveDoctor.title,
+      clinicalNotes: printRecord.diagnostics,
+      nextVisitDate: printRecord.nextVisitDate,
+      medications: (printRecord.items || []).map((p) => ({
+        medicineName: p.med?.brand || 'Prescribed Medicine',
+        genericName: p.med?.generic || '',
+        dispensedQuantity: p.qty,
+        dosage: p.dosage,
+        instructions: p.instructions,
+      })),
+    };
+  }, [printRecord, config, ageDisplay, genderDisplay, effectiveDoctor]);
+
+  // Automatically pass generated custom Rx PDF + metadata to backend on consult completion
+  useEffect(() => {
+    if (!isOpen || !mounted || !printRecord?.autoSaveToBackend || !printRecord?.appointmentId) {
+      return;
+    }
+    if (lastUploadedAptRef.current === printRecord.appointmentId) return;
+    lastUploadedAptRef.current = printRecord.appointmentId;
+
+    const payload = buildPdfPayload();
+    if (!payload) return;
+
+    (async () => {
+      try {
+        const pdfBytes = await generatePrescriptionPdfBytes({
+          payload,
+          templateUrl: activeTemplateUrl,
+          printBg: printBackground,
+          fields: parsedFields,
+        });
+
+        const res = await saveAppointmentPrescriptionPdfDb({
+          appointmentId: printRecord.appointmentId!,
+          clinicId: printRecord.clinicId,
+          patientId: printRecord.patientId,
+          pdfBytes,
+          customRxData: {
+            ...payload,
+            has_custom_template: hasCustomTemplate,
+            generated_at: new Date().toISOString(),
+          },
+        });
+        if (res.pdfUrl) {
+          setSavedPdfUrl(res.pdfUrl);
+        }
+      } catch (err) {
+        console.warn('Could not background-sync custom Rx PDF:', err);
+      }
+    })();
+  }, [
+    isOpen,
+    mounted,
+    printRecord,
+    buildPdfPayload,
+    activeTemplateUrl,
+    printBackground,
+    parsedFields,
+    hasCustomTemplate,
+  ]);
+
   const handlePrintClick = () => {
     window.print();
+  };
+
+  const handleDownloadPdfClick = async () => {
+    if (!printRecord) return;
+    setIsDownloadingPdf(true);
+    try {
+      const payload = buildPdfPayload();
+      if (!payload) return;
+
+      const existingUrl = savedPdfUrl || printRecord.prescriptionPdfUrl;
+      if (existingUrl) {
+        let resolvedUrl = existingUrl;
+        if (!/^https?:\/\//i.test(existingUrl)) {
+          const cleanPath = existingUrl.replace(/^prescriptions\//i, '');
+          const { data: signed } = await supabase.storage
+            .from('prescriptions')
+            .createSignedUrl(cleanPath, 300);
+          if (signed?.signedUrl) {
+            resolvedUrl = signed.signedUrl;
+          } else {
+            const { data: pub } = supabase.storage.from('prescriptions').getPublicUrl(cleanPath);
+            if (pub?.publicUrl) resolvedUrl = pub.publicUrl;
+          }
+        }
+        try {
+          const resp = await fetch(resolvedUrl);
+          if (resp.ok) {
+            const blob = await resp.blob();
+            const buf = new Uint8Array(await blob.arrayBuffer());
+            triggerPdfDownload(buf, payload);
+            return;
+          }
+        } catch {
+          // Fall through to local custom PDF generation
+        }
+      }
+
+      const bytes = await generatePrescriptionPdfBytes({
+        payload,
+        templateUrl: activeTemplateUrl,
+        printBg: printBackground,
+        fields: parsedFields,
+      });
+      triggerPdfDownload(bytes, payload);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
   };
 
   if (!isOpen || !printRecord || !mounted) return null;
@@ -310,6 +495,18 @@ export function PrescriptionPrintModal({
             </div>
 
             <div className="flex items-center space-x-2 self-end sm:self-auto">
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                type="button"
+                disabled={isDownloadingPdf}
+                onClick={handleDownloadPdfClick}
+                className="bg-slate-800 hover:bg-slate-900 disabled:opacity-60 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center space-x-1.5 shadow-sm"
+              >
+                <Download className="w-4 h-4" />
+                <span>{isDownloadingPdf ? 'Preparing PDF...' : 'Download PDF'}</span>
+              </motion.button>
+
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
@@ -527,7 +724,7 @@ export function PrescriptionPrintModal({
                     }}
                     className="absolute z-10 font-sans leading-normal"
                   >
-                    {doctorProfile.name}
+                    {effectiveDoctor.name}
                   </div>
                 )}
 
@@ -544,7 +741,7 @@ export function PrescriptionPrintModal({
                     }}
                     className="absolute z-10 font-sans leading-normal"
                   >
-                    {doctorProfile.name}
+                    {effectiveDoctor.name}
                   </div>
                 )}
               </div>
@@ -571,7 +768,7 @@ export function PrescriptionPrintModal({
                         {config?.clinic_name || 'HealthSync Clinic'}
                       </h2>
                       <p className="text-xs text-[#5E6470] font-medium">
-                        {doctorProfile.name} • {doctorProfile.title}
+                        {effectiveDoctor.name} • {effectiveDoctor.title}
                       </p>
                       {(config?.branch_address || config?.clinic_address || config?.branch_phone || config?.clinic_phone) && (
                         <p className="text-[10px] text-[#8A909D] mt-0.5">
@@ -641,7 +838,7 @@ export function PrescriptionPrintModal({
                   )}
                 </div>
 
-                
+
                 {printRecord?.nextVisitDate && (
                   <div className="mt-4 p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs font-semibold text-blue-900 flex items-center justify-between">
                     <span>Next Review / Follow-Up Visit Scheduled:</span>
@@ -651,8 +848,8 @@ export function PrescriptionPrintModal({
 
                 <div className="mt-12 sm:mt-16 text-right">
                   <div className="border-t border-gray-400 inline-block pt-2 pr-16 text-sm font-semibold">
-                    <p>{doctorProfile.name}</p>
-                    <p className="text-xs text-[#8A909D] font-normal">{doctorProfile.regNo ? `Reg: ${doctorProfile.regNo} • ` : ''}Authorized Medical Practitioner</p>
+                    <p>{effectiveDoctor.name}</p>
+                    <p className="text-xs text-[#8A909D] font-normal">{effectiveDoctor.regNo ? `Reg: ${effectiveDoctor.regNo} • ` : ''}Authorized Medical Practitioner</p>
                   </div>
                 </div>
 

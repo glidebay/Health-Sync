@@ -67,36 +67,79 @@ export interface ActiveQueueItem {
 export interface PatientVisitHistoryItem {
   appointment_id: string;
   date: string;
+  visit_date?: string;
+  slot_time?: string;
+  token_number?: string;
+  branch_name?: string;
+  clinic_name?: string;
   doctor_name: string;
   specialization: string;
   status: string;
   clinical_notes?: string;
   next_visit_date?: string;
   consultation_duration_mins?: number;
+  prescription_pdf_url?: string;
+  custom_rx_data?: any;
+  prescriptions?: Array<{
+    id?: string;
+    medicine_name: string;
+    dispensed_quantity?: number;
+    dosage?: string;
+    instructions?: string;
+  }>;
 }
 
 export interface PatientPrescriptionHistoryItem {
   medicine_name: string;
+  dispensed_quantity?: number;
   dosage?: string;
   frequency?: string;
   duration?: string;
   instructions?: string;
+  doctor_name?: string;
   prescribed_date: string;
+  appointment_id?: string;
+}
+
+export interface PatientPrescriptionPdfItem {
+  file_name: string;
+  appointment_id?: string | null;
+  visit_date?: string | null;
+  doctor_name?: string | null;
+  created_at?: string | null;
 }
 
 export interface PatientMedicalHistoryProfile {
   success: boolean;
   message?: string;
+  total_visits?: number;
+  total_past_visits?: number;
   patient?: {
     id: string;
     full_name: string;
     phone: string;
     age: number;
     gender: string;
+    blood_group?: string | null;
+    allergies?: string[];
+    chronic_tags?: string[];
+    is_vip?: boolean;
+    display_id?: string;
+    member_since?: string;
     created_at: string;
   };
   visits: PatientVisitHistoryItem[];
   prescriptions: PatientPrescriptionHistoryItem[];
+  prescription_pdfs?: PatientPrescriptionPdfItem[];
+  upcoming_visits?: Array<{
+    appointment_id: string;
+    visit_date: string;
+    slot_time: string;
+    token_number: string;
+    status: string;
+    doctor_name: string;
+    branch_name: string;
+  }>;
 }
 
 export interface CasemixCategory {
@@ -203,8 +246,28 @@ export interface PavilionDashboardData {
     avg_slot_label?: string;
     avg_consult_time?: string;
     pharmacy_stock: number;
+    metrics?: {
+      patients?: number;
+      quota_pct?: number;
+      whatsapp_pct?: number;
+      completion_rate?: string;
+      avg_time?: string;
+      pharmacy_stock?: number;
+    };
     bars: Array<{ hour: string; hour_num?: number; count: number; height: number }>;
   };
+  doctors_in_chamber?: Array<{
+    doctor_id: string;
+    doctor_name: string;
+    specialization?: string;
+    assigned_branch?: string;
+    today_patients?: number;
+    daily_quota?: number;
+    quota_pct?: number;
+    in_chamber?: boolean;
+    waiting_count?: number;
+    status_label?: string;
+  }>;
   intake_overview: {
     growth_label: string;
     max_daily_intake?: number;
@@ -523,7 +586,168 @@ class EnterpriseCLMSService {
     });
   }
 
-  async fetchPatientMedicalProfile(patientId: string): Promise<PatientMedicalHistoryProfile> {
+  async fetchPatientMedicalProfile(patientId: string, clinicId?: string | null): Promise<PatientMedicalHistoryProfile> {
+    // 1. Primary: Try unified get_patient_full_history RPC
+    try {
+      const { data: fullHist, error: fullErr } = await supabase.rpc('get_patient_full_history', {
+        p_search_query: patientId,
+        p_clinic_id: clinicId || null,
+      });
+
+      if (!fullErr && fullHist && fullHist.success === true && fullHist.patient) {
+        const p = fullHist.patient;
+        const visits: PatientVisitHistoryItem[] = Array.isArray(fullHist.previous_clinical_visits)
+          ? fullHist.previous_clinical_visits.map((v: any) => ({
+              appointment_id: v.appointment_id,
+              date: v.visit_date || '',
+              visit_date: v.visit_date || '',
+              slot_time: v.slot_time || '',
+              token_number: v.token_number || '',
+              branch_name: v.branch_name || 'Branch',
+              clinic_name: v.clinic_name || '',
+              doctor_name: v.doctor_name || 'Consultant Physician',
+              specialization: v.doctor_specialization || 'General Medicine',
+              status: v.status || 'Completed',
+              clinical_notes: v.clinical_notes || 'Routine consultation',
+              next_visit_date: v.next_visit_date || undefined,
+              consultation_duration_mins: v.duration_mins || 15,
+              prescription_pdf_url: v.prescription_pdf_url || undefined,
+              custom_rx_data: v.custom_rx_data || undefined,
+              prescriptions: Array.isArray(v.prescriptions) ? v.prescriptions : [],
+            }))
+          : [];
+
+        let prescriptions: PatientPrescriptionHistoryItem[] = Array.isArray(fullHist.past_prescriptions)
+          ? fullHist.past_prescriptions
+              .filter((rx: any) => {
+                // Guard against null LEFT-JOIN rows emitted by prescription_details view
+                const name = String(rx.medicine_name || '').trim();
+                const hasRealName = name !== '' && name !== 'Prescribed Medicine';
+                const hasSig = Boolean(rx.dosage || rx.frequency || rx.duration || rx.instructions);
+                return hasRealName || hasSig || (Number(rx.dispensed_quantity) || 0) > 1;
+              })
+              .map((rx: any) => ({
+                medicine_name: rx.medicine_name || 'Prescribed Medicine',
+                dispensed_quantity: rx.dispensed_quantity ?? 1,
+                dosage: rx.dosage || undefined,
+                frequency: rx.frequency || undefined,
+                duration: rx.duration || undefined,
+                instructions: rx.instructions || undefined,
+                doctor_name: rx.doctor_name || undefined,
+                prescribed_date: rx.prescribed_date || '',
+                appointment_id: rx.appointment_id || undefined,
+              }))
+          : [];
+
+        // If prescribed_medications is empty for past visits (e.g. legacy FK blocked insert),
+        // recover matching dispensing logs from stock_movements by RX-Pxxx token & IST date.
+        if (visits.length > 0 && prescriptions.length === 0) {
+          try {
+            const visitTokens = Array.from(
+              new Set(
+                visits
+                  .map((v) => (v.token_number && v.token_number !== '--' ? `RX-${v.token_number.toUpperCase()}` : ''))
+                  .filter(Boolean)
+              )
+            );
+            if (visitTokens.length > 0) {
+              const { data: movs } = await supabase
+                .from('stock_movements')
+                .select('id, medicine_id, movement_type, quantity, reference_number, date, created_at')
+                .ilike('movement_type', 'dispensing')
+                .in('reference_number', visitTokens);
+
+              if (movs && movs.length > 0) {
+                const medIds = Array.from(new Set(movs.map((m: any) => m.medicine_id).filter(Boolean)));
+                const medMap = new Map<string, string>();
+                if (medIds.length > 0) {
+                  const { data: meds } = await supabase
+                    .from('medicines')
+                    .select('id, brand_name, generic_name')
+                    .in('id', medIds);
+                  (meds || []).forEach((m: any) => {
+                    medMap.set(String(m.id), m.brand_name || m.generic_name || 'Prescribed Medicine');
+                  });
+                }
+
+                const fmtIstDate = (iso: string) =>
+                  new Intl.DateTimeFormat('en-GB', {
+                    timeZone: 'Asia/Kolkata',
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  })
+                    .format(new Date(iso))
+                    .replace(/,/g, '')
+                    .trim();
+
+                const recovered: PatientPrescriptionHistoryItem[] = [];
+                movs.forEach((m: any) => {
+                  const movDateStr = m.date || m.created_at ? fmtIstDate(m.date || m.created_at) : '';
+                  const matchingVisit = visits.find(
+                    (v) =>
+                      v.token_number &&
+                      `RX-${v.token_number.toUpperCase()}` === String(m.reference_number || '').toUpperCase() &&
+                      (!movDateStr || !v.visit_date || v.visit_date.toLowerCase() === movDateStr.toLowerCase())
+                  );
+                  if (matchingVisit) {
+                    const medName = medMap.get(String(m.medicine_id)) || 'Prescribed Medicine';
+                    const qty = Math.max(1, Math.abs(Number(m.quantity) || 1));
+                    recovered.push({
+                      medicine_name: medName,
+                      dispensed_quantity: qty,
+                      doctor_name: matchingVisit.doctor_name,
+                      prescribed_date: matchingVisit.visit_date || movDateStr,
+                    });
+                    matchingVisit.prescriptions = [
+                      ...(matchingVisit.prescriptions || []),
+                      {
+                        id: m.id,
+                        medicine_name: medName,
+                        dispensed_quantity: qty,
+                      },
+                    ];
+                  }
+                });
+                if (recovered.length > 0) {
+                  prescriptions = recovered;
+                }
+              }
+            }
+          } catch (recoverErr) {
+            console.warn('Could not recover past Rx from stock_movements:', recoverErr);
+          }
+        }
+
+        return {
+          success: true,
+          total_visits: fullHist.total_visits ?? visits.length,
+          total_past_visits: fullHist.total_past_visits ?? visits.length,
+          patient: {
+            id: p.id,
+            full_name: p.full_name,
+            phone: p.phone_number || '',
+            age: p.age || 30,
+            gender: p.gender || 'Male',
+            blood_group: p.blood_group || null,
+            allergies: Array.isArray(p.allergies) ? p.allergies : [],
+            chronic_tags: Array.isArray(p.chronic_tags) ? p.chronic_tags : [],
+            is_vip: Boolean(p.is_vip),
+            display_id: p.display_id || undefined,
+            member_since: p.member_since || undefined,
+            created_at: p.member_since || new Date().toISOString(),
+          },
+          visits,
+          prescriptions,
+          prescription_pdfs: Array.isArray(fullHist.prescription_pdfs) ? fullHist.prescription_pdfs : [],
+          upcoming_visits: Array.isArray(fullHist.upcoming_visits) ? fullHist.upcoming_visits : [],
+        };
+      }
+    } catch (err) {
+      console.warn('RPC get_patient_full_history fallback:', err);
+    }
+
+    // 2. Legacy RPC fallback
     try {
       const { data, error } = await supabase.rpc('get_patient_medical_history_profile', {
         p_patient_id: patientId,
@@ -570,27 +794,66 @@ class EnterpriseCLMSService {
       clinical_notes: a.clinical_notes || '',
       next_visit_date: a.next_visit_date || undefined,
       consultation_duration_mins: a.consultation_duration_mins || 15,
+      prescriptions: [],
     }));
 
     const apptIds = (appointments || []).map((a: any) => a.id);
     let prescriptions: PatientPrescriptionHistoryItem[] = [];
 
     if (apptIds.length > 0) {
-      const { data: rxRows } = await supabase
+      const { data: rxRows, error: rxErr } = await supabase
         .from('prescribed_medications')
         .select('*')
-        .in('appointment_id', apptIds)
-        .order('created_at', { ascending: false });
+        .in('appointment_id', apptIds);
 
-      if (rxRows) {
-        prescriptions = rxRows.map((rx: any) => ({
-          medicine_name: rx.medicine_name || 'Prescribed Medicine',
-          dosage: rx.dosage || '',
-          frequency: rx.frequency || '',
-          duration: rx.duration || '',
-          instructions: rx.instructions || '',
-          prescribed_date: rx.created_at || new Date().toISOString(),
-        }));
+      if (!rxErr && rxRows && rxRows.length > 0) {
+        const medIds = Array.from(
+          new Set(rxRows.map((rx: any) => rx.medicine_id || rx.inventory_id).filter(Boolean))
+        );
+        const medNameMap = new Map<string, string>();
+        if (medIds.length > 0) {
+          const { data: medRows } = await supabase
+            .from('medicines')
+            .select('id, brand_name, generic_name')
+            .in('id', medIds);
+          (medRows || []).forEach((m: any) => {
+            medNameMap.set(String(m.id), m.brand_name || m.generic_name || 'Prescribed Medicine');
+          });
+        }
+
+        const apptMap = new Map<string, any>();
+        (appointments || []).forEach((a: any) => apptMap.set(a.id, a));
+
+        prescriptions = rxRows.map((rx: any) => {
+          const matchedAppt = apptMap.get(rx.appointment_id);
+          const resolvedMedName =
+            rx.medicine_name ||
+            medNameMap.get(String(rx.medicine_id || rx.inventory_id || '')) ||
+            'Prescribed Medicine';
+          return {
+            medicine_name: resolvedMedName,
+            dispensed_quantity: rx.dispensed_quantity ?? 1,
+            dosage: rx.dosage || '',
+            frequency: rx.frequency || '',
+            duration: rx.duration || '',
+            instructions: rx.instructions || '',
+            doctor_name: matchedAppt?.doctor?.full_name || undefined,
+            prescribed_date: rx.created_at || matchedAppt?.scheduled_time || new Date().toISOString(),
+          };
+        });
+
+        visits.forEach((v) => {
+          v.prescriptions = rxRows
+            .filter((rx: any) => rx.appointment_id === v.appointment_id)
+            .map((rx: any) => ({
+              id: rx.id,
+              medicine_name:
+                rx.medicine_name ||
+                medNameMap.get(String(rx.medicine_id || rx.inventory_id || '')) ||
+                'Prescribed Medicine',
+              dispensed_quantity: rx.dispensed_quantity ?? 1,
+            }));
+        });
       }
     }
 

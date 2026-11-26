@@ -197,7 +197,7 @@ export function SettingsView({
   onRefreshLocations,
   isAdmin = true,
 }: SettingsViewProps) {
-  const { config, updateAllConfigs, resetConfigToDefaults } = useClinic();
+  const { config, updateAllConfigs, refreshConfig, resetConfigToDefaults } = useClinic();
 
   const effectiveClinicId = currentLocation?.clinic_id || clinicId || '';
   const effectiveLocationId = currentLocation?.id || '';
@@ -436,6 +436,12 @@ export function SettingsView({
           ? (formData.clinic_address || branchAddressToSave)
           : formData.clinic_address;
 
+        // Enable custom pad automatically if user uploaded a template and saved inside Custom Prescription
+        const customPadActiveToSave =
+          activeCategory === 'Custom Prescription' && formData.rx_template_url && edits.rx_template_enabled === undefined
+            ? true
+            : Boolean(formData.rx_template_enabled);
+
         await saveUnifiedClinicSettings({
           clinic_id: effectiveClinicId,
           location_id: effectiveLocationId,
@@ -462,19 +468,27 @@ export function SettingsView({
           pad_template_url: formData.rx_template_url,
           rx_calibrations: formData.rx_template_fields,
           print_bg_graphic: formData.rx_template_print_bg,
-          is_custom_pad_active: formData.rx_template_enabled,
+          is_custom_pad_active: customPadActiveToSave,
           rx_footer_text: formData.rx_footer_text,
         });
 
-        // Sync with AppConfig in ClinicContext
+        // Sync full Rx template + calibration state with AppConfig in ClinicContext
         await updateAllConfigs({
           ...edits,
+          rx_template_url: formData.rx_template_url,
+          rx_template_fields: formData.rx_template_fields,
+          rx_template_print_bg: formData.rx_template_print_bg,
+          rx_template_enabled: customPadActiveToSave,
+          rx_footer_text: formData.rx_footer_text,
           branch_phone: branchPhoneToSave,
           branch_address: branchAddressToSave,
         });
 
-        // Trigger parent location refresh
-        await onRefreshLocations?.();
+        // Refresh branch config + parent locations from Supabase
+        await Promise.all([
+          refreshConfig(effectiveClinicId, effectiveLocationId),
+          onRefreshLocations?.(),
+        ]);
       }
       setBaseClinicConfig((prev) => ({ ...prev, ...edits }));
       setEdits({});
@@ -514,58 +528,58 @@ export function SettingsView({
     >
       <EcgActionLoader isLoading={isSaving} text="Saving configuration..." />
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
+      <div className="bg-white rounded-2xl border border-[#ECEEF2] p-6 sm:p-8 shadow-2xs flex flex-col lg:flex-row lg:items-end justify-between gap-5">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight truncate">
+          <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
+            Clinic Configuration • {activeCategory}
+          </span>
+          <div className="mt-1.5 flex items-center gap-2.5 flex-wrap">
+            <h2 className="text-base sm:text-lg font-semibold text-[#16191E] truncate">
               Clinic Settings &amp; Operational Controls
             </h2>
             {hasUnsavedChanges && (
               <motion.span
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shadow-2xs whitespace-nowrap"
+                className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200/80 whitespace-nowrap"
               >
                 {changedKeys.length} unsaved
               </motion.span>
             )}
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Configure clinic profile, daily consultation rules, queue behavior, and automation settings
+          <p className="text-xs text-slate-500 mt-1">
+            Configure clinic profile, custom prescription layout, branch locations, and automation rules.
           </p>
         </div>
 
-        <div className="flex items-center space-x-2 flex-shrink-0 self-end sm:self-auto">
+        <div className="flex items-center gap-2.5 flex-shrink-0 self-start lg:self-auto flex-wrap">
           {hasUnsavedChanges && (
-            <motion.button
-              whileHover={{ y: -2, boxShadow: '0 4px 12px 0 rgba(0,0,0,0.05)' }}
-              whileTap={{ scale: 0.98 }}
+            <button
+              type="button"
               onClick={handleDiscard}
-              className="flex items-center space-x-1.5 text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:text-slate-800 hover:bg-slate-50 px-3.5 py-2 rounded-xl transition cursor-pointer shadow-2xs flex-shrink-0 whitespace-nowrap"
+              className="flex items-center gap-1.5 text-xs font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-full transition cursor-pointer flex-shrink-0 whitespace-nowrap"
             >
               <RotateCcw className="w-3.5 h-3.5 flex-shrink-0" />
               <span className="whitespace-nowrap">Discard</span>
-            </motion.button>
+            </button>
           )}
 
-          <motion.button
-            whileHover={{ y: -2, boxShadow: '0 4px 12px 0 rgba(0,0,0,0.05)' }}
-            whileTap={{ scale: 0.98 }}
+          <button
+            type="button"
             onClick={handleResetDefaults}
-            className="flex items-center space-x-1.5 text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50/40 px-3.5 py-2 rounded-xl transition cursor-pointer shadow-2xs flex-shrink-0 whitespace-nowrap"
+            className="flex items-center gap-1.5 text-xs font-medium bg-white border border-slate-200 text-slate-700 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50/50 px-4 py-2 rounded-full transition cursor-pointer flex-shrink-0 whitespace-nowrap"
             title="Reset to default settings"
           >
             <RotateCcw className="w-3.5 h-3.5 flex-shrink-0" />
             <span className="hidden sm:inline whitespace-nowrap">Defaults</span>
-          </motion.button>
+          </button>
 
-          <motion.button
-            whileHover={{ y: -2, boxShadow: hasUnsavedChanges ? '0 4px 14px 0 rgba(37,99,235,0.3)' : undefined }}
-            whileTap={{ scale: 0.98 }}
+          <button
+            type="button"
             onClick={handleSave}
             disabled={isSaving || !hasUnsavedChanges}
-            className={`flex items-center space-x-1.5 text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer shadow-xs flex-shrink-0 whitespace-nowrap ${hasUnsavedChanges
-                ? 'bg-[#2563EB] hover:bg-blue-700 text-white ring-2 ring-blue-500/30'
+            className={`flex items-center gap-1.5 text-xs font-medium px-5 py-2 rounded-full transition cursor-pointer flex-shrink-0 whitespace-nowrap ${hasUnsavedChanges
+                ? 'bg-[#2563EB] hover:bg-blue-700 text-white shadow-2xs'
                 : isSaved
                   ? 'bg-emerald-600 text-white'
                   : 'bg-slate-100 text-slate-400 cursor-not-allowed'
@@ -583,7 +597,7 @@ export function SettingsView({
             <span className="whitespace-nowrap">
               {isSaving ? 'Saving...' : isSaved ? 'Saved' : hasUnsavedChanges ? `Save Changes (${changedKeys.length})` : 'Save Changes'}
             </span>
-          </motion.button>
+          </button>
         </div>
       </div>
 
@@ -631,10 +645,10 @@ export function SettingsView({
                   setActiveCategory(cat.id);
                   e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
                 }}
-                className={`relative flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-150 cursor-pointer flex-shrink-0 select-none ${
+                className={`relative flex items-center space-x-2 px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-150 cursor-pointer flex-shrink-0 select-none ${
                   isActive
-                    ? 'bg-[#2563EB] text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-800 hover:bg-slate-100/60'
+                    ? 'bg-[#2563EB] text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
                 }`}
               >
                 <Icon className={`relative z-10 w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
@@ -656,40 +670,44 @@ export function SettingsView({
               transition={{ duration: 0.16, ease: 'easeOut' }}
               className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5"
             >
-              {filteredParameters.map((meta) => {
+              {filteredParameters.map((meta, index) => {
                 const val = formData[meta.key];
+                const cardNumber = String(index + 1).padStart(2, '0');
 
                 return (
                   <div
                     key={meta.key}
-                    className="bg-white rounded-2xl p-5 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300"
+                    className="bg-white rounded-2xl p-5 sm:p-6 border border-[#ECEEF2] shadow-2xs flex flex-col justify-between gap-4 transition-colors hover:border-slate-300"
                   >
-                    <div>
-                      <div className="flex items-start justify-between gap-3 mb-2">
-                        <div className="space-y-1">
-                          <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                            <h3 className="text-sm font-bold text-[#16191E]">{meta.name}</h3>
-                          </div>
-                          <p className="text-xs text-slate-400 leading-relaxed">
-                            {meta.description}
-                          </p>
+                    <div className="space-y-1.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-medium text-slate-400 tabular-nums block mb-0.5">
+                            {cardNumber}
+                          </span>
+                          <h3 className="text-sm sm:text-base font-medium text-[#16191E]">
+                            {meta.name}
+                          </h3>
                         </div>
-
                         <span
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap border flex-shrink-0 ${
                             meta.paramType === 'Control Parameter'
-                              ? 'bg-purple-50 text-purple-700 border border-purple-100'
-                              : 'bg-blue-50 text-blue-600 border border-blue-100'
+                              ? 'bg-slate-50 text-slate-700 border-slate-200'
+                              : 'bg-blue-50/70 text-blue-700 border-blue-200/60'
                           }`}
                         >
                           {meta.paramType === 'Control Parameter' ? 'Control Rule' : 'Setting'}
                         </span>
                       </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        {meta.description}
+                      </p>
+                    </div>
 
-                      <div className="mt-4 mb-2">
+                    <div className="pt-3 border-t border-slate-100 min-w-0">
                         {meta.uiWidget === 'toggle' && (
-                          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/80">
-                            <span className="text-xs font-semibold text-slate-800">
+                          <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50/70 border border-slate-200/80">
+                            <span className="text-xs font-medium text-slate-700">
                               {val ? 'Enabled' : 'Disabled'}
                             </span>
                             <button
@@ -719,7 +737,7 @@ export function SettingsView({
                                   const min = meta.min ?? 0;
                                   if (curr > min) handleFieldChange(meta.key, curr - 1);
                                 }}
-                                className="px-3.5 py-2 hover:bg-slate-100 font-bold text-slate-600 transition cursor-pointer text-sm select-none"
+                                className="px-3.5 py-2 hover:bg-slate-100 font-semibold text-slate-600 transition cursor-pointer text-sm select-none"
                               >
                                 -
                               </motion.button>
@@ -743,7 +761,7 @@ export function SettingsView({
                                   const max = meta.max ?? 9999;
                                   handleFieldChange(meta.key, Math.min(max, numVal));
                                 }}
-                                className="w-16 text-center text-xs font-bold py-2 focus:outline-none text-slate-800"
+                                className="w-16 text-center text-xs font-semibold py-2 focus:outline-none text-slate-800"
                               />
                               <motion.button
                                 whileTap={{ scale: 0.92 }}
@@ -753,13 +771,13 @@ export function SettingsView({
                                   const max = meta.max ?? 9999;
                                   if (curr < max) handleFieldChange(meta.key, curr + 1);
                                 }}
-                                className="px-3.5 py-2 hover:bg-slate-100 font-bold text-slate-600 transition cursor-pointer text-sm select-none"
+                                className="px-3.5 py-2 hover:bg-slate-100 font-semibold text-slate-600 transition cursor-pointer text-sm select-none"
                               >
                                 +
                               </motion.button>
                             </div>
                             {meta.min !== undefined && meta.max !== undefined && (
-                              <span className="text-xs text-slate-400 font-medium">
+                              <span className="text-xs text-slate-400">
                                 Range: {meta.min} – {meta.max}
                               </span>
                             )}
@@ -782,7 +800,7 @@ export function SettingsView({
                             value={String(val ?? '')}
                             onChange={(e) => handleFieldChange(meta.key, e.target.value)}
                             placeholder={`Enter ${meta.name}...`}
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 transition"
                           />
                         )}
 
@@ -792,7 +810,7 @@ export function SettingsView({
                               rows={2}
                               value={String(val ?? '')}
                               onChange={(e) => handleFieldChange(meta.key, e.target.value)}
-                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              className="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 transition"
                             />
                           </div>
                         )}
@@ -810,7 +828,7 @@ export function SettingsView({
                             />
 
                             {val ? (
-                              <div className="flex items-center space-x-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                              <div className="flex items-center space-x-3 p-3 bg-slate-50/70 border border-slate-200 rounded-xl">
                                 <div className="w-14 h-14 rounded-xl border border-slate-200 bg-white overflow-hidden flex items-center justify-center p-1 flex-shrink-0">
                                   <img
                                     src={String(val)}
@@ -819,7 +837,7 @@ export function SettingsView({
                                   />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <span className="text-xs font-bold text-slate-800 block truncate">
+                                  <span className="text-xs font-medium text-slate-800 block truncate">
                                     {meta.key === 'prescription_page_url'
                                       ? 'Prescription Page Uploaded'
                                       : 'Logo Uploaded'}
@@ -831,37 +849,32 @@ export function SettingsView({
                                   </span>
                                 </div>
                                 <div className="flex items-center space-x-1.5">
-                                  <motion.button
-                                    whileHover={{ scale: 1.02 }}
-                                    whileTap={{ scale: 0.98 }}
+                                  <button
                                     type="button"
                                     onClick={() => fileInputRefs.current[meta.key]?.click()}
-                                    className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg text-xs font-semibold text-slate-800 transition cursor-pointer"
+                                    className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 rounded-full text-xs font-medium text-slate-700 transition cursor-pointer"
                                   >
                                     Change
-                                  </motion.button>
-                                  <motion.button
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
+                                  </button>
+                                  <button
                                     type="button"
                                     onClick={() => handleFieldChange(meta.key, '')}
-                                    className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg transition cursor-pointer"
+                                    className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-full transition cursor-pointer"
                                     title="Remove logo"
                                   >
                                     <Trash2 className="w-4 h-4" />
-                                  </motion.button>
+                                  </button>
                                 </div>
                               </div>
                             ) : (
-                              <motion.div
-                                whileHover={{ scale: 1.01 }}
+                              <div
                                 onClick={() => fileInputRefs.current[meta.key]?.click()}
-                                className="border-2 border-dashed border-slate-200 hover:border-blue-600 rounded-xl p-4 text-center cursor-pointer transition-colors bg-slate-50/60 hover:bg-blue-50/20"
+                                className="border-2 border-dashed border-slate-200 hover:border-slate-400 rounded-xl p-4 text-center cursor-pointer transition-colors bg-slate-50/60"
                               >
-                                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-2">
-                                  <Upload className="w-4 h-4 stroke-[2]" />
+                                <div className="w-9 h-9 rounded-full border border-slate-200 bg-white text-slate-600 flex items-center justify-center mx-auto mb-2">
+                                  <Upload className="w-4 h-4 stroke-[1.75]" />
                                 </div>
-                                <span className="text-xs font-bold text-slate-800 block">
+                                <span className="text-xs font-medium text-slate-800 block">
                                   {meta.key === 'prescription_page_url'
                                     ? 'Choose Prescription Printed Page'
                                     : 'Choose Clinic Logo'}
@@ -871,11 +884,10 @@ export function SettingsView({
                                     ? 'PNG, JPG, SVG or WebP letterhead or prescription pad'
                                     : 'PNG, JPG, SVG or WebP from your device'}
                                 </span>
-                              </motion.div>
+                              </div>
                             )}
                           </div>
                         )}
-                      </div>
                     </div>
                   </div>
                 );
