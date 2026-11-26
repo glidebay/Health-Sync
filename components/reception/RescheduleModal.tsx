@@ -4,6 +4,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, AlertTriangle } from 'lucide-react';
 import { Patient } from '@/types';
+import { DbDoctor } from '@/types/database';
+import { getDoctors } from '@/lib/supabaseService';
 import { AVAILABLE_SLOTS } from '@/lib/constants';
 import { useClinic } from '@/context/ClinicContext';
 import { formatPatientToken } from '@/lib/utils';
@@ -19,6 +21,7 @@ interface RescheduleModalProps {
   isOpen: boolean;
   patient: Patient | null;
   queue: Patient[];
+  availableDoctors?: DbDoctor[];
   onClose: () => void;
   onReschedulePatient: (params: {
     patientId: string;
@@ -30,6 +33,7 @@ interface RescheduleModalProps {
     delayMinutes?: number;
     cascadeAll?: boolean;
     setUrgentPriority?: boolean;
+    newDoctorId?: string | null;
   }) => Promise<void> | void;
 }
 
@@ -39,6 +43,7 @@ export function RescheduleModal({
   isOpen,
   patient,
   queue,
+  availableDoctors: propDoctors,
   onClose,
   onReschedulePatient,
 }: RescheduleModalProps) {
@@ -52,8 +57,23 @@ export function RescheduleModal({
   const [fastTrackReadyPatient, setFastTrackReadyPatient] = useState<boolean>(true);
   const [readyPatientId, setReadyPatientId] = useState<string>('');
   const [cascadeDoctorDelay, setCascadeDoctorDelay] = useState<boolean>(true);
+  const [doctorsList, setDoctorsList] = useState<DbDoctor[]>(propDoctors || []);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [modalError, setModalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (propDoctors && propDoctors.length > 0) {
+      setDoctorsList(propDoctors);
+      return;
+    }
+    const storedClinic = typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_clinic_id') : null;
+    const storedLoc = patient?.locationId || (typeof window !== 'undefined' ? localStorage.getItem('healthsync_active_location_id') : null);
+    getDoctors(storedClinic || undefined, storedLoc || undefined).then((docs) => {
+      if (docs && docs.length > 0) setDoctorsList(docs);
+    });
+  }, [isOpen, propDoctors, patient?.locationId]);
 
   useEffect(() => {
     if (config?.use_standard_date_picker !== undefined) {
@@ -75,6 +95,7 @@ export function RescheduleModal({
   useEffect(() => {
     if (patient) {
       setSelectedSlotTime(patient.time || '10:00 AM');
+      setSelectedDoctorId((patient as any).doctorId || '');
     }
   }, [patient]);
 
@@ -137,6 +158,7 @@ export function RescheduleModal({
         delayMinutes,
         cascadeAll: strategy === 'doctor_delay' ? cascadeDoctorDelay : false,
         setUrgentPriority: strategy === 'emergency_shift',
+        newDoctorId: selectedDoctorId || null,
       });
 
       onClose();
@@ -183,6 +205,26 @@ export function RescheduleModal({
               <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3 rounded-xl flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
                 <span>{modalError}</span>
+              </div>
+            )}
+
+            {doctorsList.length > 0 && (
+              <div>
+                <label className="text-xs font-semibold text-[#8A909D] block mb-1.5">
+                  Allot / Reassign Doctor
+                </label>
+                <select
+                  value={selectedDoctorId}
+                  onChange={(e) => setSelectedDoctorId(e.target.value)}
+                  className="w-full h-9 px-3 bg-[#F8F9FB] border border-[#ECEEF2] rounded-xl text-xs font-semibold text-[#16191E] outline-none focus:border-blue-500"
+                >
+                  <option value="">Keep Current Doctor</option>
+                  {doctorsList.map((doc) => (
+                    <option key={doc.id} value={doc.id}>
+                      {doc.full_name} {doc.specialization ? `(${doc.specialization})` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
 

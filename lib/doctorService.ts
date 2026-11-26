@@ -1,11 +1,30 @@
 import { supabase } from './supabaseClient';
 import bcrypt from 'bcryptjs';
 import { DbDoctor, DbClinicLocation } from '@/types/database';
-import { getDoctorsLocal } from './supabaseService';
+import { getDoctorsLocal, clearDoctorsCacheLocal } from './supabaseService';
 
 export interface DoctorWithBranches extends DbDoctor {
   assigned_branch_ids?: string[];
   assigned_branches?: { id: string; branch_name: string; branch_code?: string }[];
+  chamber_pin?: string;
+  is_all_branches?: boolean;
+  today_patient_count?: number;
+}
+
+export function getStoredAdminPin(): string {
+  if (typeof window === 'undefined') return '';
+  return (
+    localStorage.getItem('healthsync_admin_pin') ||
+    localStorage.getItem('healthsync_chamber_pin') ||
+    ''
+  );
+}
+
+export function setStoredAdminPin(pin: string): void {
+  if (typeof window === 'undefined') return;
+  if (pin && pin.trim()) {
+    localStorage.setItem('healthsync_admin_pin', pin.trim());
+  }
 }
 
 export interface VerifyBranchGatewayResult {
@@ -37,10 +56,12 @@ export interface AdminUpsertDoctorPayload {
   reg_no: string;
   phone?: string;
   daily_quota: number;
+  consultation_fee?: number;
   pin_code?: string;
   is_admin_doctor: boolean;
   is_active: boolean;
-  branch_ids: string[];
+  location_id?: string | null;
+  branch_ids?: string[];
 }
 
 export interface ValidateAccessPinResult {
@@ -52,10 +73,13 @@ export interface ValidateAccessPinResult {
   clinic_name?: string;
   branch_name?: string | null;
   doctor_name?: string | null;
+  is_admin_doctor?: boolean;
   has_branch?: boolean;
   has_doctor?: boolean;
   error?: string;
 }
+
+let validateAccessPinRpcAvailable: boolean | null = null;
 
 /**
  * Direct validation using the unified access_pins table
@@ -65,13 +89,23 @@ export async function validateAccessPin(pin: string): Promise<ValidateAccessPinR
   if (!cleanPin) return { success: false, error: 'Please enter a PIN' };
 
   try {
-    // 1. Try PostgreSQL RPC
-    const { data, error } = await supabase.rpc('validate_access_pin', {
-      p_pin: cleanPin,
-    });
+    let data: any = null;
+    // 1. Try PostgreSQL RPC unless already known to be absent in schema cache (PGRST202)
+    if (validateAccessPinRpcAvailable !== false) {
+      const rpcRes = await supabase.rpc('validate_access_pin', {
+        p_pin: cleanPin,
+      });
+      data = rpcRes.data;
 
-    if (!error && data && data.success === true) {
-      return data as ValidateAccessPinResult;
+      if (rpcRes.error?.code === 'PGRST202') {
+        validateAccessPinRpcAvailable = false;
+      } else if (!rpcRes.error) {
+        validateAccessPinRpcAvailable = true;
+      }
+
+      if (!rpcRes.error && data && data.success === true) {
+        return data as ValidateAccessPinResult;
+      }
     }
 
     // 2. Direct fallback to access_pins table (works immediately even if RPC is not created yet)
@@ -94,9 +128,15 @@ export async function validateAccessPin(pin: string): Promise<ValidateAccessPinR
         if (b?.branch_name) branchName = b.branch_name;
       }
       let doctorName: string | null = null;
+      let isAdminDoctor = false;
       if (ap.doctor_id) {
-        const { data: d } = await supabase.from('doctors').select('full_name').eq('id', ap.doctor_id).maybeSingle();
+        const { data: d } = await supabase
+          .from('doctors')
+          .select('full_name, is_admin_doctor')
+          .eq('id', ap.doctor_id)
+          .maybeSingle();
         if (d?.full_name) doctorName = d.full_name;
+        if (d?.is_admin_doctor) isAdminDoctor = true;
       }
 
       return {
@@ -108,6 +148,7 @@ export async function validateAccessPin(pin: string): Promise<ValidateAccessPinR
         clinic_name: clinicName,
         branch_name: branchName,
         doctor_name: doctorName,
+        is_admin_doctor: isAdminDoctor,
         has_branch: Boolean(ap.location_id),
         has_doctor: Boolean(ap.doctor_id),
       };
@@ -275,33 +316,8 @@ export async function verifyBranchDoctorPin(
     }
 
     if (branchId) {
-      const { data: assignments } = await supabase
-        .from('doctor_locations')
-        .select('id, location_id')
-        .eq('doctor_id', matchedDoctor.id)
-        .eq('location_id', branchId)
-        .eq('is_active', true);
-
-      if (assignments && assignments.length > 0) {
-        return {
-          success: true,
-          doctor_id: matchedDoctor.id,
-          doctor_name: matchedDoctor.full_name,
-          specialization: matchedDoctor.specialization || 'General Medicine',
-          is_admin_doctor: false,
-          authorized_branch_id: branchId,
-          message: `Chamber Unlocked: Dr. ${matchedDoctor.full_name}`,
-          doctor: matchedDoctor,
-        };
-      }
-
-      const { data: anyAssignments } = await supabase
-        .from('doctor_locations')
-        .select('id')
-        .eq('doctor_id', matchedDoctor.id)
-        .eq('is_active', true);
-
-      if (!anyAssignments || anyAssignments.length === 0) {
+      // Direct location_id check: NULL means floating/all-branches, otherwise must match branchId
+      if (!matchedDoctor.location_id || matchedDoctor.location_id === branchId) {
         return {
           success: true,
           doctor_id: matchedDoctor.id,
@@ -316,7 +332,7 @@ export async function verifyBranchDoctorPin(
 
       return {
         success: false,
-        message: 'Invalid PIN. Please check and try again.',
+        message: 'Invalid PIN for this branch. Please check and try again.',
       };
     }
 
@@ -337,55 +353,78 @@ export async function verifyBranchDoctorPin(
 
 /**
  * 3. Fetch Doctors for a Specific Clinic (Admin View)
+ * Calls PostgreSQL RPC `get_clinic_doctors_admin` (single LEFT JOIN on clinic_locations)
  */
-export async function getDoctorsByClinic(clinicId: string): Promise<DoctorWithBranches[]> {
+export async function getDoctorsByClinic(
+  clinicId: string,
+  adminPin?: string
+): Promise<DoctorWithBranches[]> {
+  // 1. Primary: Call new Direct Location RPC get_clinic_doctors_admin
+  if (clinicId) {
+    try {
+      const { data, error } = await supabase.rpc('get_clinic_doctors_admin', {
+        p_clinic_id: clinicId,
+      });
+
+      if (!error && Array.isArray(data)) {
+        return data.map((d: any) => {
+          const isAll = Boolean(!d.location_id || d.is_admin_doctor || d.branch_code === 'ALL');
+          const branchName = d.branch_name || (isAll ? 'All Branches' : 'Assigned Branch');
+          const branchCode = d.branch_code || (isAll ? 'ALL' : '');
+          return {
+            ...d,
+            location_id: d.location_id || null,
+            branch_name: branchName,
+            branch_code: branchCode,
+            chamber_pin: d.pin_code || '',
+            is_all_branches: isAll,
+            assigned_branch_ids: d.location_id ? [d.location_id] : [],
+            assigned_branches: d.location_id
+              ? [{ id: d.location_id, branch_name: branchName, branch_code: branchCode }]
+              : [],
+            today_patient_count: 0,
+          };
+        });
+      }
+    } catch (rpcErr) {
+      console.warn('get_clinic_doctors_admin direct RPC note:', rpcErr);
+    }
+  }
+
+  // 2. Direct single table query fallback (JOIN clinic_locations directly!)
   try {
     const { data: doctors, error } = await supabase
       .from('doctors')
-      .select('*')
+      .select('*, clinic_locations(id, branch_name, branch_code)')
       .eq('clinic_id', clinicId)
       .neq('is_deleted', true)
+      .order('is_admin_doctor', { ascending: false })
       .order('full_name', { ascending: true });
 
-    if (error || !doctors) {
-      console.warn('getDoctorsByClinic error:', error?.message);
-      return [];
+    if (!error && doctors) {
+      return doctors.map((doc: any) => {
+        const loc = doc.clinic_locations;
+        const isAll = Boolean(!doc.location_id || doc.is_admin_doctor);
+        const branchName = loc?.branch_name || (isAll ? 'All Branches' : 'Assigned Branch');
+        const branchCode = loc?.branch_code || (isAll ? 'ALL' : '');
+        return {
+          ...doc,
+          location_id: doc.location_id || null,
+          branch_name: branchName,
+          branch_code: branchCode,
+          chamber_pin: doc.pin_code || '',
+          is_all_branches: isAll,
+          assigned_branch_ids: doc.location_id ? [doc.location_id] : [],
+          assigned_branches: doc.location_id
+            ? [{ id: doc.location_id, branch_name: branchName, branch_code: branchCode }]
+            : [],
+        };
+      });
     }
-
-    // Fetch assignments for all doctors in this clinic
-    const docIds = doctors.map((d: any) => d.id);
-    const { data: dlData } = await supabase
-      .from('doctor_locations')
-      .select('doctor_id, location_id')
-      .in('doctor_id', docIds)
-      .eq('is_active', true);
-
-    const { data: locs } = await supabase
-      .from('clinic_locations')
-      .select('id, branch_name, branch_code')
-      .eq('clinic_id', clinicId);
-
-    const locMap = new Map((locs || []).map((l: any) => [l.id, l]));
-
-    const enriched: DoctorWithBranches[] = doctors.map((doc: any) => {
-      const myAssignments = (dlData || []).filter((dl: any) => dl.doctor_id === doc.id);
-      const branchIds = myAssignments.map((a: any) => a.location_id);
-      const branches = branchIds
-        .map((bid: string) => locMap.get(bid))
-        .filter(Boolean) as { id: string; branch_name: string; branch_code?: string }[];
-
-      return {
-        ...doc,
-        assigned_branch_ids: branchIds,
-        assigned_branches: branches,
-      };
-    });
-
-    return enriched;
   } catch (err) {
-    console.warn('getDoctorsByClinic exception:', err);
-    return [];
+    console.warn('getDoctorsByClinic fallback exception:', err);
   }
+  return [];
 }
 
 /**
@@ -402,16 +441,7 @@ export async function getDoctorsByBranch(branchId: string): Promise<DbDoctor[]> 
 
     const clinicId = branch?.clinic_id;
 
-    // 2. Get assigned doctors from doctor_locations
-    const { data: dl } = await supabase
-      .from('doctor_locations')
-      .select('doctor_id')
-      .eq('location_id', branchId)
-      .eq('is_active', true);
-
-    const assignedDocIds = new Set((dl || []).map((d: any) => d.doctor_id));
-
-    // 3. Fetch all active doctors for this clinic
+    // 2. Fetch all active doctors for this clinic directly using doctors.location_id
     let query = supabase
       .from('doctors')
       .select('*')
@@ -425,10 +455,10 @@ export async function getDoctorsByBranch(branchId: string): Promise<DbDoctor[]> 
     const { data: allDocs } = await query;
     if (!allDocs) return [];
 
-    // Filter to doctors assigned to this branch OR who are Admin Doctors of this clinic
+    // Filter to doctors assigned to this branch OR floating (location_id is null) OR Admin Doctors
     const eligible = allDocs.filter((d: any) => {
-      if (d.is_admin_doctor) return true; // Admin doctor has access to all branches
-      return assignedDocIds.has(d.id);
+      if (d.is_admin_doctor || !d.location_id) return true;
+      return d.location_id === branchId;
     });
 
     return eligible as DbDoctor[];
@@ -440,12 +470,88 @@ export async function getDoctorsByBranch(branchId: string): Promise<DbDoctor[]> 
 
 /**
  * 5. Admin Upsert Doctor with Multi-Branch Assignments
+ * Calls PostgreSQL RPC `admin_create_doctor` or `admin_update_doctor` with table fallback
  */
-export async function adminUpsertDoctorWithBranches(payload: AdminUpsertDoctorPayload): Promise<{
+export async function adminUpsertDoctorWithBranches(
+  payload: AdminUpsertDoctorPayload,
+  adminPin?: string
+): Promise<{
   success: boolean;
   doctor_id?: string;
   message?: string;
 }> {
+  const pin = (adminPin || getStoredAdminPin()).trim();
+  const assignedLocationId = payload.is_admin_doctor
+    ? null
+    : (payload.location_id || (payload.branch_ids && payload.branch_ids.length > 0 ? payload.branch_ids[0] : null));
+
+  // 1. Primary: Try Direct Location RPCs
+  if (payload.clinic_id) {
+    try {
+      if (payload.id) {
+        // UPDATE DOCTOR RPC (p_doctor_id, p_full_name, ...)
+        const { data, error } = await supabase.rpc('admin_update_doctor', {
+          p_doctor_id: payload.id,
+          p_full_name: payload.full_name.trim(),
+          p_specialization: payload.specialization.trim(),
+          p_reg_no: payload.reg_no.trim(),
+          p_consultation_fee: payload.consultation_fee || 500,
+          p_daily_quota: Number(payload.daily_quota) || 30,
+          p_pin_code: payload.pin_code?.trim() || null,
+          p_is_admin_doctor: payload.is_admin_doctor,
+          p_is_active: payload.is_active !== undefined ? payload.is_active : true,
+          p_location_id: assignedLocationId,
+        });
+
+        if (!error && data) {
+          if (data.success === false) {
+            return {
+              success: false,
+              message: data.error || data.error_message || data.message || 'Failed to update doctor profile',
+            };
+          }
+          clearDoctorsCacheLocal();
+          return {
+            success: true,
+            doctor_id: payload.id,
+            message: data.message || `Doctor ${payload.full_name} updated successfully`,
+          };
+        }
+      } else {
+        // CREATE DOCTOR RPC (p_clinic_id, p_full_name, ...)
+        const { data, error } = await supabase.rpc('admin_create_doctor', {
+          p_clinic_id: payload.clinic_id,
+          p_full_name: payload.full_name.trim(),
+          p_specialization: payload.specialization.trim(),
+          p_reg_no: payload.reg_no.trim(),
+          p_consultation_fee: payload.consultation_fee || 500,
+          p_daily_quota: Number(payload.daily_quota) || 30,
+          p_pin_code: payload.pin_code?.trim() || '1234',
+          p_is_admin_doctor: payload.is_admin_doctor,
+          p_location_id: assignedLocationId,
+        });
+
+        if (!error && data) {
+          if (data.success === false) {
+            return {
+              success: false,
+              message: data.error || data.error_message || data.message || 'Failed to add doctor',
+            };
+          }
+          clearDoctorsCacheLocal();
+          return {
+            success: true,
+            doctor_id: data.doctor_id,
+            message: data.message || `Doctor ${payload.full_name} added successfully`,
+          };
+        }
+      }
+    } catch (rpcErr: any) {
+      console.warn('admin_create_doctor / admin_update_doctor RPC note:', rpcErr);
+    }
+  }
+
+  // 2. Direct fallback to Supabase tables (saving location_id directly in doctors)
   try {
     const docData: Record<string, any> = {
       clinic_id: payload.clinic_id,
@@ -454,13 +560,17 @@ export async function adminUpsertDoctorWithBranches(payload: AdminUpsertDoctorPa
       reg_no: payload.reg_no.trim(),
       phone: payload.phone?.trim() || null,
       daily_quota: payload.daily_quota || 30,
+      consultation_fee: payload.consultation_fee || 500,
       is_admin_doctor: payload.is_admin_doctor || false,
       is_active: payload.is_active !== undefined ? payload.is_active : true,
       is_deleted: false,
+      location_id: assignedLocationId,
+      updated_at: new Date().toISOString(),
     };
 
-    if (payload.pin_code && payload.pin_code.trim()) {
-      docData.pin_code = payload.pin_code.trim();
+    const cleanChamberPin = payload.pin_code?.trim();
+    if (cleanChamberPin) {
+      docData.pin_code = cleanChamberPin;
     }
 
     let doctorId = payload.id;
@@ -489,48 +599,127 @@ export async function adminUpsertDoctorWithBranches(payload: AdminUpsertDoctorPa
       return { success: false, message: 'Failed to resolve doctor record' };
     }
 
-    // Sync doctor_locations
-    // 1. Delete existing assignments
-    await supabase.from('doctor_locations').delete().eq('doctor_id', doctorId);
-
-    // 2. Insert new branch assignments (if regular doctor, or if admin has specific branches selected)
-    const branchesToInsert = payload.branch_ids || [];
-    if (branchesToInsert.length > 0) {
-      const rows = branchesToInsert.map((bid) => ({
-        doctor_id: doctorId,
-        location_id: bid,
-        is_active: true,
-      }));
-      const { error: dlErr } = await supabase.from('doctor_locations').insert(rows);
-      if (dlErr) console.warn('Error inserting doctor_locations:', dlErr.message);
+    // Sync access_pins for chamber PIN entry
+    if (cleanChamberPin) {
+      try {
+        await supabase.from('access_pins').delete().eq('doctor_id', doctorId);
+        await supabase.from('access_pins').insert([
+          {
+            pin: cleanChamberPin,
+            clinic_id: payload.clinic_id,
+            location_id: assignedLocationId,
+            doctor_id: doctorId,
+            label: `${payload.full_name.trim()} Chamber`,
+            is_active: true,
+          },
+        ]);
+      } catch (pinSyncErr) {
+        console.warn('access_pins sync note:', pinSyncErr);
+      }
     }
 
+    clearDoctorsCacheLocal();
     return {
       success: true,
       doctor_id: doctorId,
-      message: `Doctor ${payload.full_name} saved successfully`,
+      message: `Doctor ${payload.full_name} saved successfully with direct location`,
     };
   } catch (err: any) {
-    console.error('adminUpsertDoctorWithBranches exception:', err);
-    return { success: false, message: err?.message || 'Failed to save doctor' };
+    return { success: false, message: err?.message || 'Failed to save doctor record' };
   }
 }
 
 /**
- * 6. Soft Delete / Deactivate Doctor
+ * 6. Admin Delete / Deactivate Doctor
+ * Calls PostgreSQL RPC `admin_delete_doctor` with table fallback
  */
-export async function adminDeleteDoctor(doctorId: string): Promise<{ success: boolean; message?: string }> {
+export async function adminDeleteDoctor(
+  doctorId: string,
+  clinicId?: string,
+  adminPin?: string
+): Promise<{ success: boolean; message?: string }> {
+  // 0. Safety Guard: Admin Doctors cannot be deleted
+  const { data: targetDoc } = await supabase
+    .from('doctors')
+    .select('is_admin_doctor, full_name')
+    .eq('id', doctorId)
+    .maybeSingle();
+
+  if (targetDoc?.is_admin_doctor) {
+    return {
+      success: false,
+      message: 'Admin doctors cannot be removed or deleted from the clinic roster.',
+    };
+  }
+
+  const pin = (adminPin || getStoredAdminPin()).trim();
+
+  // 1. Primary: Call Supabase RPC admin_delete_doctor
+  if (clinicId) {
+    try {
+      let { data, error } = await supabase.rpc('admin_delete_doctor', {
+        p_clinic_id: clinicId,
+        p_doctor_id: doctorId,
+      });
+
+      if (error?.code === 'PGRST202' && pin) {
+        const retry = await supabase.rpc('admin_delete_doctor', {
+          p_admin_pin: pin,
+          p_clinic_id: clinicId,
+          p_doctor_id: doctorId,
+        });
+        data = retry.data;
+        error = retry.error;
+      }
+
+      if (!error && data) {
+        if (data.success === false) {
+          return {
+            success: false,
+            message: data.error || data.error_message || data.message || 'Cannot delete doctor',
+          };
+        }
+        clearDoctorsCacheLocal();
+        return {
+          success: true,
+          message: data.message || 'Doctor removed from clinic active directory successfully',
+        };
+      }
+    } catch (rpcErr: any) {
+      console.warn('admin_delete_doctor RPC note:', rpcErr);
+    }
+  }
+
+  // 2. Direct fallback
   try {
+    // Check if doctor has active waiting or in progress appointments today
+    const todayYmd = new Date().toISOString().split('T')[0];
+    const { count } = await supabase
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('doctor_id', doctorId)
+      .gte('scheduled_time', `${todayYmd}T00:00:00`)
+      .in('status', ['Waiting', 'In Progress']);
+
+    if (count && count > 0) {
+      return {
+        success: false,
+        message: `Cannot delete this doctor. There are ${count} patients currently waiting in their chamber queue today. Please reallocate or complete visits first.`,
+      };
+    }
+
     const { error } = await supabase
       .from('doctors')
-      .update({ is_deleted: true, is_active: false })
+      .update({ is_deleted: true, is_active: false, updated_at: new Date().toISOString() })
       .eq('id', doctorId);
 
     if (error) throw error;
-    // Also remove from doctor_locations
-    await supabase.from('doctor_locations').delete().eq('doctor_id', doctorId);
 
-    return { success: true, message: 'Doctor deactivated successfully' };
+    // Deactivate in access_pins
+    await supabase.from('access_pins').update({ is_active: false }).eq('doctor_id', doctorId);
+
+    clearDoctorsCacheLocal();
+    return { success: true, message: 'Doctor removed from clinic active directory successfully' };
   } catch (err: any) {
     return { success: false, message: err?.message || 'Failed to delete doctor' };
   }

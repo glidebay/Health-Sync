@@ -15,6 +15,10 @@ export interface DbDoctor {
   is_active?: boolean;
   clinic_id?: string | null;
   clinic_name?: string | null;
+  location_id?: string | null;
+  branch_name?: string | null;
+  branch_code?: string | null;
+  consultation_fee?: number | null;
   is_admin?: boolean;
   is_admin_doctor?: boolean;
   is_deleted?: boolean;

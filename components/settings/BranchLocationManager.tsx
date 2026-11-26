@@ -16,6 +16,8 @@ import {
   MessageSquare,
   Users,
   X,
+  Upload,
+  Trash2,
 } from 'lucide-react';
 import { DbClinicLocation } from '@/types/database';
 import { fetchClinicLocations } from '@/lib/supabaseService';
@@ -54,6 +56,8 @@ export function BranchLocationManager({
   const [formPhone, setFormPhone] = useState('');
   const [formWaPhoneId, setFormWaPhoneId] = useState('');
   const [formQuota, setFormQuota] = useState('40');
+  const [formLogoUrl, setFormLogoUrl] = useState('');
+  const logoInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const loadLocations = async () => {
     setIsLoading(true);
@@ -93,6 +97,7 @@ export function BranchLocationManager({
     setFormPhone('');
     setFormWaPhoneId('');
     setFormQuota('40');
+    setFormLogoUrl('');
     setIsModalOpen(true);
   };
 
@@ -105,7 +110,21 @@ export function BranchLocationManager({
     setFormPhone(loc.phone || '');
     setFormWaPhoneId(loc.whatsapp_phone_number_id || '');
     setFormQuota(String(loc.daily_quota || 40));
+    setFormLogoUrl(loc.logo_url || '');
     setIsModalOpen(true);
+  };
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setFormLogoUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const getFullBookingUrl = (loc: DbClinicLocation): string => {
@@ -137,6 +156,7 @@ export function BranchLocationManager({
         phone: formPhone.trim() || null,
         whatsapp_phone_number_id: formWaPhoneId.trim() || null,
         daily_quota: parseInt(formQuota, 10) || 40,
+        logo_url: formLogoUrl.trim() || null,
         updated_at: new Date().toISOString(),
       };
 
@@ -238,10 +258,18 @@ export function BranchLocationManager({
                 }`}
               >
                 <div className="space-y-3">
-                  {/* Top Row: Icon & Status Badges */}
+                  {/* Top Row: Icon/Logo & Status Badges */}
                   <div className="flex items-start justify-between gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100/60 text-[#2563EB] flex items-center justify-center flex-shrink-0">
-                      <MapPin className="w-5 h-5 stroke-[2.2]" />
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100/60 text-[#2563EB] flex items-center justify-center flex-shrink-0 overflow-hidden">
+                      {loc.logo_url ? (
+                        <img
+                          src={loc.logo_url}
+                          alt={loc.branch_name}
+                          className="w-full h-full object-contain p-1 bg-white"
+                        />
+                      ) : (
+                        <MapPin className="w-5 h-5 stroke-[2.2]" />
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
@@ -372,6 +400,57 @@ export function BranchLocationManager({
 
               {/* Modal Body */}
               <form onSubmit={handleSave} className="p-6 overflow-y-auto space-y-4">
+                {/* Branch Logo Upload */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Branch Logo <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoFileChange}
+                    className="hidden"
+                  />
+                  {formLogoUrl ? (
+                    <div className="flex items-center gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                      <div className="w-11 h-11 rounded-lg border border-slate-200 bg-white overflow-hidden flex items-center justify-center p-1 flex-shrink-0">
+                        <img src={formLogoUrl} alt="Branch logo" className="w-full h-full object-contain" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-bold text-slate-800 block truncate">Branch Logo Ready</span>
+                        <span className="text-[11px] text-slate-400">Saved for this branch</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => logoInputRef.current?.click()}
+                          className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg text-[11px] font-semibold text-slate-700 cursor-pointer"
+                        >
+                          Change
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormLogoUrl('')}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                          title="Remove branch logo"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      className="w-full border border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-3 flex items-center justify-center gap-2 text-xs font-semibold text-slate-600 hover:text-blue-600 bg-slate-50/50 hover:bg-blue-50/30 transition cursor-pointer"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Upload Branch Logo (PNG, JPG, SVG)</span>
+                    </button>
+                  )}
+                </div>
+
                 {/* Branch Name */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">

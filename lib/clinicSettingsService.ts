@@ -17,6 +17,7 @@ export interface UnifiedClinicSettings {
   branch_phone?: string;
   branch_address?: string;
   branch_landmark?: string;
+  branch_logo_url?: string;
   daily_quota: number;
   slot_duration_mins: number;
   gateway_pin?: string;
@@ -52,6 +53,7 @@ export interface SaveUnifiedSettingsInput {
   branch_phone?: string;
   branch_address?: string;
   branch_landmark?: string;
+  branch_logo_url?: string;
   daily_quota?: number;
   slot_duration_mins?: number;
   gateway_pin?: string;
@@ -87,7 +89,18 @@ export async function fetchUnifiedClinicSettings(
     });
 
     if (!rpcError && rpcData && rpcData.success !== false) {
-      return { success: true, settings: rpcData as UnifiedClinicSettings };
+      const settings = rpcData as UnifiedClinicSettings;
+      if (locationId && settings.branch_logo_url === undefined) {
+        const { data: bLogo } = await supabase
+          .from('clinic_locations')
+          .select('logo_url')
+          .eq('id', locationId)
+          .maybeSingle();
+        if (bLogo?.logo_url) {
+          settings.branch_logo_url = bLogo.logo_url;
+        }
+      }
+      return { success: true, settings };
     }
 
     // 2. Direct fallback to tables
@@ -138,6 +151,7 @@ export async function fetchUnifiedClinicSettings(
       branch_phone: branch?.phone || '',
       branch_address: branch?.address || '',
       branch_landmark: branch?.landmark || '',
+      branch_logo_url: branch?.logo_url || '',
       daily_quota: branch?.daily_quota ?? 40,
       slot_duration_mins: branch?.slot_duration_mins ?? 15,
       gateway_pin: branch?.gateway_pin || '',
@@ -212,6 +226,7 @@ export async function saveUnifiedClinicSettings(
       if (input.branch_phone !== undefined) branchUpdates.phone = input.branch_phone ? input.branch_phone.trim() : null;
       if (input.branch_address !== undefined) branchUpdates.address = input.branch_address ? input.branch_address.trim() : null;
       if (input.branch_landmark !== undefined) branchUpdates.landmark = input.branch_landmark ? input.branch_landmark.trim() : null;
+      if (input.branch_logo_url !== undefined) branchUpdates.logo_url = input.branch_logo_url ? input.branch_logo_url.trim() : null;
       if (input.daily_quota !== undefined) branchUpdates.daily_quota = Math.max(1, Math.min(500, input.daily_quota));
       if (input.slot_duration_mins !== undefined) branchUpdates.slot_duration_mins = Math.max(5, Math.min(180, input.slot_duration_mins));
       if (input.gateway_pin !== undefined) branchUpdates.gateway_pin = input.gateway_pin ? input.gateway_pin.trim() : null;

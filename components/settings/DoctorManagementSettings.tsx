@@ -18,8 +18,9 @@ import {
   getDoctorsByClinic,
   adminUpsertDoctorWithBranches,
   adminDeleteDoctor,
+  getStoredAdminPin,
 } from '@/lib/doctorService';
-import { fetchClinicLocations } from '@/lib/supabaseService';
+import { fetchClinicLocations, clearDoctorsCacheLocal } from '@/lib/supabaseService';
 import { supabase } from '@/lib/supabaseClient';
 import { DbClinicLocation } from '@/types/database';
 import { EcgActionLoader } from '@/components/loading/EcgActionLoader';
@@ -61,6 +62,10 @@ const SPECIALIZATION_OPTIONS = [
 
 interface DoctorManagementSettingsProps {
   currentClinicId?: string | null;
+  adminPin?: string;
+  isAdminUser?: boolean;
+  lockedLocationId?: string | null;
+  lockedBranchName?: string | null;
 }
 
 /** Formats a doctor's name cleanly without duplicate "Dr. Dr." */
@@ -73,8 +78,18 @@ export function formatDoctorDisplayName(fullName: string): string {
   return `Dr. ${stripped}`;
 }
 
-export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSettingsProps) {
+export function DoctorManagementSettings({
+  currentClinicId,
+  adminPin,
+  isAdminUser = true,
+  lockedLocationId,
+  lockedBranchName,
+}: DoctorManagementSettingsProps) {
   const [clinicList, setClinicList] = useState<{ id: string; name: string; slug?: string }[]>([]);
+
+  const effectiveAdminPin = useMemo(() => {
+    return (adminPin || getStoredAdminPin() || '').trim();
+  }, [adminPin]);
 
   useEffect(() => {
     async function loadClinics() {
@@ -140,7 +155,7 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
   const [formQuota, setFormQuota] = useState(30);
   const [formPin, setFormPin] = useState('');
   const [formIsAdmin, setFormIsAdmin] = useState(false);
-  const [formBranchIds, setFormBranchIds] = useState<string[]>([]);
+  const [formLocationId, setFormLocationId] = useState<string>('');
   const [formError, setFormError] = useState('');
 
   // Load doctors and branches for selected clinic ONLY
@@ -150,7 +165,7 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
     const startTime = Date.now();
     try {
       const [docList, branchList] = await Promise.all([
-        getDoctorsByClinic(selectedClinicId),
+        getDoctorsByClinic(selectedClinicId, effectiveAdminPin),
         fetchClinicLocations(selectedClinicId),
       ]);
       setDoctors(docList);
@@ -164,11 +179,20 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
     } finally {
       setIsLoading(false);
     }
-  }, [selectedClinicId]);
+  }, [selectedClinicId, effectiveAdminPin]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const visibleDoctors = useMemo(() => {
+    if (!isAdminUser && lockedLocationId) {
+      return doctors.filter(
+        (d) => d.location_id === lockedLocationId || !d.location_id || d.is_admin_doctor
+      );
+    }
+    return doctors;
+  }, [doctors, isAdminUser, lockedLocationId]);
 
   const handleOpenAdd = () => {
     setEditingDoctor(null);
@@ -180,7 +204,7 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
     setFormQuota(30);
     setFormPin('1234');
     setFormIsAdmin(false);
-    setFormBranchIds(branches.length > 0 ? [branches[0].id] : []);
+    setFormLocationId(!isAdminUser && lockedLocationId ? lockedLocationId : '');
     setFormError('');
     setIsModalOpen(true);
   };
@@ -200,15 +224,9 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
     setFormQuota(doc.daily_quota || 30);
     setFormPin(''); // blank means keep existing PIN
     setFormIsAdmin(Boolean(doc.is_admin_doctor));
-    setFormBranchIds(doc.assigned_branch_ids || []);
+    setFormLocationId(doc.location_id || (doc.assigned_branch_ids && doc.assigned_branch_ids[0]) || '');
     setFormError('');
     setIsModalOpen(true);
-  };
-
-  const toggleBranchSelection = (branchId: string) => {
-    setFormBranchIds((prev) =>
-      prev.includes(branchId) ? prev.filter((id) => id !== branchId) : [...prev, branchId]
-    );
   };
 
   const handleSaveDoctor = async (e: React.FormEvent) => {
@@ -229,11 +247,6 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
       return;
     }
 
-    if (!formIsAdmin && formBranchIds.length === 0) {
-      setFormError('Please assign at least one physical clinic branch for standard OPD doctors');
-      return;
-    }
-
     setIsSaving(true);
     try {
       const res = await adminUpsertDoctorWithBranches({
@@ -245,12 +258,18 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
         phone: formPhone.trim() || undefined,
         daily_quota: Number(formQuota) || 30,
         pin_code: formPin.trim() || undefined,
-        is_admin_doctor: formIsAdmin,
+        is_admin_doctor: isAdminUser ? formIsAdmin : false,
         is_active: true,
-        branch_ids: formIsAdmin ? branches.map((b) => b.id) : formBranchIds,
-      });
+        location_id: !isAdminUser && lockedLocationId
+          ? lockedLocationId
+          : (formIsAdmin ? null : (formLocationId || null)),
+        branch_ids: !isAdminUser && lockedLocationId
+          ? [lockedLocationId]
+          : (formIsAdmin ? [] : (formLocationId ? [formLocationId] : [])),
+      }, effectiveAdminPin);
 
       if (res.success) {
+        clearDoctorsCacheLocal();
         setStatusMessage({
           type: 'success',
           text: `${cleanName} successfully ${editingDoctor ? 'updated' : 'added to roster'}.`,
@@ -268,15 +287,23 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
   };
 
   const handleDeleteDoctor = async (doc: DoctorWithBranches) => {
+    // Admin doctors cannot be deleted
+    if (doc.is_admin_doctor) {
+      setStatusMessage({ type: 'error', text: 'Admin doctors cannot be removed or deleted.' });
+      return;
+    }
+
     const displayName = formatDoctorDisplayName(doc.full_name);
     const confirm = window.confirm(
       `Are you sure you want to remove ${displayName} from the active clinic roster?`
     );
     if (!confirm) return;
 
+    setIsLoading(true);
     try {
-      const res = await adminDeleteDoctor(doc.id);
+      const res = await adminDeleteDoctor(doc.id, selectedClinicId, effectiveAdminPin);
       if (res.success) {
+        clearDoctorsCacheLocal();
         setStatusMessage({ type: 'success', text: `${displayName} deactivated.` });
         await loadData();
       } else {
@@ -284,6 +311,8 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
       }
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err?.message || 'Error deactivating doctor.' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -299,11 +328,13 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
               Doctor Management
             </h2>
             <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
-              {doctors.length} {doctors.length === 1 ? 'Doctor' : 'Doctors'}
+              {visibleDoctors.length} {visibleDoctors.length === 1 ? 'Doctor' : 'Doctors'}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Manage doctors, specializations, daily quotas, and branch allocations for {activeClinicMeta.name}.
+            {!isAdminUser && lockedBranchName
+              ? `Manage doctors and daily quotas for ${lockedBranchName}.`
+              : `Manage doctors, specializations, daily quotas, and branch allocations for ${activeClinicMeta.name}.`}
           </p>
         </div>
 
@@ -335,7 +366,7 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
       )}
 
       {/* Doctor Directory Grid */}
-      {doctors.length === 0 && !isLoading ? (
+      {visibleDoctors.length === 0 && !isLoading ? (
         <div className="p-12 text-center bg-white rounded-2xl border border-[#ECEEF2]">
           <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
           <h4 className="text-sm font-bold text-slate-700">No Doctors Found</h4>
@@ -345,8 +376,9 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {doctors.map((doc) => {
+          {visibleDoctors.map((doc) => {
             const isAdmin = Boolean(doc.is_admin_doctor);
+            const canManageDoctor = isAdminUser || (!isAdmin && (!lockedLocationId || doc.location_id === lockedLocationId));
             const formattedName = formatDoctorDisplayName(doc.full_name);
             const initials = formattedName
               .replace(/^dr\.?\s+/i, '')
@@ -387,70 +419,77 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
                   </div>
 
                   {/* Credentials / Details */}
-                  <div className="grid grid-cols-2 gap-2 text-xs py-2.5 px-3 bg-slate-50/70 rounded-xl border border-slate-100 my-3 text-slate-600">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs py-2.5 px-3 bg-slate-50/70 rounded-xl border border-slate-100 my-3 text-slate-600">
                     <div>
-                      <span className="text-[11px] text-slate-400 block">Registration No.</span>
-                      <span className="font-semibold text-slate-800 text-xs">{doc.reg_no || '—'}</span>
+                      <span className="text-[10px] text-slate-400 block font-medium">Reg. No</span>
+                      <span className="font-semibold text-slate-800 text-xs truncate block">{doc.reg_no || '—'}</span>
                     </div>
                     <div>
-                      <span className="text-[11px] text-slate-400 block">Daily Quota</span>
-                      <span className="font-semibold text-slate-800 text-xs">{doc.daily_quota || 30} patients</span>
+                      <span className="text-[10px] text-slate-400 block font-medium">Daily Quota</span>
+                      <span className="font-semibold text-slate-800 text-xs">{doc.daily_quota || 30} pts</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-medium">Chamber PIN</span>
+                      <span className="font-mono font-semibold text-blue-700 text-xs">{doc.chamber_pin || '••••'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-medium">Today&apos;s Queue</span>
+                      <span className="font-semibold text-emerald-700 text-xs">{doc.today_patient_count ?? 0} active</span>
                     </div>
                   </div>
 
-                  {/* Branch Assignments */}
+                  {/* Branch Scope */}
                   <div>
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1.5">
-                      {isAdmin ? 'Scope' : 'Branches'}
+                      Branch Scope
                     </span>
-                    {isAdmin ? (
+                    {isAdmin || doc.is_all_branches || !doc.location_id ? (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-700">
                         <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                        <span>All Branches</span>
+                        <span>All Branches (Org-wide)</span>
                       </span>
                     ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {doc.assigned_branches && doc.assigned_branches.length > 0 ? (
-                          doc.assigned_branches.map((b) => (
-                            <span
-                              key={b.id}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-700"
-                            >
-                              <MapPin className="w-3 h-3 text-slate-400" />
-                              <span>{b.branch_name}</span>
-                              {b.branch_code && (
-                                <span className="text-slate-400 font-mono text-[10px]">({b.branch_code})</span>
-                              )}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-xs text-slate-400 italic">No branch assigned</span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                        <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                        <span>{doc.branch_name || 'Assigned Branch'}</span>
+                        {doc.branch_code && (
+                          <span className="text-blue-500 font-mono text-[10px]">({doc.branch_code})</span>
                         )}
-                      </div>
+                      </span>
                     )}
                   </div>
                 </div>
 
                 {/* Bottom Actions */}
                 <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEdit(doc)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition cursor-pointer"
-                    title="Edit Doctor"
-                  >
-                    <Edit3 className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Edit</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteDoctor(doc)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer"
-                    title="Delete Doctor"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                    <span>Delete</span>
-                  </button>
+                  {canManageDoctor ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(doc)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition cursor-pointer"
+                        title="Edit Doctor"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Edit</span>
+                      </button>
+                      {!isAdmin && !doc.is_admin_doctor && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDoctor(doc)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer"
+                          title="Delete Doctor"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                          <span>Delete</span>
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-[11px] text-slate-400 font-medium italic">
+                      Managed by Clinic Admin
+                    </span>
+                  )}
                 </div>
               </motion.div>
             );
@@ -585,61 +624,59 @@ export function DoctorManagementSettings({ currentClinicId }: DoctorManagementSe
                   </div>
                 </div>
 
-                {/* Admin Doctor Toggle */}
-                <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    id="adminDoctorCheckbox"
-                    checked={formIsAdmin}
-                    onChange={(e) => setFormIsAdmin(e.target.checked)}
-                    className="mt-0.5 w-4 h-4 text-blue-600 rounded-sm border-slate-300 focus:ring-blue-500 cursor-pointer"
-                  />
-                  <label htmlFor="adminDoctorCheckbox" className="text-xs text-slate-700 cursor-pointer">
-                    <span className="font-semibold text-slate-800 block">
-                      Admin Doctor
-                    </span>
-                    <span className="text-[11px] text-slate-500">
-                      Grants administrative privileges and access across all clinic branches.
-                    </span>
-                  </label>
-                </div>
-
-                {/* Branch Assignment Selector (Disabled if Admin Doctor) */}
-                {!formIsAdmin && (
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Assign Physical Clinic Branches *
+                {/* Admin Doctor Toggle (Clinic Admin only) */}
+                {isAdminUser && (
+                  <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      id="adminDoctorCheckbox"
+                      checked={formIsAdmin}
+                      onChange={(e) => setFormIsAdmin(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 text-blue-600 rounded-sm border-slate-300 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <label htmlFor="adminDoctorCheckbox" className="text-xs text-slate-700 cursor-pointer">
+                      <span className="font-semibold text-slate-800 block">
+                        Admin Doctor
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Grants administrative privileges and access across all clinic branches.
+                      </span>
                     </label>
-                    <div className="space-y-2 max-h-40 overflow-y-auto p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                      {branches.map((b) => {
-                        const isChecked = formBranchIds.includes(b.id);
-                        return (
-                          <label
-                            key={b.id}
-                            className={`flex items-center justify-between p-2 rounded-lg text-xs transition cursor-pointer border ${
-                              isChecked
-                                ? 'bg-blue-50 text-blue-800 border-blue-200 font-bold'
-                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => toggleBranchSelection(b.id)}
-                                className="w-3.5 h-3.5 text-blue-600 rounded-sm"
-                              />
-                              <span>{b.branch_name}</span>
-                            </div>
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              {b.branch_code || 'MAIN'}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
                   </div>
                 )}
+
+                {/* Branch Location Selector */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Branch Allocation
+                  </label>
+                  <select
+                    disabled={formIsAdmin || (!isAdminUser && Boolean(lockedLocationId))}
+                    value={!isAdminUser && lockedLocationId ? lockedLocationId : (formIsAdmin ? '' : formLocationId)}
+                    onChange={(e) => setFormLocationId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:border-blue-500 focus:outline-hidden disabled:bg-slate-100 disabled:text-slate-400"
+                  >
+                    <option value="">All Branches (Floating / Clinic Director)</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.branch_name} {b.branch_code ? `(${b.branch_code})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {!isAdminUser && lockedLocationId ? (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Scoped to your active branch ({lockedBranchName || 'Current Branch'}).
+                    </p>
+                  ) : formIsAdmin ? (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Admin doctors operate across all clinic branches automatically.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Select a specific branch, or choose &ldquo;All Branches&rdquo; for multi-branch coverage.
+                    </p>
+                  )}
+                </div>
 
                 {/* Modal Footer */}
                 <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">

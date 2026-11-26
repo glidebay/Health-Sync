@@ -153,7 +153,7 @@ export function SideMenu({
                       {!requireDoctorPin
                         ? 'Open Access'
                         : isLoggedIn
-                        ? (isAdmin ? 'Main Doctor (Admin)' : 'Doctor Verified')
+                        ? (isAdmin ? 'Admin' : 'Doctor Verified')
                         : 'Doctor Locked'}
                     </p>
                     <p className="text-[11px] text-[#8A909D] truncate font-medium">

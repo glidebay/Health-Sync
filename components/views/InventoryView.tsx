@@ -323,14 +323,15 @@ export function InventoryView({
       locationId,
     });
 
-    setMedicines((prev) => {
-      const idx = prev.findIndex((m) => m.id === newMed.id || m.sku.toUpperCase() === newMed.sku.toUpperCase());
-      const next = idx >= 0 ? prev.map((m, i) => (i === idx ? newMed : m)) : [newMed, ...prev];
-      if (onInventorySync) {
-        onInventorySync(convertMasterToInventoryItems(next));
-      }
-      return next;
-    });
+    const idx = medicines.findIndex(
+      (m) => m.id === newMed.id || m.sku.toUpperCase() === newMed.sku.toUpperCase()
+    );
+    const nextMedicines =
+      idx >= 0 ? medicines.map((m, i) => (i === idx ? newMed : m)) : [newMed, ...medicines];
+    setMedicines(nextMedicines);
+    if (onInventorySync) {
+      onInventorySync(convertMasterToInventoryItems(nextMedicines));
+    }
 
     setNewBrand('');
     setNewGeneric('');
