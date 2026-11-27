@@ -348,7 +348,7 @@ export function ConsultationView({
             </div>
           </div>
 
-          {/* 2. Collapsible Previous Visits & Prescriptions Card */}
+          {/* 2. Collapsible Previous  & Prescriptions Card */}
           <AnimatePresence>
             {showHistoryPanel && medicalProfile && (
               <motion.div
