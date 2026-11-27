@@ -23,6 +23,10 @@ interface QueueViewProps {
   itemsPerPage?: number;
   locationId?: string;
   clinicId?: string;
+  doctorId?: string;
+  doctorName?: string;
+  isDoctorAdmin?: boolean;
+  doctors?: { id: string; full_name: string }[];
 }
 
 function getTodayIST(): string {
@@ -67,16 +71,32 @@ export function QueueView({
   itemsPerPage = 5,
   locationId,
   clinicId,
+  doctorId,
+  doctorName,
+  isDoctorAdmin = false,
+  doctors = [],
 }: QueueViewProps) {
   const todayIST = useMemo(() => getTodayIST(), []);
   const [selectedDate, setSelectedDate] = useState<string>(todayIST);
+  const [selectedDoctorFilter, setSelectedDoctorFilter] = useState<string>(() => doctorId || 'all');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [dbPatients, setDbPatients] = useState<Patient[] | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
+  // Keep filter synced when logged-in doctor changes; non-admin doctors are strictly locked to their own queue
+  useEffect(() => {
+    setSelectedDoctorFilter(doctorId || 'all');
+  }, [doctorId]);
+
+  const effectiveDoctorId = useMemo(() => {
+    if (!isDoctorAdmin && doctorId) return doctorId;
+    if (selectedDoctorFilter && selectedDoctorFilter !== 'all') return selectedDoctorFilter;
+    return undefined;
+  }, [isDoctorAdmin, doctorId, selectedDoctorFilter]);
+
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedDate]);
+  }, [selectedDate, effectiveDoctorId]);
 
   const loadData = useCallback(
     async (silent: boolean = false) => {
@@ -85,6 +105,7 @@ export function QueueView({
         const fetchedPatients = await fetchPatientAppointmentsFromDb({
           date: selectedDate,
           status: 'All',
+          doctorId: effectiveDoctorId,
           locationId,
           clinicId,
         });
@@ -95,7 +116,7 @@ export function QueueView({
         if (!silent) setIsLoading(false);
       }
     },
-    [selectedDate, locationId, clinicId]
+    [selectedDate, effectiveDoctorId, locationId, clinicId]
   );
 
   useEffect(() => {
@@ -137,8 +158,10 @@ export function QueueView({
   }, [loadData, selectedDate]);
 
   const rawPatients = useMemo(() => {
-    return dbPatients !== null ? dbPatients : queue;
-  }, [dbPatients, queue]);
+    const base = dbPatients !== null ? dbPatients : queue;
+    if (!effectiveDoctorId) return base;
+    return base.filter((p) => p.doctorId === effectiveDoctorId);
+  }, [dbPatients, queue, effectiveDoctorId]);
 
   const currentPatients = useMemo(() => {
     return rawPatients.filter((p) => p.status !== 'Cancelled' && p.status !== 'Completed');
@@ -174,16 +197,38 @@ export function QueueView({
           <div>
             <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 block">
               Live Queue • {currentPatients.length} {currentPatients.length === 1 ? 'Patient' : 'Patients'}
+              {effectiveDoctorId && (doctorName || doctors.find((d) => d.id === effectiveDoctorId)?.full_name)
+                ? ` • Dr. ${(doctors.find((d) => d.id === effectiveDoctorId)?.full_name || doctorName || '').replace(/^Dr\.\s*/i, '')}`
+                : isDoctorAdmin
+                ? ' • All Doctors'
+                : ''}
             </span>
             <h2 className="mt-1.5 text-base sm:text-lg font-semibold text-[#16191E]">
               Doctor Consultation Queue
             </h2>
             <p className="mt-1 text-xs text-slate-500">
-              Click any waiting patient or &quot;Consult&quot; to begin their examination.
+              {effectiveDoctorId
+                ? 'Showing patients booked specifically for your consultation queue.'
+                : 'Click any waiting patient or "Consult" to begin their examination.'}
             </p>
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+            {isDoctorAdmin && doctors.length > 0 && (
+              <select
+                value={selectedDoctorFilter}
+                onChange={(e) => setSelectedDoctorFilter(e.target.value)}
+                aria-label="Filter queue by doctor"
+                className="h-[38px] px-3 rounded-xl border border-[#ECEEF2] bg-white text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:border-[#2563EB] focus:outline-hidden cursor-pointer"
+              >
+                <option value="all">All Doctors</option>
+                {doctors.map((doc) => (
+                  <option key={doc.id} value={doc.id}>
+                    {doc.full_name}
+                  </option>
+                ))}
+              </select>
+            )}
             <div className="relative flex items-center bg-white rounded-xl border border-[#ECEEF2] p-1 shadow-2xs hover:border-slate-300 transition-all">
               <button
                 type="button"
@@ -313,6 +358,11 @@ export function QueueView({
                           <li className="rounded-full border border-slate-200 px-3 py-0.5 text-[11px] font-normal text-slate-600 bg-white">
                             {isOnline ? 'Online (WhatsApp)' : 'Walk-in Visit'}
                           </li>
+                          {p.doctorName && (
+                            <li className="rounded-full border border-blue-200/70 bg-blue-50/70 px-3 py-0.5 text-[11px] font-medium text-[#2563EB]">
+                              {p.doctorName}
+                            </li>
+                          )}
                           {isUrgent && (
                             <li className="rounded-full border border-rose-200 bg-rose-50 px-3 py-0.5 text-[11px] font-medium text-rose-700">
                               Urgent Priority
