@@ -687,7 +687,7 @@ export function DashboardView({
                   Clinic Operations
                 </span>
                 <h2 className="text-base sm:text-lg font-semibold text-[#16191E] flex items-center gap-2 flex-wrap">
-                  <span>Smart Patient Flow &amp; Chamber Triage</span>
+                  <span>Manage Patients</span>
                   {branchName && (
                     <span className="rounded-full border border-blue-200/70 bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-blue-700">
                       {branchName}
@@ -695,8 +695,7 @@ export function DashboardView({
                   )}
                 </h2>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Direct token sequencing, automated WhatsApp reminders, and real-time consultation coordination.
-                </p>
+Register new appointments, reschedule existing bookings, or reallocate patients to another doctor or available slot.                </p>
               </div>
 
               <div className="pt-2 flex items-center gap-2.5 flex-wrap">
