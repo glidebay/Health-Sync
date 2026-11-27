@@ -66,6 +66,7 @@ export interface DbClinicLocation {
   whatsapp_phone_number_id?: string | null;
   whatsapp_display_number?: string | null;
   whatsapp_waba_id?: string | null;
+  whatsapp_access_token?: string | null;
   welcome_message?: string | null;
   daily_quota?: number | null;
   slot_duration_mins?: number | null;

@@ -40,6 +40,8 @@ export interface FormattedQueuePatient {
   cancellationReason?: string;
   locationId?: string;
   clinicId?: string;
+  doctorId?: string;
+  doctorName?: string;
 }
 
 export interface FormattedInventoryItem {
@@ -921,7 +923,8 @@ export async function fetchQueueFromDb(
       const filtered = rpcData.filter(
         (i: any) =>
           (!effectiveLocationId || i.location_id === effectiveLocationId) &&
-          (!effectiveClinicId || i.clinic_id === effectiveClinicId)
+          (!effectiveClinicId || i.clinic_id === effectiveClinicId) &&
+          (!doctorId || i.doctor_id === doctorId)
       );
       if (filtered.length === 0) {
         return [];
@@ -953,6 +956,8 @@ export async function fetchQueueFromDb(
           visitType: isOnline ? 'Online' : 'Walk-in',
           cancellationReason: item.cancellation_reason || undefined,
           locationId: item.location_id || effectiveLocationId,
+          doctorId: item.doctor_id || undefined,
+          doctorName: item.doctor_name || undefined,
         };
       });
 
@@ -1053,6 +1058,7 @@ export async function fetchQueueFromDb(
         visitType,
         cancellationReason: item.cancellation_reason || undefined,
         locationId: item.location_id || undefined,
+        doctorId: item.doctor_id || undefined,
       };
     });
 
@@ -1132,7 +1138,8 @@ export async function fetchPatientAppointmentsFromDb(params?: {
     const scopedData = data.filter(
       (item: any) =>
         (!effectiveLocationId || item.location_id === effectiveLocationId) &&
-        (!effectiveClinicId || item.clinic_id === effectiveClinicId)
+        (!effectiveClinicId || item.clinic_id === effectiveClinicId) &&
+        (!params?.doctorId || item.doctor_id === params.doctorId)
     );
 
     let mapped: Patient[] = scopedData.map((item: any) => {

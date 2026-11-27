@@ -127,7 +127,9 @@ export async function POST(req: NextRequest) {
     }
 
     // 6. Send Response via Meta Cloud API if Token is configured
+    // Prefer branch-specific WABA token if set, otherwise fall back to global env token
     const whatsappToken =
+      loc?.whatsapp_access_token ||
       process.env.WHATSAPP_ACCESS_TOKEN ||
       process.env.WHATSAPP_TOKEN ||
       process.env.META_ACCESS_TOKEN;

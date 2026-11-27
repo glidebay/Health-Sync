@@ -246,6 +246,13 @@ function DashboardContent() {
     return false;
   });
 
+  const [activeDoctorId, setActiveDoctorId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return getDoctorSessionLocal()?.doctorId || null;
+    }
+    return null;
+  });
+
   const [adminPin, setAdminPin] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('healthsync_admin_pin') || '';
@@ -271,6 +278,7 @@ function DashboardContent() {
         if (docSession.clinicId) setCurrentClinicId(docSession.clinicId);
         const adminFlag = Boolean(docSession.isAdmin || docSession.doctorId === '7ff87d97-4c12-42c3-b1b3-44a7a5933a83' || docSession.doctorId === 'defefb30-c455-45e6-b524-d1bbe65bb696');
         setIsDoctorAdmin(adminFlag);
+        setActiveDoctorId(docSession.doctorId);
         setDoctorProfile({
           name: docSession.name,
           title: docSession.title,
@@ -278,6 +286,7 @@ function DashboardContent() {
       } else if (clinicSession) {
         setIsLoggedIn(false);
         setIsDoctorAdmin(false);
+        setActiveDoctorId(null);
         if (clinicSession.clinicId) setCurrentClinicId(clinicSession.clinicId);
         setDoctorProfile({
           name: clinicSession.name || 'Clinic Assistant',
@@ -765,6 +774,7 @@ function DashboardContent() {
         });
         setIsLoggedIn(true);
         setIsDoctorAdmin(isDocAdmin);
+        setActiveDoctorId(doctorId!);
         if (isDocAdmin) {
           if (typeof window !== 'undefined') {
             localStorage.setItem('healthsync_admin_pin', clean);
@@ -787,6 +797,7 @@ function DashboardContent() {
         });
         setIsLoggedIn(true);
         setIsDoctorAdmin(true);
+        setActiveDoctorId('admin');
         if (typeof window !== 'undefined') {
           localStorage.setItem('healthsync_admin_pin', clean);
         }
@@ -929,6 +940,7 @@ function DashboardContent() {
 
         setIsLoggedIn(true);
         setIsDoctorAdmin(isAdmin);
+        setActiveDoctorId(fallbackDoc.doctor.id);
         if (isAdmin) {
           if (typeof window !== 'undefined') {
             localStorage.setItem('healthsync_admin_pin', clean);
@@ -1015,6 +1027,7 @@ function DashboardContent() {
 
     setIsLoggedIn(true);
     setIsDoctorAdmin(isAdmin);
+    setActiveDoctorId(docRes.doctor.id);
     if (!currentClinicId && docClinicId) {
       setCurrentClinicId(docClinicId);
       if (typeof window !== 'undefined') {
@@ -1053,6 +1066,7 @@ function DashboardContent() {
     clearDoctorSessionLocal();
     setIsLoggedIn(false);
     setIsDoctorAdmin(false);
+    setActiveDoctorId(null);
     if (typeof window !== 'undefined') {
       localStorage.removeItem('healthsync_admin_pin');
     }
@@ -1081,6 +1095,7 @@ function DashboardContent() {
     clearDoctorsCacheLocal();
     setIsLoggedIn(false);
     setIsDoctorAdmin(false);
+    setActiveDoctorId(null);
     setCurrentClinicId(null);
     setCurrentLocation(null);
     currentLocationRef.current = null;
@@ -2447,6 +2462,10 @@ function DashboardContent() {
                           p.status !== 'Cancelled' &&
                           (!p.appointmentDate || p.appointmentDate === getTodayIST())
                       )}
+                      doctorId={activeDoctorId && activeDoctorId !== 'admin' ? activeDoctorId : undefined}
+                      doctorName={doctorProfile.name}
+                      isDoctorAdmin={isDoctorAdmin}
+                      doctors={availableDoctors.map((d) => ({ id: d.id, full_name: d.full_name }))}
                       locationId={currentLocation?.id}
                       clinicId={currentClinicId || currentLocation?.clinic_id || undefined}
                       onStartConsultation={startConsultation}
